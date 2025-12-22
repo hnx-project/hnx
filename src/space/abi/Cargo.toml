@@ -1,0 +1,21 @@
+# src/space/abi/Cargo.toml
+[package]
+name = "hnx-abi"
+version = "0.0.1"
+edition = "2021"
+
+[dependencies]
+
+[features]
+default = ["std"]
+std = []
+no_std = []
+
+[build-dependencies]
+bindgen = "0.66"
+quote = "1.0"
+proc-macro2 = "1.0"
+
+[lib]
+name = "hnx_abi"
+crate-type = ["lib", "staticlib"]

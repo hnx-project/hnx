@@ -1,0 +1,45 @@
+# src/kernel/Cargo.toml
+[package]
+name = "hnx-kernel"
+version = "0.0.1"
+edition = "2021"
+authors = ["HNX Developers"]
+license = "MIT"
+
+# kernel needs no_std
+[lib]
+name = "hnx_kernel"
+crate-type = ["staticlib"]
+
+[[bin]]
+name = "hnx-kernel"
+path = "src/main.rs"
+
+[dependencies]
+# for kernel deps
+log = { version = "0.4", default-features = false, features = ["max_level_debug", "release_max_level_warn"] }
+spin = "0.9"
+bitflags = "2.0"
+zerocopy = { version = "0.7", default-features = false, features = ["derive"] }
+
+# user space abi
+hnx-abi = { path = "../space/abi", features = ["no_std"] }
+
+[features]
+default = []
+test = []
+
+[profile.dev]
+opt-level = 0
+debug = true
+debug-assertions = true
+panic = "abort"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[build-dependencies]
+cc = "1.0"

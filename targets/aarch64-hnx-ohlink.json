@@ -1,0 +1,44 @@
+{
+  "llvm-target": "aarch64-unknown-none",
+  "data-layout": "e-m:e-p270:32:32-p271:32:32-p272:64:64-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128-Fn32",
+  "arch": "aarch64",
+  "target-endian": "little",
+  "target-pointer-width": 64,
+  "target-c-int-width": 32,
+  "max-atomic-width": 128,
+  "atomic-cas": true,
+  "os": "hnx",
+  "vendor": "ohlink",
+  "env": "",
+  
+  "features": "+neon,+fp-armv8,+v8a",
+  "panic-strategy": "abort",
+  "relocation-model": "static",
+  "code-model": "small",
+  "disable-redzone": true,
+  
+  "linker-flavor": "ld",
+  "linker": "ohlink-ld",
+  "post-link-args": {
+    "gcc": ["-L${HNX_TOOLCHAIN}/lib"]
+  },
+  "executables": true,
+  "has-rpath": false,
+  
+  "position-independent-executables": false,
+  "dynamic-linking": false,
+  "exe-suffix": ".ohlink",
+  
+  "singlethread": true,
+  "no-builtins": true,
+  "eh-frame-header": false,
+  "emit-debug-gdb-scripts": false,
+  
+  "stack-probes": {
+    "kind": "none"
+  },
+  
+  "supported-sanitizers": [],
+  "min-atomic-width": 8,
+  "cpu": "generic"
+}

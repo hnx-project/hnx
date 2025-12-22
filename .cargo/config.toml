@@ -1,0 +1,33 @@
+# .cargo/config.toml
+[build]
+# 使用 nightly 工具链
+rustflags = ["-C", "linker=rust-lld"]
+
+[unstable]
+# 启用构建 std 功能
+build-std = ["core", "alloc", "compiler_builtins"]
+build-std-features = ["compiler-builtins-mem"]
+
+# 目标配置
+[target.aarch64-unknown-hnx-kernel]
+linker = "rust-lld"
+rustflags = [
+    "-C", "link-arg=-Tlinker.ld",
+    "-C", "linker-flavor=ld.lld",
+    "-C", "relocation-model=static",
+    "-C", "code-model=large",
+]
+
+[target.aarch64-unknown-hnx]
+linker = "rust-lld"
+rustflags = [
+    "-C", "link-arg=-Tlinker.ld",
+    "-C", "linker-flavor=ld.lld",
+    "-C", "relocation-model=pic",
+]
+
+# 环境变量
+[env]
+ARCH = "aarch64"
+KERNEL_TARGET = "aarch64-unknown-hnx-kernel"
+SPACE_TARGET = "aarch64-unknown-hnx"
