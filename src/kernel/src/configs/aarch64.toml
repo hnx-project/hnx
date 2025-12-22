@@ -1,0 +1,52 @@
+[arch]
+name = "aarch64"
+endian = "little"
+page_size = 4096
+kernel_base = "0xffff800000000000"
+stack_size = 65536
+physical_base = "0x40080000"
+
+[memory]
+layout = "standard"
+# 内存区域定义
+regions = [
+    { start = "0x40000000", size = "0x40000000" },
+    { name = "kernel", start = "0x80000", size = "2M" },
+    { name = "initrd", start = "0x2000000", size = "16M" },
+]
+
+[features]
+smp = true
+virtio = true
+gic_version = "v2"  # 中断控制器版本
+
+[qemu]
+machine = "virt"
+cpu = "cortex-a72"
+memory = "512M"
+uart = "pl011"
+
+[platforms.virt]  # QEMU virt 机器
+uart = "pl011"
+irq_controller = "gicv2"
+timer = "generic_timer"
+
+[platforms.rpi4]  # Raspberry Pi 4
+uart = "mini_uart"
+irq_controller = "gicv2"
+timer = "system_timer"
+
+[defaults]
+platform = "virt"
+
+[uart]
+driver = "pl011"
+baud = 115200
+
+[timer]
+tick_ms = 500
+
+[platforms.virt.mmio]
+pl011_base = "0x09000000"
+gicd_base = "0x08000000"
+gicc_base = "0x08010000"

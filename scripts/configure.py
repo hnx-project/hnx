@@ -1,129 +1,140 @@
 # scripts/configure.py
 #!/usr/bin/env python3
-import tomllib
 import json
-import os
+# import os
+import tomllib
+# import tomli
 from pathlib import Path
+# import sys
 
-def load_config(arch, board, profile):
-    """加载配置"""
-    config_dir = Path("configs")
+def load_board_config(board_name, config_dir="configs"):
+    """加载开发板 TOML 配置"""
+    board_file = Path(config_dir) / "board" / f"{board_name}.toml"
     
-    # 加载架构配置
+    if not board_file.exists():
+        raise FileNotFoundError(f"Board config not found: {board_file}")
+    
+    with open(board_file, 'rb') as f:
+        config = tomllib.load(f)
+    
+    return config
+
+def generate_qemu_config(board_config, arch, output_dir):
+    """从 board 配置生成 QEMU 运行配置"""
+    qemu_config = {
+        "machine": board_config.get("machine", "virt"),
+        "cpu": board_config.get("cpu", "cortex-a72"),
+        "devices": board_config.get("devices", []),
+        "memory": board_config.get("memory", "512M"),
+        "kernel_args": board_config.get("kernel_args", ""),
+        "description": board_config.get("description", ""),
+    }
+    
+    # 根据架构调整
+    if arch == "x86_64":
+        qemu_config["cpu"] = board_config.get("cpu", "qemu64")
+    
+    # 保存为 JSON（供 Python 脚本使用）
+    config_file = Path(output_dir) / "qemu_config.json"
+    with open(config_file, 'w') as f:
+        json.dump(qemu_config, f, indent=2)
+    
+    return qemu_config
+
+def main():
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Generate HNX build configuration")
+    parser.add_argument("--arch", required=True, choices=["aarch64", "x86_64", "riscv64"])
+    parser.add_argument("--board", required=True, help="Board name")
+    parser.add_argument("--profile", default="debug", choices=["debug", "release"])
+    parser.add_argument("--output-dir", required=True, help="Output directory for config files")
+    
+    args = parser.parse_args()
+    
+    # 创建输出目录
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    print(f"Generating configuration for:")
+    print(f"  Architecture: {args.arch}")
+    print(f"  Board: {args.board}")
+    print(f"  Profile: {args.profile}")
+    print(f"  Output: {output_dir}")
+    
+    # 1. 加载架构配置
     arch_config = {}
-    arch_file = config_dir / "arch" / f"{arch}.toml"
+    arch_file = Path("configs/arch") / f"{args.arch}.toml"
     if arch_file.exists():
         with open(arch_file, 'rb') as f:
             arch_config = tomllib.load(f)
     
-    # 加载开发板配置
-    board_config = {}
-    board_file = config_dir / "board" / f"{board}.toml"
-    if board_file.exists():
-        with open(board_file, 'rb') as f:
-            board_config = tomllib.load(f)
+    # 2. 加载开发板配置
+    board_config = load_board_config(args.board)
     
-    # 加载构建配置
-    build_config = {}
-    profile_file = config_dir / "profile" / f"{profile}.toml"
+    # 3. 加载构建配置
+    profile_config = {}
+    profile_file = Path("configs/profile") / f"{args.profile}.toml"
     if profile_file.exists():
         with open(profile_file, 'rb') as f:
-            build_config = tomllib.load(f)
+            profile_config = tomllib.load(f)
     
-    # 合并配置
-    config = {**arch_config, **board_config, **build_config}
-    
-    # 生成 Rust 目标文件
-    generate_rust_target(arch, config)
-    
-    # 生成构建配置
-    generate_build_config(config, arch, board, profile)
-    
-    return config
-
-def generate_rust_target(arch, config):
-    """生成 Rust 目标定义文件"""
-    target_dir = Path("targets")
-    target_dir.mkdir(exist_ok=True)
-    
-    # 内核目标
-    kernel_target = {
-        "llvm-target": f"{arch}-unknown-none",
-        "data-layout": config.get("data-layout", ""),
-        "arch": arch,
-        "os": "hnx-kernel",
-        "env": "",
-        "vendor": "unknown",
-        "linker-flavor": "ld.lld",
-        "linker": "rust-lld",
-        "panic-strategy": "abort",
-        "disable-redzone": True,
-        "features": ",".join(config.get("features", [])),
-        "frame-pointer": "always",
-        "stack-protector": False,
-        "relocation-model": "static",
-        "code-model": "large",
-        "target-pointer-width": "64",
-        "target-c-int-width": "32",
-        "target-endian": "little",
-        "target-family": "unix",
-        "executables": True,
-        "singlethread": True,
-        "linker-script": "linker.ld",
+    # 4. 合并配置
+    merged_config = {
+        "arch": arch_config,
+        "board": board_config,
+        "profile": profile_config,
+        "metadata": {
+            "arch": args.arch,
+            "board": args.board,
+            "profile": args.profile,
+            "timestamp": time.time()
+        }
     }
     
-    # 空间目标
-    space_target = kernel_target.copy()
-    space_target["os"] = "hnx"
-    space_target["relocation-model"] = "pic"
-    space_target["position-independent-executables"] = True
+    # 5. 生成 QEMU 运行配置
+    qemu_config = generate_qemu_config(board_config, args.arch, output_dir)
+    merged_config["qemu"] = qemu_config
     
-    # 写入文件
-    kernel_file = target_dir / f"{arch}-unknown-hnx-kernel.json"
-    space_file = target_dir / f"{arch}-unknown-hnx.json"
+    # 6. 保存完整配置
+    config_file = output_dir / "config.json"
+    with open(config_file, 'w') as f:
+        json.dump(merged_config, f, indent=2)
     
-    with open(kernel_file, 'w') as f:
-        json.dump(kernel_target, f, indent=2)
-    
-    with open(space_file, 'w') as f:
-        json.dump(space_target, f, indent=2)
-
-def generate_build_config(config, arch, board, profile):
-    """生成构建配置文件"""
-    build_dir = Path("build") / "config"
-    build_dir.mkdir(parents=True, exist_ok=True)
-    
-    build_config = {
-        "arch": arch,
-        "board": board,
-        "profile": profile,
-        "kernel_target": f"{arch}-unknown-hnx-kernel",
-        "space_target": f"{arch}-unknown-hnx",
-        "features": config.get("features", []),
-        "kernel": config.get("kernel", {}),
-        "space": config.get("space", {}),
-    }
-    
-    with open(build_dir / "config.json", 'w') as f:
-        json.dump(build_config, f, indent=2)
-    
-    # 生成环境文件
-    env_file = build_dir / "env.sh"
+    # 7. 生成环境文件
+    env_file = output_dir / "env.sh"
     with open(env_file, 'w') as f:
-        f.write(f"export ARCH={arch}\n")
-        f.write(f"export BOARD={board}\n")
-        f.write(f"export PROFILE={profile}\n")
-        f.write(f"export KERNEL_TARGET={arch}-unknown-hnx-kernel\n")
-        f.write(f"export SPACE_TARGET={arch}-unknown-hnx\n")
+        f.write(f"export ARCH={args.arch}\n")
+        f.write(f"export BOARD={args.board}\n")
+        f.write(f"export PROFILE={args.profile}\n")
+        f.write(f"export KERNEL_TARGET={args.arch}-unknown-none\n")
+        f.write(f"export SPACE_TARGET={args.arch}-unknown-hnx\n")
+        f.write(f"export QEMU_MACHINE={qemu_config['machine']}\n")
+        f.write(f"export QEMU_CPU={qemu_config['cpu']}\n")
+    
+    # 8. 生成 Makefile 片段
+    makefile_fragment = output_dir / "Makefile.inc"
+    with open(makefile_fragment, 'w') as f:
+        f.write(f"# Auto-generated Makefile variables\n")
+        f.write(f"QEMU_MACHINE := {qemu_config['machine']}\n")
+        f.write(f"QEMU_CPU := {qemu_config['cpu']}\n")
+        f.write(f"QEMU_MEMORY := {qemu_config['memory']}\n")
+        if qemu_config['kernel_args']:
+            f.write(f"QEMU_KERNEL_ARGS := {qemu_config['kernel_args']}\n")
+    
+    print(f"\nConfiguration files generated:")
+    print(f"  {config_file}")
+    print(f"  {env_file}")
+    print(f"  {makefile_fragment}")
+    
+    # 显示 QEMU 配置
+    print(f"\nQEMU Configuration:")
+    print(f"  Machine: {qemu_config['machine']}")
+    print(f"  CPU: {qemu_config['cpu']}")
+    print(f"  Memory: {qemu_config['memory']}")
+    if qemu_config['description']:
+        print(f"  Description: {qemu_config['description']}")
 
 if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--arch", required=True)
-    parser.add_argument("--board", required=True)
-    parser.add_argument("--profile", default="debug")
-    parser.add_argument("--output", required=True)
-    args = parser.parse_args()
-    
-    config = load_config(args.arch, args.board, args.profile)
-    print(f"Configuration loaded: {args.arch}/{args.board}/{args.profile}")
+    import time
+    main()

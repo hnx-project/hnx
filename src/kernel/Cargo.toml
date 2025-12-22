@@ -1,45 +1,26 @@
-# src/kernel/Cargo.toml
 [package]
 name = "hnx-kernel"
 version = "0.0.1"
 edition = "2021"
-authors = ["HNX Developers"]
-license = "MIT"
-
-# kernel needs no_std
-[lib]
-name = "hnx_kernel"
-crate-type = ["staticlib"]
-
-[[bin]]
-name = "hnx-kernel"
-path = "src/main.rs"
+authors = ["HNX Developer"]
 
 [dependencies]
-# for kernel deps
-log = { version = "0.4", default-features = false, features = ["max_level_debug", "release_max_level_warn"] }
-spin = "0.9"
-bitflags = "2.0"
-zerocopy = { version = "0.7", default-features = false, features = ["derive"] }
+log = { version = "0.4", default-features = false }
+bitflags = { version = "2.0", default-features = false }
+spin = "0.9.8"
+lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
+heapless = "0.8"
 
-# user space abi
-hnx-abi = { path = "../space/abi", features = ["no_std"] }
+[target.'cfg(target_arch = "aarch64")'.dependencies]
+cortex-a = { version = "8.0.0", default-features = false }
 
-[features]
-default = []
-test = []
-
-[profile.dev]
-opt-level = 0
-debug = true
-debug-assertions = true
-panic = "abort"
-
-[profile.release]
-opt-level = "z"
-lto = true
-codegen-units = 1
-panic = "abort"
+[dev-dependencies]
 
 [build-dependencies]
-cc = "1.0"
+quote = "1.0"
+proc-macro2 = "1.0"
+toml = "0.8"
+
+# Link with libc
+[package.metadata.link]
+links = ["../../space/libc/libhnxc.a"]

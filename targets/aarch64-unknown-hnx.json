@@ -1,6 +1,6 @@
 {
   "llvm-target": "aarch64-unknown-none",
-  "data-layout": "",
+  "data-layout": "e-m:e-p270:32:32-p271:32:32-p272:64:64-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128-Fn32",
   "arch": "aarch64",
   "os": "hnx",
   "env": "",
@@ -11,7 +11,6 @@
   "disable-redzone": true,
   "features": "",
   "frame-pointer": "always",
-  "stack-protector": false,
   "relocation-model": "pic",
   "code-model": "large",
   "target-pointer-width": 64,
@@ -20,6 +19,6 @@
   "target-family": "unix",
   "executables": true,
   "singlethread": true,
-  "linker-script": "linker.ld",
+  "link-script": "linker.ld",
   "position-independent-executables": true
 }
