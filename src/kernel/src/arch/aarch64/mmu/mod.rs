@@ -1,3 +1,4 @@
+pub mod mmu_boot;
 pub fn init() {}
 
 pub fn enable() {}

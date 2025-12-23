@@ -7,8 +7,6 @@
 //! - Managing DMA buffer allocation for drivers
 //! - Supporting device hotplug detection
 
-#![no_std]
-
 extern crate alloc;
 
 use crate::drivers::ipc_protocol::*;

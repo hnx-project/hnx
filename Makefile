@@ -53,7 +53,7 @@ toolchain:
 # 构建内核（简化版）
 kernel: configure check-abi
 	@echo "========= Building kernel for target: $(KERNEL_TARGET) ========="
-	@cargo build -p hnx-kernel \
+	@RUSTFLAGS="-A warnings" cargo build  -p hnx-kernel \
 			--target $(KERNEL_TARGET)
 	@mkdir -p $(BUILD_ROOT)/kernel/$(PROFILE)
 	@cp target/$(KERNEL_TARGET)/$(PROFILE)/hnx-kernel \
@@ -64,7 +64,7 @@ kernel: configure check-abi
 # 检查 ABI 一致性
 check-abi:
 	@echo "========= Build ABI consistency ========="
-	@cargo build -p hnx-abi --target $(KERNEL_TARGET) --release
+	@RUSTFLAGS="-A warnings" cargo build  -p hnx-abi --target $(KERNEL_TARGET) --release
 # 	@$(PYTHON) scripts/verify_abi.py
 	@echo "========= ABI check passed ========="
 	@echo ""
@@ -73,7 +73,7 @@ check-abi:
 space: kernel
 	@echo "========= Building space components for target: $(SPACE_TARGET) ========="
 	@cd src/space && \
-		cargo build \
+		RUSTFLAGS="-A warnings" cargo build  \
 			--workspace \
 			--target $(SPACE_TARGET)
 	@mkdir -p $(BUILD_ROOT)/space/$(PROFILE)
@@ -154,7 +154,7 @@ test:
 # 快速构建（仅内核）
 quick: configure
 	@echo "========= Quick build (kernel only) ========="
-	@cd src/kernel && cargo build --target $(KERNEL_TARGET) --release
+	@cd src/kernel && RUSTFLAGS="-A warnings" cargo build  --target $(KERNEL_TARGET) --release
 	@echo "========= Quick build completed ========="
 	@echo ""
 

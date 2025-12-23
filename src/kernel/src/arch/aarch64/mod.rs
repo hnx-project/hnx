@@ -7,7 +7,6 @@ pub mod boot;
 pub mod console;
 pub mod interrupt;
 pub mod mmu;
-pub mod mmu_boot;
 pub mod timer;
 
 pub fn init() {

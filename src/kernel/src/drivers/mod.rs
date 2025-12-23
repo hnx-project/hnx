@@ -1,7 +1,7 @@
 pub mod uart;
 pub mod gic;
 pub mod bus;
-pub mod dtb_parser;
+pub mod dtb;
 pub mod ipc_protocol;
 pub mod device_manager;
 // pub mod net;

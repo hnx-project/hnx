@@ -22,9 +22,9 @@ pub unsafe fn zero_bss() {
     core::ptr::write_bytes(bss_start, 0, bss_size);
 }
 
-/// 收集启动信息
+/// TODO 收集启动信息
 pub fn get_boot_info() -> BootInfo {
-    // TODO 这是是不是应该针对不同机器？
+    // TODO 这是是不是应该针对不同机器？或者应该直接从设备树获取？
     BootInfo {
         phys_mem_start: 0x40000000, // QEMU virt 机器的内存起始地址
         phys_mem_size: 0x40000000,  // 1GB 内存
