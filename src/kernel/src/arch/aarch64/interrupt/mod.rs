@@ -174,7 +174,7 @@ pub extern "C" fn rust_svc_handler(esr: u64, elr: u64, far: u64) {
                     }
                 }
                 4 => {
-                    crate::process::syscall::exec::sys_execve_start();
+                    // crate::process::syscall::exec::sys_execve_start();
                 }
                 _ => {}
             }

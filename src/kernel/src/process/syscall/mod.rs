@@ -1130,7 +1130,7 @@ fn sys_mprotect(addr: usize, length: usize, prot: usize) -> SysResult {
     }
 }
 
-pub mod exec;
+// pub mod exec;
 pub mod process;
 pub mod signal;
 pub mod driver;

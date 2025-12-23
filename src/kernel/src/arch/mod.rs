@@ -15,6 +15,3 @@ pub use x86_64::*;
 
 // 导出通用接口
 pub mod common;
-
-// 重新导出关键类型
-pub use common::traits::*;

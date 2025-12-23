@@ -4,11 +4,9 @@ pub mod bus;
 pub mod dtb_parser;
 pub mod ipc_protocol;
 pub mod device_manager;
-pub mod net;
+// pub mod net;
 pub mod block;
 
-#[cfg(test)]
-mod tests;
 
 use crate::arch::common::boot::BootInfo;
 use crate::arch::common::mmu::{ArchType, MmuFlags};

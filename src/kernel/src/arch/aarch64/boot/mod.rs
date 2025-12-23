@@ -5,8 +5,8 @@ use core::arch::global_asm;
 
 // 汇编启动代码
 global_asm!(include_str!("../boot.S"));
-// 用户态自检片段（用于生成精确指令字节）
-global_asm!(include_str!("../selftest.S"));
+// 用户态自检片段 - ⚠️
+// global_asm!(include_str!("../selftest.S"));
 
 /// 清零 BSS 段
 pub unsafe fn zero_bss() {
@@ -24,6 +24,7 @@ pub unsafe fn zero_bss() {
 
 /// 收集启动信息
 pub fn get_boot_info() -> BootInfo {
+    // TODO 这是是不是应该针对不同机器？
     BootInfo {
         phys_mem_start: 0x40000000, // QEMU virt 机器的内存起始地址
         phys_mem_size: 0x40000000,  // 1GB 内存

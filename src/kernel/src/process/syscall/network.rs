@@ -5,7 +5,7 @@
 
 extern crate alloc;
 
-use crate::network::manager::get_network_manager;
+// use crate::network::manager::get_network_manager;
 use crate::process::syscall::SysResult;
 
 /// Network syscall error codes
