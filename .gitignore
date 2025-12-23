@@ -2,3 +2,5 @@ target
 /build
 /venv
 .DS_Store
+*.old
+*.backup
