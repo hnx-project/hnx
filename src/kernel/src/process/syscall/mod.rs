@@ -10,7 +10,9 @@ use crate::abi::{
     SYS_MMAP, SYS_MUNMAP, SYS_MPROTECT, SYS_FORK, SYS_KILL, SYS_SETPGID, SYS_GETPGID,
     SYS_GETPPID, SYS_WAIT4, SYS_DRIVER_REGISTER, SYS_DRIVER_REQUEST_IRQ,
     SYS_DRIVER_MAP_MMIO, SYS_DRIVER_DMA_ALLOC, SYS_SOCKET, SYS_BIND, SYS_CONNECT,
-    SYS_LISTEN, SYS_ACCEPT, SYS_SEND, SYS_RECV, SysResult
+    SYS_LISTEN, SYS_ACCEPT, SYS_SEND, SYS_RECV, 
+    SYS_CHANNEL_CREATE, SYS_PROCESS_CREATE, SYS_THREAD_CREATE, SYS_VMO_CREATE,
+    SysResult
 };
 
 #[derive(Copy, Clone)]
@@ -399,6 +401,46 @@ pub fn dispatch(
         SYS_MPROTECT => {
             crate::debug!("syscall enter mprotect");
             sys_mprotect(x0, x1, x2)
+        }
+        SYS_CHANNEL_CREATE => {
+            crate::debug!("syscall enter channel_create");
+            channel::sys_channel_create(x0, x1, x2)
+        }
+        SYS_PROCESS_CREATE => {
+            crate::debug!("syscall enter process_create");
+            process_create::sys_process_create(x0, x1, x2, _x3, _x4)
+        }
+        SYS_THREAD_CREATE => {
+            crate::debug!("syscall enter thread_create");
+            process_create::sys_thread_create(x0, x1, x2, _x3, _x4)
+        }
+        SYS_VMO_CREATE => {
+            crate::debug!("syscall enter vmo_create");
+            vmo::sys_vmo_create(x0, x1, x2)
+        }
+        SYS_CHANNEL_WRITE => {
+            crate::debug!("syscall enter channel_write");
+            channel::sys_channel_write(x0, x1, x2, _x3, _x4, _x5)
+        }
+        SYS_CHANNEL_READ => {
+            crate::debug!("syscall enter channel_read");
+            channel::sys_channel_read(x0, x1, x2, _x3, _x4, _x5, 0, 0)
+        }
+        SYS_PROCESS_START => {
+            crate::debug!("syscall enter process_start");
+            process_create::sys_process_start(x0, x1, x2)
+        }
+        SYS_THREAD_START => {
+            crate::debug!("syscall enter thread_start");
+            process_create::sys_thread_start(x0, x1, x2)
+        }
+        SYS_VMO_READ => {
+            crate::debug!("syscall enter vmo_read");
+            vmo::sys_vmo_read(x0, x1, x2, _x3)
+        }
+        SYS_VMO_WRITE => {
+            crate::debug!("syscall enter vmo_write");
+            vmo::sys_vmo_write(x0, x1, x2, _x3)
         }
         _ => -1,
     }
@@ -1136,3 +1178,6 @@ pub mod signal;
 pub mod driver;
 pub mod network;
 pub mod loader;
+pub mod channel;
+pub mod process_create;
+pub mod vmo;

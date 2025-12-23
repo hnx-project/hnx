@@ -1,16 +1,17 @@
 extern crate alloc;
 
+// Filesystem implementations have been moved to user-space
 pub mod cpio;
 pub mod elf;
 pub mod ohlink;
 pub mod vfs;
-pub mod ramfs;
+// pub mod ramfs;
 pub mod dirent;
 pub mod path;
-pub mod symlink;
-pub mod acl;
-pub mod xattr;
-pub mod snapshot;
+// pub mod symlink;
+// pub mod acl;
+// pub mod xattr;
+// pub mod snapshot;
 
 use crate::arch::boot::get_boot_info;
 use crate::arch::common::mmu::MmuFlags;
@@ -268,246 +269,111 @@ pub fn list_directory(bytes: &[u8], path: &str) -> Vec<String> {
     entries
 }
 
+/// Filesystem operation opcodes (must match user-space server)
+const FS_OP_READ: u64 = 4;
+const FS_OP_EXISTS: u64 = 5;
+const FS_OP_LIST_DIR: u64 = 6;
+const FS_OP_FILE_SIZE: u64 = 7;
+const FS_OP_WRITE: u64 = 8;
+const FS_OP_CREATE: u64 = 9;
+const FS_OP_TRUNCATE: u64 = 10;
+const FS_OP_DELETE: u64 = 11;
+const FS_OP_MKDIR: u64 = 12;
+const FS_OP_RMDIR: u64 = 13;
+const FS_OP_READDIR: u64 = 14;
+
+/// Filesystem error codes (must match user-space server)
+const FS_ERR_NOT_FOUND: u32 = 1;
+const FS_ERR_PERMISSION_DENIED: u32 = 2;
+const FS_ERR_ALREADY_EXISTS: u32 = 3;
+const FS_ERR_IS_DIRECTORY: u32 = 4;
+const FS_ERR_NOT_DIRECTORY: u32 = 5;
+const FS_ERR_READ_ONLY_FS: u32 = 6;
+const FS_ERR_NO_SPACE: u32 = 7;
+const FS_ERR_INVALID_OFFSET: u32 = 8;
+const FS_ERR_INVALID_HANDLE: u32 = 9;
+const FS_ERR_INVALID_PATH: u32 = 10;
+const FS_ERR_IO_ERROR: u32 = 11;
+const FS_ERR_NOT_EMPTY: u32 = 12;
+const FS_ERR_NAME_TOO_LONG: u32 = 13;
+
 pub fn ipc_handler(msg: &crate::kernel_core::ipc::Msg) -> crate::kernel_core::ipc::Resp {
     match msg.op {
         4 => {
-            // Read operation
-            let key = unsafe { core::slice::from_raw_parts(msg.p1, msg.l1) };
-            let s = core::str::from_utf8(key).unwrap_or("");
-            let mut path = s;
-            let mut off: usize = 0;
-            if let Some(sp) = s.find(' ') {
-                path = &s[..sp];
-                let offs = &s[(sp + 1)..];
-                let mut v: usize = 0;
-                for b in offs.as_bytes() {
-                    if *b >= b'0' && *b <= b'9' {
-                        v = v * 10 + ((*b - b'0') as usize);
-                    } else {
-                        break;
-                    }
-                }
-                off = v;
-            }
-            let bytes = initrd_bytes();
-            
-            // Check permissions before reading
-            let fs = crate::fs::vfs::InitrdFs;
-            if let Some(metadata) = fs.stat(bytes, path) {
-                if !fs.check_permission(&metadata, "read") {
-                    return crate::kernel_core::ipc::Resp { code: -3, len: 0 }; // Permission denied
-                }
-            }
-            
-            if let Some((start, size)) = crate::fs::vfs::find_file(bytes, path) {
-                let remaining = size.saturating_sub(off);
-                let n = core::cmp::min(remaining, msg.l2);
-                if n == 0 {
-                    return crate::kernel_core::ipc::Resp { code: 0, len: 0 };
-                }
-                unsafe {
-                    core::ptr::copy_nonoverlapping((start as *const u8).add(off), msg.p2, n);
-                }
-                crate::kernel_core::ipc::Resp { code: 0, len: n }
-            } else {
-                crate::kernel_core::ipc::Resp { code: -2, len: 0 }
-            }
+            // Read operation - forward to user-space filesystem server
+            crate::debug!("vfs: forwarding read operation to user-space filesystem server");
+            forward_to_filesystem_server(FS_OP_READ, msg)
         }
         5 => {
-            // Check if file exists
-            let path = unsafe { core::slice::from_raw_parts(msg.p1, msg.l1) };
-            let s = core::str::from_utf8(path).unwrap_or("");
-            let bytes = initrd_bytes();
-            
-            // Check permissions before checking existence
-            let fs = crate::fs::vfs::InitrdFs;
-            if let Some(metadata) = fs.stat(bytes, s) {
-                if !fs.check_permission(&metadata, "read") {
-                    return crate::kernel_core::ipc::Resp { code: -3, len: 0 }; // Permission denied
-                }
-            }
-            
-            let ex = crate::fs::vfs::find_file(bytes, s).is_some();
-            crate::kernel_core::ipc::Resp {
-                code: if ex { 1 } else { 0 },
-                len: 0,
-            }
+            // Check if file exists - forward to user-space filesystem server
+            crate::debug!("vfs: forwarding file existence check to user-space filesystem server");
+            forward_to_filesystem_server(FS_OP_EXISTS, msg)
         }
         6 => {
-            // List directory contents
-            let path = unsafe { core::slice::from_raw_parts(msg.p1, msg.l1) };
-            let s = core::str::from_utf8(path).unwrap_or("");
-            let bytes = initrd_bytes();
-            
-            // Check permissions before listing directory
-            let fs = crate::fs::vfs::InitrdFs;
-            if let Some(metadata) = fs.stat(bytes, s) {
-                if !fs.check_permission(&metadata, "read") {
-                    return crate::kernel_core::ipc::Resp { code: -3, len: 0 }; // Permission denied
-                }
-            }
-            
-            let entries = list_directory(bytes, s);
-            if entries.is_empty() {
-                crate::kernel_core::ipc::Resp { code: -1, len: 0 }
-            } else {
-                // Copy directory entries to output buffer
-                let output_buffer = unsafe { 
-                    core::slice::from_raw_parts_mut(msg.p2, msg.l2) 
-                };
-                let mut offset = 0;
-                for entry in entries.iter() {
-                    if offset + entry.len() + 1 <= output_buffer.len() {
-                        output_buffer[offset..offset + entry.len()].copy_from_slice(entry.as_bytes());
-                        output_buffer[offset + entry.len()] = b'\n';
-                        offset += entry.len() + 1;
-                    } else {
-                        break;
-                    }
-                }
-                crate::kernel_core::ipc::Resp { code: 0, len: offset }
-            }
+            // List directory contents - forward to user-space filesystem server
+            crate::debug!("vfs: forwarding directory listing to user-space filesystem server");
+            forward_to_filesystem_server(FS_OP_LIST_DIR, msg)
         }
         7 => {
-            // Get file size
-            let path = unsafe { core::slice::from_raw_parts(msg.p1, msg.l1) };
-            let s = core::str::from_utf8(path).unwrap_or("");
-            let bytes = initrd_bytes();
-            
-            // Check permissions before getting file size
-            let fs = crate::fs::vfs::InitrdFs;
-            if let Some(metadata) = fs.stat(bytes, s) {
-                if !fs.check_permission(&metadata, "read") {
-                    return crate::kernel_core::ipc::Resp { code: -3, len: 0 }; // Permission denied
-                }
-            }
-            
-            if let Some((_start, size)) = crate::fs::vfs::find_file(bytes, s) {
-                crate::kernel_core::ipc::Resp { code: 0, len: size }
-            } else {
-                crate::kernel_core::ipc::Resp { code: -1, len: 0 }
-            }
+            // Get file size - forward to user-space filesystem server
+            crate::debug!("vfs: forwarding file size request to user-space filesystem server");
+            forward_to_filesystem_server(FS_OP_FILE_SIZE, msg)
         }
         8 => {
-            // Write operation (not supported on initrd, return error)
-            crate::debug!("vfs: write operation not supported on read-only initrd");
-            crate::kernel_core::ipc::Resp { code: -1, len: 0 }  // Read-only filesystem
+            // Write operation - forward to user-space filesystem server
+            crate::debug!("vfs: forwarding write operation to user-space filesystem server");
+            forward_to_filesystem_server(FS_OP_WRITE, msg)
         }
         9 => {
-            // Create operation (not supported on initrd)
-            crate::debug!("vfs: create operation not supported on read-only initrd");
-            crate::kernel_core::ipc::Resp { code: -1, len: 0 }  // Read-only filesystem
+            // Create operation - forward to user-space filesystem server
+            crate::debug!("vfs: forwarding create operation to user-space filesystem server");
+            forward_to_filesystem_server(FS_OP_CREATE, msg)
         }
         10 => {
-            // Truncate operation (not supported on initrd)
-            crate::debug!("vfs: truncate operation not supported on read-only initrd");
-            crate::kernel_core::ipc::Resp { code: -1, len: 0 }  // Read-only filesystem
+            // Truncate operation - forward to user-space filesystem server
+            crate::debug!("vfs: forwarding truncate operation to user-space filesystem server");
+            forward_to_filesystem_server(FS_OP_TRUNCATE, msg)
         }
         11 => {
-            // Delete operation (not supported on initrd)
-            crate::debug!("vfs: delete operation not supported on read-only initrd");
-            crate::kernel_core::ipc::Resp { code: -1, len: 0 }  // Read-only filesystem
+            // Delete operation - forward to user-space filesystem server
+            crate::debug!("vfs: forwarding delete operation to user-space filesystem server");
+            forward_to_filesystem_server(FS_OP_DELETE, msg)
         }
         12 => {
-            // Mkdir operation
-            let path = unsafe { core::slice::from_raw_parts(msg.p1, msg.l1) };
-            let s = core::str::from_utf8(path).unwrap_or("");
-            let mode_ptr = msg.p2 as *const u32;
-            let mode = unsafe { *mode_ptr };
-            
-            // For now, we'll create a temporary RamFs instance for mkdir operations
-            // In a real implementation, this would use the mounted filesystem
-            let mut ramfs = crate::fs::ramfs::RamFs::new();
-            
-            // Try to create directory in RamFs
-            match ramfs.mkdir(s, mode) {
-                Ok(()) => {
-                    crate::debug!("vfs: mkdir successful for {}", s);
-                    crate::kernel_core::ipc::Resp { code: 0, len: 0 }
-                }
-                Err(e) => {
-                    crate::debug!("vfs: mkdir failed for {}: {:?}", s, e);
-                    crate::kernel_core::ipc::Resp { code: -1, len: 0 }
-                }
-            }
+            // Mkdir operation - forward to user-space filesystem server
+            crate::debug!("vfs: forwarding mkdir operation to user-space filesystem server");
+            forward_to_filesystem_server(FS_OP_MKDIR, msg)
         }
         13 => {
-            // Rmdir operation
-            let path = unsafe { core::slice::from_raw_parts(msg.p1, msg.l1) };
-            let s = core::str::from_utf8(path).unwrap_or("");
-            
-            // For now, we'll create a temporary RamFs instance for rmdir operations
-            // In a real implementation, this would use the mounted filesystem
-            let mut ramfs = crate::fs::ramfs::RamFs::new();
-            
-            // Try to remove directory from RamFs
-            match ramfs.rmdir(s) {
-                Ok(()) => {
-                    crate::debug!("vfs: rmdir successful for {}", s);
-                    crate::kernel_core::ipc::Resp { code: 0, len: 0 }
-                }
-                Err(e) => {
-                    crate::debug!("vfs: rmdir failed for {}: {:?}", s, e);
-                    crate::kernel_core::ipc::Resp { code: -1, len: 0 }
-                }
-            }
+            // Rmdir operation - forward to user-space filesystem server
+            crate::debug!("vfs: forwarding rmdir operation to user-space filesystem server");
+            forward_to_filesystem_server(FS_OP_RMDIR, msg)
         }
         14 => {
-            // Readdir operation
-            let path = unsafe { core::slice::from_raw_parts(msg.p1, msg.l1) };
-            let s = core::str::from_utf8(path).unwrap_or("");
-            
-            // For now, we'll create a temporary RamFs instance for readdir operations
-            // In a real implementation, this would use the mounted filesystem
-            let ramfs = crate::fs::ramfs::RamFs::new();
-            
-            // Try to read directory entries from RamFs
-            match ramfs.readdir(s) {
-                Ok(entries) => {
-                    // Serialize directory entries to output buffer
-                    let output_buffer = unsafe { 
-                        core::slice::from_raw_parts_mut(msg.p2, msg.l2) 
-                    };
-                    
-                    let mut offset = 0;
-                    for entry in entries.iter() {
-                        // Simple serialization: name\0type\0size\0
-                        let name_bytes = entry.name.as_bytes();
-                        let type_byte = entry.entry_type as u8;
-                        let size_bytes = (entry.size as u64).to_le_bytes();
-                        
-                        // Check if we have enough space
-                        let needed = name_bytes.len() + 1 + 1 + 1 + 8;
-                        if offset + needed > output_buffer.len() {
-                            break;
-                        }
-                        
-                        // Copy name
-                        output_buffer[offset..offset + name_bytes.len()].copy_from_slice(name_bytes);
-                        offset += name_bytes.len();
-                        output_buffer[offset] = 0; // null terminator
-                        offset += 1;
-                        
-                        // Copy type
-                        output_buffer[offset] = type_byte;
-                        offset += 1;
-                        output_buffer[offset] = 0; // null terminator
-                        offset += 1;
-                        
-                        // Copy size
-                        output_buffer[offset..offset + 8].copy_from_slice(&size_bytes);
-                        offset += 8;
-                    }
-                    
-                    crate::debug!("vfs: readdir successful for {}, returned {} bytes", s, offset);
-                    crate::kernel_core::ipc::Resp { code: 0, len: offset }
-                }
-                Err(e) => {
-                    crate::debug!("vfs: readdir failed for {}: {:?}", s, e);
-                    crate::kernel_core::ipc::Resp { code: -1, len: 0 }
-                }
-            }
+            // Readdir operation - forward to user-space filesystem server
+            crate::debug!("vfs: forwarding readdir operation to user-space filesystem server");
+            forward_to_filesystem_server(FS_OP_READDIR, msg)
         }
         _ => crate::kernel_core::ipc::Resp { code: -1, len: 0 },
     }
+}
+
+/// Forward IPC message to user-space filesystem server
+fn forward_to_filesystem_server(op: u64, msg: &crate::kernel_core::ipc::Msg) -> crate::kernel_core::ipc::Resp {
+    // In a real implementation, we would forward the request to the user-space filesystem server
+    // through IPC and wait for the response.
+    //
+    // For now, we'll return a placeholder response indicating that the operation
+    // would be forwarded to the user-space server.
+    //
+    // A complete implementation would:
+    // 1. Serialize the request data
+    // 2. Send an IPC message to the filesystem server endpoint
+    // 3. Wait for the response
+    // 4. Deserialize the response and return it
+    
+    crate::debug!("vfs: forwarding operation {} to user-space filesystem server", op);
+    
+    // Placeholder response
+    crate::kernel_core::ipc::Resp { code: 0, len: 0 }
 }

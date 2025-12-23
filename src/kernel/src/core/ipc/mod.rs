@@ -44,6 +44,15 @@ pub struct EndpointCapabilities {
     pub admin: bool,
 }
 
+impl EndpointCapabilities {
+    /// Send capability
+    pub const SEND: u32 = 0x1;
+    /// Receive capability
+    pub const RECV: u32 = 0x2;
+    /// Manage capability
+    pub const MANAGE: u32 = 0x4;
+}
+
 /// Handle for asynchronous operations
 pub struct AsyncHandle {
     pub id: u64,

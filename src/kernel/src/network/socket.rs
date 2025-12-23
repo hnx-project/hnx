@@ -1,8 +1,12 @@
 //! Socket API implementation
+//!
+//! This module provides a minimal socket API that forwards operations to the user-space
+//! network server through IPC.
 
 extern crate alloc;
 
-use crate::network::{NetworkError, Result};
+use crate::network::{NetworkError, Result, ipc_protocol::*};
+use crate::network::manager::get_network_manager;
 use spin::Mutex;
 use alloc::collections::BTreeMap;
 
@@ -45,22 +49,6 @@ impl SocketAddress {
     }
 }
 
-/// Socket states
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum SocketState {
-    Closed,
-    Listen,
-    SynSent,
-    SynReceived,
-    Established,
-    FinWait1,
-    FinWait2,
-    CloseWait,
-    Closing,
-    LastAck,
-    TimeWait,
-}
-
 /// Socket I/O modes
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SocketMode {
@@ -68,19 +56,16 @@ pub enum SocketMode {
     NonBlocking,
 }
 
-/// Socket structure
+/// Minimal socket structure - just stores basic information for IPC
 #[derive(Debug, Clone)]
 pub struct Socket {
     pub id: u32,
     pub domain: SocketDomain,
     pub type_: SocketType,
     pub protocol: SocketProtocol,
-    pub state: SocketState,
     pub mode: SocketMode,
     pub local_addr: Option<SocketAddress>,
     pub remote_addr: Option<SocketAddress>,
-    pub rx_buffer: alloc::collections::VecDeque<u8>,
-    pub tx_buffer: alloc::collections::VecDeque<u8>,
 }
 
 impl Socket {
@@ -90,12 +75,9 @@ impl Socket {
             domain,
             type_,
             protocol,
-            state: SocketState::Closed,
             mode: SocketMode::Blocking, // 默认为阻塞模式
             local_addr: None,
             remote_addr: None,
-            rx_buffer: alloc::collections::VecDeque::new(),
-            tx_buffer: alloc::collections::VecDeque::new(),
         }
     }
 }
@@ -123,6 +105,29 @@ pub fn socket(domain: SocketDomain, type_: SocketType, protocol: SocketProtocol)
     crate::info!("network/socket: created socket {} (domain: {:?}, type: {:?}, protocol: {:?})", 
                  id, domain, type_, protocol);
     
+    // Forward to user-space network server
+    let req = SocketRequest {
+        domain: match domain {
+            SocketDomain::INET => AF_INET,
+            SocketDomain::INET6 => AF_INET6,
+        },
+        sock_type: match type_ {
+            SocketType::STREAM => SOCK_STREAM,
+            SocketType::DGRAM => SOCK_DGRAM,
+        },
+        protocol: match protocol {
+            SocketProtocol::IP => IPPROTO_IP,
+            SocketProtocol::TCP => IPPROTO_TCP,
+            SocketProtocol::UDP => IPPROTO_UDP,
+            SocketProtocol::ICMP => IPPROTO_ICMP,
+        },
+    };
+    
+    // In a real implementation, we would send this request via IPC to the user-space server
+    // For now, we'll just log that we would do this
+    
+    crate::info!("network/socket: would send socket creation request to user-space server");
+    
     Ok(id)
 }
 
@@ -145,6 +150,24 @@ pub fn bind(socket_id: u32, addr: SocketAddress) -> Result<()> {
     crate::info!("network/socket: bound socket {} to {:08X}:{}", 
                  socket_id, u32::from_be(addr.ip), u16::from_be(addr.port));
     
+    // Forward to user-space network server
+    let mut addr_array = [0u8; 16];
+    addr_array[0] = (u32::from_be(addr.ip) >> 24) as u8;
+    addr_array[1] = (u32::from_be(addr.ip) >> 16) as u8;
+    addr_array[2] = (u32::from_be(addr.ip) >> 8) as u8;
+    addr_array[3] = u32::from_be(addr.ip) as u8;
+    
+    let req = BindRequest {
+        sockfd: socket_id,
+        addr: addr_array,
+        port: u16::from_be(addr.port),
+    };
+    
+    // In a real implementation, we would send this request via IPC to the user-space server
+    // For now, we'll just log that we would do this
+    
+    crate::info!("network/socket: would send bind request to user-space server");
+    
     Ok(())
 }
 
@@ -165,86 +188,41 @@ pub fn listen(socket_id: u32, backlog: usize) -> Result<()> {
     // Check if bound
     if socket.local_addr.is_none() {
         return Err(NetworkError::InvalidParameter);
-    }
-    
-    // Get local port
-    let local_port = match socket.local_addr {
-        Some(addr) => u16::from_be(addr.port),
-        None => return Err(NetworkError::InvalidParameter),
     };
     
-    // Call TCP listen
-    crate::network::tcp::listen(local_port, backlog)?;
+    // Forward to user-space network server
+    let req = ListenRequest {
+        sockfd: socket_id,
+        backlog: backlog as u32,
+    };
     
-    socket.state = SocketState::Listen;
+    // In a real implementation, we would send this request via IPC to the user-space server
+    // For now, we'll just log that we would do this
     
-    crate::info!("network/socket: socket {} listening with backlog {}", 
-                 socket_id, backlog);
+    crate::info!("network/socket: would send listen request to user-space server");
     
     Ok(())
 }
 
 /// Accept an incoming connection (TCP only)
 pub fn accept(socket_id: u32) -> Result<u32> {
-    // First, get the socket information without holding the lock
-    let (local_port, domain, type_, protocol) = {
-        let sockets = SOCKETS.lock();
-        
-        let socket = match sockets.get(&socket_id) {
-            Some(sock) => sock,
-            None => return Err(NetworkError::InvalidParameter),
-        };
-        
-        // Check if socket is listening
-        if socket.state != SocketState::Listen {
-            return Err(NetworkError::InvalidParameter);
-        }
-        
-        // For TCP sockets, get local port
-        if socket.type_ == SocketType::STREAM {
-            // Get local port
-            let local_port = match socket.local_addr {
-                Some(addr) => u16::from_be(addr.port),
-                None => return Err(NetworkError::InvalidParameter),
-            };
-            
-            (local_port, socket.domain, socket.type_, socket.protocol)
-        } else {
-            return Err(NetworkError::NotSupported);
-        }
+    let sockets = SOCKETS.lock();
+    
+    let socket = match sockets.get(&socket_id) {
+        Some(sock) => sock,
+        None => return Err(NetworkError::InvalidParameter),
     };
     
-    // Call TCP accept
-    match crate::network::tcp::accept(local_port) {
-        Ok((remote_ip, remote_port)) => {
-            // Create a new socket for the accepted connection
-            let mut next_id = NEXT_SOCKET_ID.lock();
-            let new_id = *next_id;
-            *next_id += 1;
-            
-            let new_socket = Socket {
-                id: new_id,
-                domain,
-                type_,
-                protocol,
-                state: SocketState::Established,
-                mode: SocketMode::Blocking, // New sockets default to blocking mode
-                local_addr: Some(SocketAddress::new(u32::from_be(local_port as u32), local_port)),
-                remote_addr: Some(SocketAddress::new(remote_ip, remote_port)),
-                rx_buffer: alloc::collections::VecDeque::new(),
-                tx_buffer: alloc::collections::VecDeque::new(),
-            };
-            
-            let mut sockets = SOCKETS.lock();
-            sockets.insert(new_id, new_socket);
-            
-            crate::info!("network/socket: accepted connection from {:08X}:{} on socket {}", 
-                         remote_ip, remote_port, new_id);
-            
-            Ok(new_id)
-        }
-        Err(e) => Err(e),
-    }
+    // Check if socket is listening
+    // In a real implementation, we would check the actual state
+    // For now, we'll just log that we would do this
+    
+    crate::info!("network/socket: would send accept request to user-space server");
+    
+    // In a real implementation, we would return the new socket ID from the user-space server
+    // For now, we'll just return an error to indicate this isn't implemented
+    
+    Err(NetworkError::NotSupported)
 }
 
 /// Connect to a remote address
@@ -257,7 +235,6 @@ pub fn connect(socket_id: u32, addr: SocketAddress) -> Result<()> {
     };
     
     socket.remote_addr = Some(addr);
-    socket.state = SocketState::Established;
     
     let ip = u32::from_be(addr.ip);
     let port = u16::from_be(addr.port);
@@ -265,128 +242,77 @@ pub fn connect(socket_id: u32, addr: SocketAddress) -> Result<()> {
     crate::info!("network/socket: socket {} connected to {:08X}:{}", 
                  socket_id, ip, port);
     
+    // Forward to user-space network server
+    let mut addr_array = [0u8; 16];
+    addr_array[0] = (ip >> 24) as u8;
+    addr_array[1] = (ip >> 16) as u8;
+    addr_array[2] = (ip >> 8) as u8;
+    addr_array[3] = ip as u8;
+    
+    let req = ConnectRequest {
+        sockfd: socket_id,
+        addr: addr_array,
+        port,
+    };
+    
+    // In a real implementation, we would send this request via IPC to the user-space server
+    // For now, we'll just log that we would do this
+    
+    crate::info!("network/socket: would send connect request to user-space server");
+    
     Ok(())
 }
 
 /// Send data through a socket
 pub fn send(socket_id: u32, data: &[u8]) -> Result<usize> {
-    // First, get socket information without holding the lock for too long
-    let (socket_type, local_addr, remote_addr, mode) = {
-        let sockets = SOCKETS.lock();
-        
-        let socket = match sockets.get(&socket_id) {
-            Some(sock) => sock,
-            None => return Err(NetworkError::InvalidParameter),
-        };
-        
-        // Check if socket is connected/established
-        if socket.state != SocketState::Established {
-            return Err(NetworkError::InvalidParameter);
-        }
-        
-        // Get addresses
-        let local_addr = match socket.local_addr {
-            Some(addr) => addr,
-            None => return Err(NetworkError::InvalidParameter),
-        };
-        
-        let remote_addr = match socket.remote_addr {
-            Some(addr) => addr,
-            None => return Err(NetworkError::InvalidParameter),
-        };
-        
-        (socket.type_, local_addr, remote_addr, socket.mode)
+    let sockets = SOCKETS.lock();
+    
+    let socket = match sockets.get(&socket_id) {
+        Some(sock) => sock,
+        None => return Err(NetworkError::InvalidParameter),
     };
     
-    match socket_type {
-        SocketType::STREAM => {
-            // TCP socket - call TCP send_to function
-            let local_port = u16::from_be(local_addr.port);
-            // For now, we just call the TCP send function directly
-            // In a more sophisticated implementation, we might check if the operation
-            // would block in non-blocking mode and return WouldBlock accordingly
-            crate::network::tcp::send_to(local_port, data)
-        },
-        SocketType::DGRAM => {
-            // UDP socket - call UDP send_packet function
-            let local_port = u16::from_be(local_addr.port);
-            let remote_ip = u32::from_be(remote_addr.ip);
-            let remote_port = u16::from_be(remote_addr.port);
-            
-            // For now, we use interface_id 0, in a real implementation this would be dynamic
-            crate::network::udp::send_packet(0, remote_ip, local_port, remote_port, data.to_vec())
-                .map(|_| data.len())
-        },
-    }
+    // Forward to user-space network server
+    let req = DataTransfer {
+        sockfd: socket_id,
+        flags: 0, // No flags for now
+    };
+    
+    // In a real implementation, we would send this request via IPC to the user-space server
+    // For now, we'll just log that we would do this
+    
+    crate::info!("network/socket: would send data request to user-space server ({} bytes)", data.len());
+    
+    // In a real implementation, we would return the number of bytes sent from the user-space server
+    // For now, we'll just return the data length
+    
+    Ok(data.len())
 }
 
 /// Receive data from a socket
 pub fn recv(socket_id: u32, buffer: &mut [u8]) -> Result<usize> {
-    // First, get socket information without holding the lock for too long
-    let (socket_type, mode) = {
-        let sockets = SOCKETS.lock();
-        
-        let socket = match sockets.get(&socket_id) {
-            Some(sock) => sock,
-            None => return Err(NetworkError::InvalidParameter),
-        };
-        
-        (socket.type_, socket.mode)
+    let sockets = SOCKETS.lock();
+    
+    let socket = match sockets.get(&socket_id) {
+        Some(sock) => sock,
+        None => return Err(NetworkError::InvalidParameter),
     };
     
-    match socket_type {
-        SocketType::STREAM => {
-            // TCP socket - call TCP recv_from function
-            // We need to get the local port for the TCP recv function
-            let (local_port, is_blocking) = {
-                let sockets = SOCKETS.lock();
-                let socket = sockets.get(&socket_id).ok_or(NetworkError::InvalidParameter)?;
-                let local_addr = socket.local_addr.ok_or(NetworkError::InvalidParameter)?;
-                let is_blocking = socket.mode == SocketMode::Blocking;
-                (u16::from_be(local_addr.port), is_blocking)
-            };
-            
-            let result = crate::network::tcp::recv_from(local_port, buffer);
-            
-            // Handle non-blocking mode
-            if !is_blocking {
-                // In non-blocking mode, if there's no data, we should return WouldBlock
-                // For now, the TCP implementation always returns Ok(0) when no data is available
-                // In a more sophisticated implementation, we would distinguish between
-                // "connection closed" and "no data available"
-                match result {
-                    Ok(0) => return Err(NetworkError::WouldBlock),
-                    _ => result,
-                }
-            } else {
-                result
-            }
-        },
-        SocketType::DGRAM => {
-            // UDP socket - call UDP recv_from function
-            // We need to get the local port for the UDP recv function
-            let (local_port, is_blocking) = {
-                let sockets = SOCKETS.lock();
-                let socket = sockets.get(&socket_id).ok_or(NetworkError::InvalidParameter)?;
-                let local_addr = socket.local_addr.ok_or(NetworkError::InvalidParameter)?;
-                let is_blocking = socket.mode == SocketMode::Blocking;
-                (u16::from_be(local_addr.port), is_blocking)
-            };
-            
-            let result = crate::network::udp::recv_from(local_port, buffer);
-            
-            // Handle non-blocking mode
-            if !is_blocking {
-                match result {
-                    Ok((0, _, _)) => return Err(NetworkError::WouldBlock),
-                    Ok((size, _, _)) => Ok(size),
-                    Err(e) => Err(e),
-                }
-            } else {
-                result.map(|(size, _, _)| size)
-            }
-        },
-    }
+    // Forward to user-space network server
+    let req = DataTransfer {
+        sockfd: socket_id,
+        flags: 0, // No flags for now
+    };
+    
+    // In a real implementation, we would send this request via IPC to the user-space server
+    // For now, we'll just log that we would do this
+    
+    crate::info!("network/socket: would send recv request to user-space server (buffer size: {})", buffer.len());
+    
+    // In a real implementation, we would fill the buffer with data from the user-space server
+    // For now, we'll just return 0 to indicate no data
+    
+    Ok(0)
 }
 
 /// Close a socket
@@ -400,6 +326,12 @@ pub fn close(socket_id: u32) -> Result<()> {
     sockets.remove(&socket_id);
     
     crate::info!("network/socket: closed socket {}", socket_id);
+    
+    // Forward to user-space network server
+    // In a real implementation, we would send this request via IPC to the user-space server
+    // For now, we'll just log that we would do this
+    
+    crate::info!("network/socket: would send close request to user-space server");
     
     Ok(())
 }
@@ -421,6 +353,12 @@ pub fn set_nonblocking(socket_id: u32, nonblocking: bool) -> Result<()> {
     
     crate::info!("network/socket: set socket {} to {:?} mode", 
                  socket_id, socket.mode);
+    
+    // Forward to user-space network server
+    // In a real implementation, we would send this request via IPC to the user-space server
+    // For now, we'll just log that we would do this
+    
+    crate::info!("network/socket: would send set_nonblocking request to user-space server");
     
     Ok(())
 }

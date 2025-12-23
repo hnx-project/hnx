@@ -1,0 +1,283 @@
+//! GIC Driver Implementation for Kernel
+//!
+//! This module implements a kernel-space GIC driver that communicates with the user-space
+//! GIC driver through IPC to handle interrupt controller operations.
+
+use core::ptr;
+use core::sync::atomic::{AtomicUsize, Ordering};
+use crate::kernel_core::ipc::{endpoint_send_sync, IpcMessage, Priority};
+
+// GIC register offsets (for fallback/direct access if needed)
+const GICD_OFFSET: usize = 0x0000;
+const GICC_OFFSET: usize = 0x1000;
+
+// GICD registers
+const GICD_CTLR: usize = 0x000;
+const GICD_ISENABLER: usize = 0x100;
+
+// GICC registers
+const GICC_IAR: usize = 0x00C;
+const GICC_EOIR: usize = 0x010;
+
+/// GIC driver that communicates with user-space driver
+pub struct KernelGic {
+    gicd_base: AtomicUsize,
+    gicc_base: AtomicUsize,
+    user_driver_epid: Option<u32>, // Endpoint ID of user-space driver
+}
+
+impl KernelGic {
+    /// Create a new kernel GIC driver instance
+    pub const fn new() -> Self {
+        Self {
+            gicd_base: AtomicUsize::new(0x0800_0000), // Default GICD base address
+            gicc_base: AtomicUsize::new(0x0801_0000), // Default GICC base address
+            user_driver_epid: None,
+        }
+    }
+    
+    /// Initialize the GIC driver
+    pub fn init(&self) {
+        // Initialization is handled by user-space driver
+        // We just need to register with the device manager
+        crate::info!("Kernel GIC driver initialized");
+        
+        // If we have a user-space driver, send initialization request
+        if let Some(epid) = self.user_driver_epid {
+            // Create IPC message to initialize GIC in user-space
+            let msg = IpcMessage {
+                src_pid: 0, // Kernel PID
+                dst_epid: epid,
+                op: 0x200, // Custom opcode for GIC init
+                priority: Priority::High,
+                data_len: 0,
+                data: [0u8; 256],
+                timestamp: crate::arch::timer::now_us(),
+            };
+            
+            if let Err(e) = endpoint_send_sync(epid, msg) {
+                crate::error!("Failed to send GIC init request to user-space driver: {:?}", e);
+                // Fallback to direct hardware access if IPC fails
+                self.init_direct();
+            }
+        } else {
+            // Fallback to direct hardware access if no user-space driver
+            self.init_direct();
+        }
+    }
+    
+    /// Direct hardware access for init (fallback)
+    fn init_direct(&self) {
+        unsafe {
+            let gicd = self.gicd_base.load(Ordering::Relaxed) as *mut u32;
+            let gicc = self.gicc_base.load(Ordering::Relaxed) as *mut u32;
+            
+            crate::info!("GICv2: Initializing interrupt controller (direct)");
+            
+            // Enable distributor
+            ptr::write_volatile(gicd.add(GICD_CTLR / 4), 1u32);
+            
+            // Enable CPU interface
+            ptr::write_volatile(gicc.add(0), 1u32);
+        }
+    }
+    
+    /// Set the endpoint ID of the user-space driver
+    pub fn set_user_driver_epid(&mut self, epid: u32) {
+        self.user_driver_epid = Some(epid);
+    }
+    
+    /// Enable an interrupt through user-space driver
+    pub fn enable_irq(&self, irq: u32) {
+        // If we have a user-space driver, send the request through IPC
+        if let Some(epid) = self.user_driver_epid {
+            // Create IPC message to enable IRQ in user-space
+            let mut data = [0u8; 256];
+            data[0..4].copy_from_slice(&irq.to_le_bytes()); // IRQ number
+            
+            let msg = IpcMessage {
+                src_pid: 0, // Kernel PID
+                dst_epid: epid,
+                op: 0x201, // Custom opcode for GIC enable IRQ
+                priority: Priority::High,
+                data_len: 4,
+                data,
+                timestamp: crate::arch::timer::now_us(),
+            };
+            
+            if let Err(e) = endpoint_send_sync(epid, msg) {
+                crate::error!("Failed to send GIC enable IRQ request to user-space driver: {:?}", e);
+                // Fallback to direct hardware access if IPC fails
+                self.enable_irq_direct(irq);
+            }
+        } else {
+            // Fallback to direct hardware access if no user-space driver
+            self.enable_irq_direct(irq);
+        }
+    }
+    
+    /// Direct hardware access for enable_irq (fallback)
+    fn enable_irq_direct(&self, irq: u32) {
+        unsafe {
+            let gicd = self.gicd_base.load(Ordering::Relaxed) as *mut u32;
+            let idx = (irq / 32) as usize;
+            let bit = 1u32 << (irq % 32);
+            let isenabler = gicd.add(GICD_ISENABLER / 4 + idx);
+            let v = ptr::read_volatile(isenabler);
+            ptr::write_volatile(isenabler, v | bit);
+        }
+    }
+    
+    /// Disable an interrupt through user-space driver
+    pub fn disable_irq(&self, irq: u32) {
+        // If we have a user-space driver, send the request through IPC
+        if let Some(epid) = self.user_driver_epid {
+            // Create IPC message to disable IRQ in user-space
+            let mut data = [0u8; 256];
+            data[0..4].copy_from_slice(&irq.to_le_bytes()); // IRQ number
+            
+            let msg = IpcMessage {
+                src_pid: 0, // Kernel PID
+                dst_epid: epid,
+                op: 0x202, // Custom opcode for GIC disable IRQ
+                priority: Priority::High,
+                data_len: 4,
+                data,
+                timestamp: crate::arch::timer::now_us(),
+            };
+            
+            if let Err(e) = endpoint_send_sync(epid, msg) {
+                crate::error!("Failed to send GIC disable IRQ request to user-space driver: {:?}", e);
+                // Fallback to direct hardware access if IPC fails
+                self.disable_irq_direct(irq);
+            }
+        } else {
+            // Fallback to direct hardware access if no user-space driver
+            self.disable_irq_direct(irq);
+        }
+    }
+    
+    /// Direct hardware access for disable_irq (fallback)
+    fn disable_irq_direct(&self, irq: u32) {
+        unsafe {
+            let gicd = self.gicd_base.load(Ordering::Relaxed) as *mut u32;
+            let idx = (irq / 32) as usize;
+            let bit = 1u32 << (irq % 32);
+            let icenabler = gicd.add(0x180 / 4 + idx); // GICD_ICENABLER
+            let v = ptr::read_volatile(icenabler);
+            ptr::write_volatile(icenabler, v | bit);
+        }
+    }
+    
+    /// Read the interrupt acknowledge register through user-space driver
+    pub fn read_iar(&self) -> u32 {
+        // If we have a user-space driver, read through IPC
+        if let Some(epid) = self.user_driver_epid {
+            // In a real implementation, we would receive the IAR value through IPC
+            // For now, we'll fall back to direct hardware access
+            self.read_iar_direct()
+        } else {
+            // Fallback to direct hardware access if no user-space driver
+            self.read_iar_direct()
+        }
+    }
+    
+    /// Direct hardware access for read_iar (fallback)
+    fn read_iar_direct(&self) -> u32 {
+        unsafe {
+            let gicc = self.gicc_base.load(Ordering::Relaxed) as *mut u32;
+            ptr::read_volatile(gicc.add(GICC_IAR / 4))
+        }
+    }
+    
+    /// Write to the end of interrupt register through user-space driver
+    pub fn write_eoi(&self, iar: u32) {
+        // If we have a user-space driver, send through IPC
+        if let Some(epid) = self.user_driver_epid {
+            // Create IPC message to write EOI in user-space
+            let mut data = [0u8; 256];
+            data[0..4].copy_from_slice(&iar.to_le_bytes()); // IAR value
+            
+            let msg = IpcMessage {
+                src_pid: 0, // Kernel PID
+                dst_epid: epid,
+                op: 0x203, // Custom opcode for GIC write EOI
+                priority: Priority::High,
+                data_len: 4,
+                data,
+                timestamp: crate::arch::timer::now_us(),
+            };
+            
+            if let Err(e) = endpoint_send_sync(epid, msg) {
+                crate::error!("Failed to send GIC write EOI request to user-space driver: {:?}", e);
+                // Fallback to direct hardware access if IPC fails
+                self.write_eoi_direct(iar);
+            }
+        } else {
+            // Fallback to direct hardware access if no user-space driver
+            self.write_eoi_direct(iar);
+        }
+    }
+    
+    /// Direct hardware access for write_eoi (fallback)
+    fn write_eoi_direct(&self, iar: u32) {
+        unsafe {
+            let gicc = self.gicc_base.load(Ordering::Relaxed) as *mut u32;
+            ptr::write_volatile(gicc.add(GICC_EOIR / 4), iar)
+        }
+    }
+    
+    /// Set interrupt priority through user-space driver
+    pub fn set_interrupt_priority(&self, irq: u32, priority: u8) {
+        // If we have a user-space driver, send the request through IPC
+        if let Some(epid) = self.user_driver_epid {
+            // Create IPC message to set interrupt priority in user-space
+            let mut data = [0u8; 256];
+            data[0..4].copy_from_slice(&irq.to_le_bytes()); // IRQ number
+            data[4] = priority; // Priority value
+            
+            let msg = IpcMessage {
+                src_pid: 0, // Kernel PID
+                dst_epid: epid,
+                op: 0x204, // Custom opcode for GIC set priority
+                priority: Priority::High,
+                data_len: 5,
+                data,
+                timestamp: crate::arch::timer::now_us(),
+            };
+            
+            if let Err(e) = endpoint_send_sync(epid, msg) {
+                crate::error!("Failed to send GIC set priority request to user-space driver: {:?}", e);
+                // Fallback to direct hardware access if IPC fails
+                self.set_interrupt_priority_direct(irq, priority);
+            }
+        } else {
+            // Fallback to direct hardware access if no user-space driver
+            self.set_interrupt_priority_direct(irq, priority);
+        }
+    }
+    
+    /// Direct hardware access for set_interrupt_priority (fallback)
+    fn set_interrupt_priority_direct(&self, irq: u32, priority: u8) {
+        unsafe {
+            let gicd = self.gicd_base.load(Ordering::Relaxed) as *mut u32;
+            let offset = (irq / 4) as usize;
+            let shift = (irq % 4) * 8;
+            
+            let reg_addr = gicd.add(0x400 / 4 + offset); // GICD_IPRIORITYR
+            let mut val = ptr::read_volatile(reg_addr);
+            val &= !(0xFF << shift);  // Clear old priority
+            val |= (priority as u32) << shift;  // Set new priority
+            ptr::write_volatile(reg_addr, val);
+        }
+    }
+    
+    /// Set the base addresses of the GIC hardware
+    pub fn set_bases(&self, gicd: usize, gicc: usize) {
+        self.gicd_base.store(gicd, Ordering::Relaxed);
+        self.gicc_base.store(gicc, Ordering::Relaxed);
+    }
+}
+
+/// Global kernel GIC instance
+pub static KERNEL_GIC: KernelGic = KernelGic::new();

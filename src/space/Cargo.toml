@@ -1,8 +1,12 @@
 # src/space/Cargo.toml
+# 空间组件工作区
 [workspace]
 members = [
     "libc",
     "hnxlib",
+    "services/filesystem-server",
+    "services/network-server",
+    "services/device-driver-server",
     #"services/init",
     #"services/device-manager",
     #"services/display-server",

@@ -1,7 +1,7 @@
 //! Network subsystem for the HNX kernel
 //!
-//! This module implements the TCP/IP protocol stack and provides
-//! networking capabilities to the kernel and applications.
+//! This module implements minimal networking capabilities, with most functionality
+//! moved to user-space network server.
 
 extern crate alloc;
 
@@ -11,6 +11,7 @@ pub mod arp;
 pub mod ipv4;
 pub mod ipv6;
 pub mod icmp;
+// Protocol implementations moved to user-space
 pub mod udp;
 pub mod tcp;
 pub mod tcp_congestion;
@@ -66,13 +67,15 @@ pub type Result<T> = core::result::Result<T, NetworkError>;
 pub fn init() {
     crate::info!("network: initializing network subsystem");
     
-    // Initialize subsystems
+    // Initialize minimal subsystems
     interface::init();
     ethernet::init();
     arp::init();
     ipv4::init();
     ipv6::init();
     icmp::init();
+    // Protocol implementations moved to user-space
+    // For now, we still need minimal TCP/UDP for some internal functions
     udp::init();
     tcp::init();
     socket::init();
