@@ -310,8 +310,8 @@ impl DtbParser {
     }
 }
 
-// 固定容量数组向量实现
-struct ArrayVec<T, const N: usize> {
+/// 固定容量数组向量实现
+pub struct ArrayVec<T, const N: usize> {
     data: [Option<T>; N],
     len: usize,
 }
@@ -348,7 +348,7 @@ impl<T: Clone, const N: usize> ArrayVec<T, N> {
         self.len
     }
 
-    fn iter(&self) -> ArrayVecIter<T, N> {
+    fn iter(&self) -> ArrayVecIter<'_, T, N> {
         ArrayVecIter {
             vec: self,
             index: 0,

@@ -3,7 +3,6 @@ extern crate bindgen;
 
 use std::env;
 use std::path::PathBuf;
-use std::process::Command;
 
 fn main() {
     println!("cargo:rerun-if-changed=../../include/hnx/abi/syscalls.h");

@@ -4,6 +4,7 @@
 
 use super::{DebugResult, DebugError};
 use crate::console;
+use spin::Mutex;
 
 /// 调试会话状态
 #[derive(Debug, Clone)]
@@ -15,17 +16,16 @@ pub struct DebugSession {
 }
 
 /// 全局调试会话实例
-static mut DEBUG_SESSION: DebugSession = DebugSession {
+static DEBUG_SESSION: Mutex<DebugSession> = Mutex::new(DebugSession {
     enabled: false,
     level: 0,
-};
+});
 
 /// 初始化调试器
 pub fn init() -> DebugResult<()> {
-    unsafe {
-        DEBUG_SESSION.enabled = true;
-        DEBUG_SESSION.level = 1;
-    }
+    let mut session = DEBUG_SESSION.lock();
+    session.enabled = true;
+    session.level = 1;
     
     // 注意：在no_std环境中，我们不能使用println宏
     // console::println("Debugger initialized");
@@ -45,11 +45,10 @@ pub fn log_debug(message: &str, level: u32) -> DebugResult<()> {
         return Err(DebugError::PermissionDenied);
     }
     
-    unsafe {
-        if DEBUG_SESSION.enabled && level <= DEBUG_SESSION.level {
-            // 在no_std环境中，我们不能使用println宏
-            // console::println(&format!("[DEBUG {}] {}", level, message));
-        }
+    let session = DEBUG_SESSION.lock();
+    if session.enabled && level <= session.level {
+        // 在no_std环境中，我们不能使用println宏
+        // console::println(&format!("[DEBUG {}] {}", level, message));
     }
     
     Ok(())
@@ -61,7 +60,5 @@ pub fn get_session_info() -> DebugResult<DebugSession> {
         return Err(DebugError::PermissionDenied);
     }
     
-    unsafe {
-        Ok(DEBUG_SESSION.clone())
-    }
+    Ok(DEBUG_SESSION.lock().clone())
 }
