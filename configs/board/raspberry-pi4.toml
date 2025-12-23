@@ -1,0 +1,33 @@
+# configs/board/raspberry-pi4.toml
+# 树莓派4配置
+
+[machine]
+name = "raspi4b"
+cpu = "cortex-a72"
+memory = "1G"  # 树莓派4默认内存
+
+[devices]
+usb-kbd = "-device usb-kbd"
+usb-mouse = "-device usb-mouse"
+
+[qemu]
+machine_type = "raspi4b"
+cpu_type = "cortex-a72"
+dtb = true  # 需要设备树
+
+[firmware]
+# 树莓派需要额外的固件文件
+required = true
+files = [
+    "bcm2711-rpi-4-b.dtb",
+    "start4.elf",
+    "fixup4.dat"
+]
+
+[kernel]
+args = "console=ttyAMA0,115200 root=/dev/mmcblk0p2 rootwait"
+earlyprintk = true
+
+[description]
+text = "Raspberry Pi 4 Model B"
+notes = "Requires separate firmware files from Raspberry Pi foundation"

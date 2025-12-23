@@ -1,0 +1,15 @@
+# configs/arch/aarch64.toml
+[arch]
+name = "aarch64"
+data-layout = "e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128"
+features = ["+strict-align", "+neon", "+fp-armv8"]
+
+[memory]
+page_size = 4096
+kernel_base = "0xffff000000000000"
+user_base = "0x0000000000400000"
+
+[kernel]
+max_processes = 256
+max_threads = 1024
+max_handles_per_process = 1024

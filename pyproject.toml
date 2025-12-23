@@ -1,0 +1,20 @@
+[project]
+name = "hnx-py"
+version = "0.0.1"
+description = "Use for config and env."
+authors = [
+    {name = "HNX Developer"}
+]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = "3.11.*"
+dependencies = [
+]
+
+[tool.poetry]
+package-mode = false
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

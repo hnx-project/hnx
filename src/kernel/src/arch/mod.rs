@@ -1,0 +1,20 @@
+#[cfg(target_arch = "aarch64")]
+mod aarch64;
+#[cfg(target_arch = "aarch64")]
+pub use aarch64::*;
+
+#[cfg(target_arch = "riscv64")]
+mod riscv64;
+#[cfg(target_arch = "riscv64")]
+pub use riscv64::*;
+
+#[cfg(target_arch = "x86_64")]
+mod x86_64;
+#[cfg(target_arch = "x86_64")]
+pub use x86_64::*;
+
+// 导出通用接口
+pub mod common;
+
+// 重新导出关键类型
+pub use common::traits::*;
