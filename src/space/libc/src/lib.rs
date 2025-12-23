@@ -286,7 +286,7 @@ pub mod syscalls {
 }
 
 // Basic C-compatible functions
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn write(fd: i32, buf: *const u8, count: usize) -> isize {
     syscalls::sys_write(fd, buf, count)
 }
@@ -294,57 +294,57 @@ pub unsafe extern "C" fn write(fd: i32, buf: *const u8, count: usize) -> isize {
 // Print utilities
 pub mod print;
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn exit(status: i32) -> ! {
     syscalls::sys_exit(status)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn read(fd: i32, buf: *mut u8, count: usize) -> isize {
     syscalls::sys_read(fd, buf, count)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn open(path: *const u8, flags: i32, mode: i32) -> i32 {
     syscalls::sys_open(path, flags, mode)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn close(fd: i32) -> i32 {
     syscalls::sys_close(fd)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn socket(domain: i32, type_: i32, protocol: i32) -> i32 {
     syscalls::sys_socket(domain, type_, protocol)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn bind(sockfd: i32, addr: *const u8, addrlen: usize) -> i32 {
     syscalls::sys_bind(sockfd, addr, addrlen)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn connect(sockfd: i32, addr: *const u8, addrlen: usize) -> i32 {
     syscalls::sys_connect(sockfd, addr, addrlen)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn send(sockfd: i32, buf: *const u8, len: usize, flags: i32) -> isize {
     syscalls::sys_send(sockfd, buf, len, flags)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn recv(sockfd: i32, buf: *mut u8, len: usize, flags: i32) -> isize {
     syscalls::sys_recv(sockfd, buf, len, flags)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn listen(sockfd: i32, backlog: i32) -> i32 {
     syscalls::sys_listen(sockfd, backlog)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn accept(sockfd: i32, addr: *mut u8, addrlen: *mut usize) -> i32 {
     syscalls::sys_accept(sockfd, addr, addrlen)
 }

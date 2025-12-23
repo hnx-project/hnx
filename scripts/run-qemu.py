@@ -138,7 +138,7 @@ class QEMURunner:
         qemu_config = self._get_qemu_config()
         
         # 机器类型和 CPU
-        cmd.extend(["-machine", qemu_config["machine"]])
+        cmd.extend(["-machine", qemu_config["machine"].get("name", "virt")])
         cmd.extend(["-cpu", qemu_config["cpu"]])
         
         # 内存

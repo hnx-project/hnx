@@ -17,7 +17,7 @@ fn main() {
     generate_linker_script_and_config_header(&target_arch, &target);
 
     // 3. 链接 libc 库
-    link_libc();
+    // link_libc();
 
     // 4. 设置重新编译条件
     println!("cargo:rerun-if-changed=build.rs");
@@ -25,13 +25,13 @@ fn main() {
     println!("cargo:rerun-if-changed=src/configs/");
 }
 
-fn link_libc() {
-    // 链接 libc 库
-    let libc_path = "../libc/libhnxc.a";
-    println!("cargo:rustc-link-search=native=../libc");
-    println!("cargo:rustc-link-lib=static=hnxc");
-    println!("cargo:rerun-if-changed={}", libc_path);
-}
+// fn link_libc() {
+//     // 链接 libc 库
+//     let libc_path = "../libc/libhnxc.a";
+//     println!("cargo:rustc-link-search=native=../libc");
+//     println!("cargo:rustc-link-lib=static=hnxc");
+//     println!("cargo:rerun-if-changed={}", libc_path);
+// }
 
 fn generate_linker_script_and_config_header(arch: &str, _target: &str) {
     // 读取模板（优先使用仓库模板）

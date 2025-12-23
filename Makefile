@@ -18,7 +18,7 @@ PROFILE ?= debug
 # 导出环境变量
 export ARCH BOARD PROFILE
 export KERNEL_TARGET = $(ARCH)-unknown-none
-export SPACE_TARGET = $(PROJECT_ROOT)/targets/$(ARCH)-unknown-hnx.json
+export SPACE_TARGET = $(ARCH)-unknown-none
 
 all: image
 
@@ -93,6 +93,16 @@ image: kernel space
 		--board $(BOARD) \
 		--output $(BUILD_ROOT)/images/hnx-$(ARCH)-$(BOARD).img
 	@echo "========= System image created ========="
+	@echo ""
+
+run-kernel: kernel
+	@echo "========= Running kernel in QEMU ========="
+	@$(PYTHON) scripts/run-qemu.py \
+		--arch $(ARCH) \
+		--board $(BOARD) \
+		--headless \
+		$(BUILD_ROOT)/kernel/$(PROFILE)/hnx-kernel.bin
+	@echo "========= QEMU exited ========="
 	@echo ""
 
 # 运行 QEMU（使用配置）

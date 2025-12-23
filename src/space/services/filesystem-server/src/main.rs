@@ -169,28 +169,28 @@ impl FilesystemServer {
                 self.handle_file_size_request(msg);
             }
             FS_OP_WRITE => {
-                self.handle_write_request(msg)); */ 
+                self.handle_write_request(msg);
             }
             FS_OP_CREATE => {
-                self.handle_create_request(msg)); */ 
+                self.handle_create_request(msg);
             }
             FS_OP_TRUNCATE => {
-                self.handle_truncate_request(msg)); */ 
+                self.handle_truncate_request(msg);
             }
             FS_OP_DELETE => {
-                self.handle_delete_request(msg)); */ 
+                self.handle_delete_request(msg);
             }
             FS_OP_MKDIR => {
-                self.handle_mkdir_request(msg)); */ 
+                self.handle_mkdir_request(msg);
             }
             FS_OP_RMDIR => {
-                self.handle_rmdir_request(msg)); */ 
+                self.handle_rmdir_request(msg);
             }
             FS_OP_READDIR => {
-                self.handle_readdir_request(msg)); */ 
+                self.handle_readdir_request(msg);
             }
             _ => {
-                /* log_message(crate::println!(format!(*/ "Filesystem server received unknown opcode: {}", msg.op)); */ 
+                /* log_message(crate::println!(format!( Filesystem server received unknown opcode: {}", msg.op)); */ 
                 
                 // Send error response
                 let response_msg = IpcMessage {
@@ -208,7 +208,7 @@ impl FilesystemServer {
                 };
                 
                 if let Err(e) = endpoint_send_sync(msg.src_pid, response_msg, None) {
-                    /* log_message(crate::println!(format!(*/ "Failed to send error response: {:?}", e)); */ 
+                    /* log_message(crate::println!(format!( Failed to send error response: {:?}", e)); */ 
                 }
             }
         }
@@ -216,7 +216,7 @@ impl FilesystemServer {
     
     /// Handle read request
     fn handle_read_request(&mut self, msg: IpcMessage) {
-        /* log_message(crate::println!(format!(*/ "Filesystem server handling read request")); */ 
+        /* log_message(crate::println!(format!( Filesystem server handling read request")); */ 
         
         // Parse request data
         // Expected format: [path_len: u32, path_bytes..., offset: u64, buffer_size: u32]
@@ -230,7 +230,7 @@ impl FilesystemServer {
         
         // Check if we have enough data
         if msg.data_len < 4 + path_len + 8 + 4 {
-            self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH)); */ 
+            self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH);
             return;
         }
         
@@ -239,7 +239,7 @@ impl FilesystemServer {
         let path = match core::str::from_utf8(path_bytes) {
             Ok(s) => s,
             Err(_) => {
-                self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH)); */ 
+                self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH);
                 return;
             }
         };
@@ -257,7 +257,7 @@ impl FilesystemServer {
             buf_size_bytes[0], buf_size_bytes[1], buf_size_bytes[2], buf_size_bytes[3]
         ]) as usize;
         
-        /* log_message(crate::println!(format!(*/ "Reading from path: {}, offset: {}, buffer size: {}", path, offset, buf_size)); */ 
+        /* log_message(crate::println!(format!( Reading from path: {}, offset: {}, buffer size: {}", path, offset, buf_size)); */ 
         
         // Open file
         match self.ramfs.open(path, 0) {
@@ -275,12 +275,12 @@ impl FilesystemServer {
                         let mut response_data = [0u8; 256];
                         
                         // First 4 bytes: number of bytes read
-                        response_data[0..4].copy_from_slice(&(bytes_read as u32).to_le_bytes())); */ 
+                        response_data[0..4].copy_from_slice(&(bytes_read as u32).to_le_bytes());
                         
                         // Next bytes: actual data read
                         let data_end = 4 + bytes_read;
                         if data_end <= 256 {
-                            response_data[4..data_end].copy_from_slice(&buffer[..bytes_read])); */ 
+                            response_data[4..data_end].copy_from_slice(&buffer[..bytes_read]); 
                             
                             // Send success response
                             let response_msg = IpcMessage {
@@ -294,35 +294,35 @@ impl FilesystemServer {
                             };
                             
                             if let Err(e) = endpoint_send_sync(msg.src_pid, response_msg, None) {
-                                /* log_message(crate::println!(format!(*/ "Failed to send read response: {:?}", e)); */ 
+                                /* log_message(crate::println!(format!( Failed to send read response: {:?}", e)); */ 
                             }
                         } else {
                             // Data too large for response buffer
-                            self.send_error_response(msg.src_pid, msg.op, FS_ERR_IO_ERROR)); */ 
+                            self.send_error_response(msg.src_pid, msg.op, FS_ERR_IO_ERROR);
                         }
                     }
                     Err(_) => {
                         // Close file handle
-                        let _ = self.ramfs.close(handle)); */ 
+                        let _ = self.ramfs.close(handle);
                         
-                        self.send_error_response(msg.src_pid, msg.op, FS_ERR_IO_ERROR)); */ 
+                        self.send_error_response(msg.src_pid, msg.op, FS_ERR_IO_ERROR);
                     }
                 }
             }
             Err(_) => {
-                self.send_error_response(msg.src_pid, msg.op, FS_ERR_NOT_FOUND)); */ 
+                self.send_error_response(msg.src_pid, msg.op, FS_ERR_NOT_FOUND);
             }
         }
     }
     
     /// Handle file exists request
     fn handle_exists_request(&mut self, msg: IpcMessage) {
-        /* log_message(crate::println!(format!(*/ "Filesystem server handling file exists request")); */ 
+        /* log_message(crate::println!(format!( Filesystem server handling file exists request")); */ 
         
         // Parse request data
         // Expected format: [path_len: u32, path_bytes...]
         if msg.data_len < 4 {
-            self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH)); */ 
+            self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH);
             return;
         }
         
@@ -331,7 +331,7 @@ impl FilesystemServer {
         
         // Check if we have enough data
         if msg.data_len < 4 + path_len {
-            self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH)); */ 
+            self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH);
             return;
         }
         
@@ -340,12 +340,12 @@ impl FilesystemServer {
         let path = match core::str::from_utf8(path_bytes) {
             Ok(s) => s,
             Err(_) => {
-                self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH)); */ 
+                self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH);
                 return;
             }
         };
         
-        /* log_message(crate::println!(format!(*/ "Checking if file exists: {}", path)); */ 
+        /* log_message(crate::println!(format!( Checking if file exists: {}", path)); */ 
         
         // Check if file exists
         match self.ramfs.lookup(path) {
@@ -366,24 +366,24 @@ impl FilesystemServer {
                 };
                 
                 if let Err(e) = endpoint_send_sync(msg.src_pid, response_msg, None) {
-                    /* log_message(crate::println!(format!(*/ "Failed to send exists response: {:?}", e)); */ 
+                    /* log_message(crate::println!(format!( Failed to send exists response: {:?}", e)); */ 
                 }
             }
             Err(_) => {
                 // File does not exist - send not found response
-                self.send_error_response(msg.src_pid, msg.op, FS_ERR_NOT_FOUND)); */ 
+                self.send_error_response(msg.src_pid, msg.op, FS_ERR_NOT_FOUND);
             }
         }
     }
     
     /// Handle list directory request
     fn handle_list_dir_request(&mut self, msg: IpcMessage) {
-        /* log_message(crate::println!(format!(*/ "Filesystem server handling list directory request")); */ 
+        /* log_message(crate::println!(format!( Filesystem server handling list directory request")); */ 
         
         // Parse request data
         // Expected format: [path_len: u32, path_bytes...]
         if msg.data_len < 4 {
-            self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH)); */ 
+            self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH);
             return;
         }
         
@@ -392,7 +392,7 @@ impl FilesystemServer {
         
         // Check if we have enough data
         if msg.data_len < 4 + path_len {
-            self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH)); */ 
+            self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH);
             return;
         }
         
@@ -401,12 +401,12 @@ impl FilesystemServer {
         let path = match core::str::from_utf8(path_bytes) {
             Ok(s) => s,
             Err(_) => {
-                self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH)); */ 
+                self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH);
                 return;
             }
         };
         
-        /* log_message(crate::println!(format!(*/ "Listing directory: {}", path)); */ 
+        /* log_message(crate::println!(format!( Listing directory: {}", path)); */ 
         
         // List directory contents
         match self.ramfs.readdir(path) {
@@ -417,24 +417,24 @@ impl FilesystemServer {
                 
                 // First 4 bytes: number of entries
                 let num_entries = entries.len() as u32;
-                response_data[offset..offset + 4].copy_from_slice(&num_entries.to_le_bytes())); */ 
+                response_data[offset..offset + 4].copy_from_slice(&num_entries.to_le_bytes()); 
                 offset += 4;
                 
                 // For each entry, serialize: name_len (u32), name_bytes, entry_type (u8), size (u64)
                 for entry in entries {
                     if offset + 4 + entry.name.len() + 1 + 8 > 256 {
                         // Not enough space in response buffer
-                        self.send_error_response(msg.src_pid, msg.op, FS_ERR_IO_ERROR)); */ 
+                        self.send_error_response(msg.src_pid, msg.op, FS_ERR_IO_ERROR);
                         return;
                     }
                     
                     // Name length
                     let name_len = entry.name.len() as u32;
-                    response_data[offset..offset + 4].copy_from_slice(&name_len.to_le_bytes())); */ 
+                    response_data[offset..offset + 4].copy_from_slice(&name_len.to_le_bytes());
                     offset += 4;
                     
                     // Name bytes
-                    response_data[offset..offset + entry.name.len()].copy_from_slice(entry.name.as_bytes())); */ 
+                    response_data[offset..offset + entry.name.len()].copy_from_slice(entry.name.as_bytes());
                     offset += entry.name.len()); */ 
                     
                     // Entry type
@@ -446,7 +446,7 @@ impl FilesystemServer {
                     offset += 1;
                     
                     // Size
-                    response_data[offset..offset + 8].copy_from_slice(&(entry.size as u64).to_le_bytes())); */ 
+                    response_data[offset..offset + 8].copy_from_slice(&(entry.size as u64).to_le_bytes());
                     offset += 8;
                 }
                 
@@ -462,23 +462,23 @@ impl FilesystemServer {
                 };
                 
                 if let Err(e) = endpoint_send_sync(msg.src_pid, response_msg, None) {
-                    /* log_message(crate::println!(format!(*/ "Failed to send list directory response: {:?}", e)); */ 
+                    /* log_message(crate::println!(format!( Failed to send list directory response: {:?}", e)); */ 
                 }
             }
             Err(_) => {
-                self.send_error_response(msg.src_pid, msg.op, FS_ERR_NOT_FOUND)); */ 
+                self.send_error_response(msg.src_pid, msg.op, FS_ERR_NOT_FOUND);
             }
         }
     }
     
     /// Handle file size request
     fn handle_file_size_request(&mut self, msg: IpcMessage) {
-        /* log_message(crate::println!(format!(*/ "Filesystem server handling file size request")); */ 
+        /* log_message(crate::println!(format!( Filesystem server handling file size request")); */ 
         
         // Parse request data
         // Expected format: [path_len: u32, path_bytes...]
         if msg.data_len < 4 {
-            self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH)); */ 
+            self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH);
             return;
         }
         
@@ -487,7 +487,7 @@ impl FilesystemServer {
         
         // Check if we have enough data
         if msg.data_len < 4 + path_len {
-            self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH)); */ 
+            self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH);
             return;
         }
         
@@ -496,12 +496,12 @@ impl FilesystemServer {
         let path = match core::str::from_utf8(path_bytes) {
             Ok(s) => s,
             Err(_) => {
-                self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH)); */ 
+                self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH);
                 return;
             }
         };
         
-        /* log_message(crate::println!(format!(*/ "Getting file size for: {}", path)); */ 
+        /* log_message(crate::println!(format!( Getting file size for: {}", path)); */ 
         
         // Get file size
         match self.ramfs.lookup(path) {
@@ -518,30 +518,30 @@ impl FilesystemServer {
                     data_len: 8,
                     data: {
                         let mut arr = [0u8; 256];
-                        arr[0..8].copy_from_slice(&size.to_le_bytes())); */ 
+                        arr[0..8].copy_from_slice(&size.to_le_bytes());
                         arr
                     },
                     timestamp: crate::arch::timer::now_us(),
                 };
                 
                 if let Err(e) = endpoint_send_sync(msg.src_pid, response_msg, None) {
-                    /* log_message(crate::println!(format!(*/ "Failed to send file size response: {:?}", e)); */ 
+                    /* log_message(crate::println!(format!( Failed to send file size response: {:?}", e)); */ 
                 }
             }
             Err(_) => {
-                self.send_error_response(msg.src_pid, msg.op, FS_ERR_NOT_FOUND)); */ 
+                self.send_error_response(msg.src_pid, msg.op, FS_ERR_NOT_FOUND);
             }
         }
     }
     
     /// Handle write request
     fn handle_write_request(&mut self, msg: IpcMessage) {
-        /* log_message(crate::println!(format!(*/ "Filesystem server handling write request")); */ 
+        /* log_message(crate::println!(format!( Filesystem server handling write request")); */ 
         
         // Parse request data
         // Expected format: [path_len: u32, path_bytes..., offset: u64, data_len: u32, data_bytes...]
         if msg.data_len < 4 {
-            self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH)); */ 
+            self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH);
             return;
         }
         
@@ -550,7 +550,7 @@ impl FilesystemServer {
         
         // Check if we have enough data
         if msg.data_len < 4 + path_len + 8 + 4 {
-            self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH)); */ 
+            self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH);
             return;
         }
         
@@ -559,7 +559,7 @@ impl FilesystemServer {
         let path = match core::str::from_utf8(path_bytes) {
             Ok(s) => s,
             Err(_) => {
-                self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH)); */ 
+                self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH);
                 return;
             }
         };
@@ -579,14 +579,14 @@ impl FilesystemServer {
         
         // Check if we have enough data
         if msg.data_len < 4 + path_len + 8 + 4 + data_len {
-            self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH)); */ 
+            self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH);
             return;
         }
         
         // Extract data
         let data_bytes = &msg.data[4 + path_len + 8 + 4..4 + path_len + 8 + 4 + data_len];
         
-        /* log_message(crate::println!(format!(*/ "Writing to path: {}, offset: {}, data length: {}", path, offset, data_len)); */ 
+        /* log_message(crate::println!(format!( Writing to path: {}, offset: {}, data length: {}", path, offset, data_len)); */ 
         
         // Open file (create if it doesn't exist)
         let handle = match self.ramfs.open(path, 0) {
@@ -596,7 +596,7 @@ impl FilesystemServer {
                 match self.ramfs.create(path, 0o644) {
                     Ok(h) => h,
                     Err(_) => {
-                        self.send_error_response(msg.src_pid, msg.op, FS_ERR_IO_ERROR)); */ 
+                        self.send_error_response(msg.src_pid, msg.op, FS_ERR_IO_ERROR);
                         return;
                     }
                 }
@@ -618,33 +618,33 @@ impl FilesystemServer {
                     data_len: 4,
                     data: {
                         let mut arr = [0u8; 256];
-                        arr[0..4].copy_from_slice(&(bytes_written as u32).to_le_bytes())); */ 
+                        arr[0..4].copy_from_slice(&(bytes_written as u32).to_le_bytes());
                         arr
                     },
                     timestamp: crate::arch::timer::now_us(),
                 };
                 
                 if let Err(e) = endpoint_send_sync(msg.src_pid, response_msg, None) {
-                    /* log_message(crate::println!(format!(*/ "Failed to send write response: {:?}", e)); */ 
+                    /* log_message(crate::println!(format!( Failed to send write response: {:?}", e)); */ 
                 }
             }
             Err(_) => {
                 // Close file handle
-                let _ = self.ramfs.close(handle)); */ 
+                let _ = self.ramfs.close(handle);
                 
-                self.send_error_response(msg.src_pid, msg.op, FS_ERR_IO_ERROR)); */ 
+                self.send_error_response(msg.src_pid, msg.op, FS_ERR_IO_ERROR);
             }
         }
     }
     
     /// Handle create request
     fn handle_create_request(&mut self, msg: IpcMessage) {
-        /* log_message(crate::println!(format!(*/ "Filesystem server handling create request")); */ 
+        /* log_message(crate::println!(format!( Filesystem server handling create request")); */ 
         
         // Parse request data
         // Expected format: [path_len: u32, path_bytes..., mode: u32]
         if msg.data_len < 4 {
-            self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH)); */ 
+            self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH);
             return;
         }
         
@@ -653,7 +653,7 @@ impl FilesystemServer {
         
         // Check if we have enough data
         if msg.data_len < 4 + path_len + 4 {
-            self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH)); */ 
+            self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH);
             return;
         }
         
@@ -662,7 +662,7 @@ impl FilesystemServer {
         let path = match core::str::from_utf8(path_bytes) {
             Ok(s) => s,
             Err(_) => {
-                self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH)); */ 
+                self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH);
                 return;
             }
         };
@@ -673,7 +673,7 @@ impl FilesystemServer {
             mode_bytes[0], mode_bytes[1], mode_bytes[2], mode_bytes[3]
         ])); */ 
         
-        /* log_message(crate::println!(format!(*/ "Creating file: {} with mode: {:o}", path, mode)); */ 
+        /* log_message(crate::println!(format!( Creating file: {} with mode: {:o}", path, mode)); */ 
         
         // Create file
         match self.ramfs.create(path, mode) {
@@ -694,7 +694,7 @@ impl FilesystemServer {
                 };
                 
                 if let Err(e) = endpoint_send_sync(msg.src_pid, response_msg, None) {
-                    /* log_message(crate::println!(format!(*/ "Failed to send create response: {:?}", e)); */ 
+                    /* log_message(crate::println!(format!( Failed to send create response: {:?}", e)); */ 
                 }
             }
             Err(fs_err) => {
@@ -704,19 +704,19 @@ impl FilesystemServer {
                     filesystems::ramfs::FsError::InvalidPath => FS_ERR_INVALID_PATH,
                     _ => FS_ERR_IO_ERROR,
                 };
-                self.send_error_response(msg.src_pid, msg.op, err_code)); */ 
+                self.send_error_response(msg.src_pid, msg.op, err_code);
             }
         }
     }
     
     /// Handle truncate request
     fn handle_truncate_request(&mut self, msg: IpcMessage) {
-        /* log_message(crate::println!(format!(*/ "Filesystem server handling truncate request")); */ 
+        /* log_message(crate::println!(format!( Filesystem server handling truncate request")); */ 
         
         // Parse request data
         // Expected format: [path_len: u32, path_bytes..., size: u64]
         if msg.data_len < 4 {
-            self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH)); */ 
+            self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH);
             return;
         }
         
@@ -725,7 +725,7 @@ impl FilesystemServer {
         
         // Check if we have enough data
         if msg.data_len < 4 + path_len + 8 {
-            self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH)); */ 
+            self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH);
             return;
         }
         
@@ -734,7 +734,7 @@ impl FilesystemServer {
         let path = match core::str::from_utf8(path_bytes) {
             Ok(s) => s,
             Err(_) => {
-                self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH)); */ 
+                self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH); 
                 return;
             }
         };
@@ -746,7 +746,7 @@ impl FilesystemServer {
             size_bytes[4], size_bytes[5], size_bytes[6], size_bytes[7]
         ]) as usize;
         
-        /* log_message(crate::println!(format!(*/ "Truncating file: {} to size: {}", path, size)); */ 
+        /* log_message(crate::println!(format!( Truncating file: {} to size: {}", path, size)); */ 
         
         // Truncate file
         match self.ramfs.truncate(path, size) {
@@ -767,7 +767,7 @@ impl FilesystemServer {
                 };
                 
                 if let Err(e) = endpoint_send_sync(msg.src_pid, response_msg, None) {
-                    /* log_message(crate::println!(format!(*/ "Failed to send truncate response: {:?}", e)); */ 
+                    /* log_message(crate::println!(format!( Failed to send truncate response: {:?}", e)); */ 
                 }
             }
             Err(fs_err) => {
@@ -777,19 +777,19 @@ impl FilesystemServer {
                     filesystems::ramfs::FsError::InvalidPath => FS_ERR_INVALID_PATH,
                     _ => FS_ERR_IO_ERROR,
                 };
-                self.send_error_response(msg.src_pid, msg.op, err_code)); */ 
+                self.send_error_response(msg.src_pid, msg.op, err_code);
             }
         }
     }
     
     /// Handle delete request
     fn handle_delete_request(&mut self, msg: IpcMessage) {
-        /* log_message(crate::println!(format!(*/ "Filesystem server handling delete request")); */ 
+        /* log_message(crate::println!(format!( Filesystem server handling delete request")); */ 
         
         // Parse request data
         // Expected format: [path_len: u32, path_bytes...]
         if msg.data_len < 4 {
-            self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH)); */ 
+            self.send_error_response(msg.src_pid, msg.op, FS_ERR_INVALID_PATH);
             return;
         }
         
@@ -812,7 +812,7 @@ impl FilesystemServer {
             }
         };
         
-        /* log_message(crate::println!(format!(*/ "Deleting file: {}", path)); */ 
+        /* log_message(crate::println!(format!( Deleting file: {}", path)); */ 
         
         // Delete file
         match self.ramfs.delete(path) {
@@ -833,7 +833,7 @@ impl FilesystemServer {
                 };
                 
                 if let Err(e) = endpoint_send_sync(msg.src_pid, response_msg, None) {
-                    /* log_message(crate::println!(format!(*/ "Failed to send delete response: {:?}", e)); */ 
+                    /* log_message(crate::println!(format!( Failed to send delete response: {:?}", e)); */ 
                 }
             }
             Err(fs_err) => {
@@ -850,7 +850,7 @@ impl FilesystemServer {
     
     /// Handle mkdir request
     fn handle_mkdir_request(&mut self, msg: IpcMessage) {
-        /* log_message(crate::println!(format!(*/ "Filesystem server handling mkdir request")); */ 
+        /* log_message(crate::println!(format!( Filesystem server handling mkdir request")); */ 
         
         // Parse request data
         // Expected format: [path_len: u32, path_bytes..., mode: u32]
@@ -884,7 +884,7 @@ impl FilesystemServer {
             mode_bytes[0], mode_bytes[1], mode_bytes[2], mode_bytes[3]
         ])); */ 
         
-        /* log_message(crate::println!(format!(*/ "Creating directory: {} with mode: {:o}", path, mode)); */ 
+        /* log_message(crate::println!(format!( Creating directory: {} with mode: {:o}", path, mode)); */ 
         
         // Create directory
         match self.ramfs.mkdir(path, mode) {
@@ -905,7 +905,7 @@ impl FilesystemServer {
                 };
                 
                 if let Err(e) = endpoint_send_sync(msg.src_pid, response_msg, None) {
-                    /* log_message(crate::println!(format!(*/ "Failed to send mkdir response: {:?}", e)); */ 
+                    /* log_message(crate::println!(format!( Failed to send mkdir response: {:?}", e)); */ 
                 }
             }
             Err(fs_err) => {
@@ -922,7 +922,7 @@ impl FilesystemServer {
     
     /// Handle rmdir request
     fn handle_rmdir_request(&mut self, msg: IpcMessage) {
-        /* log_message(crate::println!(format!(*/ "Filesystem server handling rmdir request")); */ 
+        /* log_message(crate::println!(format!( Filesystem server handling rmdir request")); */ 
         
         // Parse request data
         // Expected format: [path_len: u32, path_bytes...]
@@ -950,7 +950,7 @@ impl FilesystemServer {
             }
         };
         
-        /* log_message(crate::println!(format!(*/ "Removing directory: {}", path)); */ 
+        /* log_message(crate::println!(format!( Removing directory: {}", path)); */ 
         
         // Remove directory
         match self.ramfs.rmdir(path) {
@@ -971,7 +971,7 @@ impl FilesystemServer {
                 };
                 
                 if let Err(e) = endpoint_send_sync(msg.src_pid, response_msg, None) {
-                    /* log_message(crate::println!(format!(*/ "Failed to send rmdir response: {:?}", e)); */ 
+                    /* log_message(crate::println!(format!( Failed to send rmdir response: {:?}", e)); */ 
                 }
             }
             Err(fs_err) => {
@@ -989,7 +989,7 @@ impl FilesystemServer {
     
     /// Handle readdir request
     fn handle_readdir_request(&mut self, msg: IpcMessage) {
-        /* log_message(crate::println!(format!(*/ "Filesystem server handling readdir request")); */ 
+        /* log_message(crate::println!(format!( Filesystem server handling readdir request")); */ 
         
         // Parse request data
         // Expected format: [path_len: u32, path_bytes...]
@@ -1017,7 +1017,7 @@ impl FilesystemServer {
             }
         };
         
-        /* log_message(crate::println!(format!(*/ "Reading directory: {}", path)); */ 
+        /* log_message(crate::println!(format!( Reading directory: {}", path)); */ 
         
         // Read directory entries
         match self.ramfs.readdir(path) {
@@ -1073,7 +1073,7 @@ impl FilesystemServer {
                 };
                 
                 if let Err(e) = endpoint_send_sync(msg.src_pid, response_msg, None) {
-                    /* log_message(crate::println!(format!(*/ "Failed to send readdir response: {:?}", e)); */ 
+                    /* log_message(crate::println!(format!( Failed to send readdir response: {:?}", e)); */ 
                 }
             }
             Err(fs_err) => {
@@ -1106,14 +1106,14 @@ impl FilesystemServer {
         };
         
         if let Err(e) = endpoint_send_sync(dst_epid, response_msg, None) {
-            /* log_message(crate::println!(format!(*/ "Failed to send error response: {:?}", e)); */ 
+            /* log_message(crate::println!(format!( Failed to send error response: {:?}", e)); */ 
         }
     }
 }
 
 /// Initialize and start the filesystem server
 pub fn start_filesystem_server() -> ! {
-    /* log_message(crate::println!(format!(*/ "Starting user-space filesystem server...")); */ 
+    /* log_message(crate::println!(format!( Starting user-space filesystem server...")); */ 
     
     // Create filesystem server instance
     let mut server = FilesystemServer::new().expect("Failed to create filesystem server")); */ 

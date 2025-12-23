@@ -173,7 +173,7 @@ impl DeviceDriverServer {
                     self.handle_ipc_message(msg);
                 }
                 Err(e) => {
-                    /* log_message(crate::println!(format!(*/ "Error receiving IPC message: {:?}", e)); */ 
+                    /* log_message(crate::println!(format!( "Error receiving IPC message: {:?}", e)); */ 
                     // Handle error or continue
                     continue;
                 }
@@ -185,40 +185,40 @@ impl DeviceDriverServer {
     fn handle_ipc_message(&self, msg: IpcMessage) {
         match msg.op as u64 {
             DEV_OP_REGISTER_DRIVER => {
-                self.handle_register_driver(msg)); */ 
+                self.handle_register_driver(msg);
             }
             DEV_OP_REQUEST_IRQ => {
-                self.handle_request_irq(msg)); */ 
+                self.handle_request_irq(msg);
             }
             DEV_OP_MMIO_MAP => {
-                self.handle_mmio_map(msg)); */ 
+                self.handle_mmio_map(msg);
             }
             DEV_OP_DMA_ALLOC => {
-                self.handle_dma_alloc(msg)); */ 
+                self.handle_dma_alloc(msg);
             }
             DEV_OP_INTERRUPT => {
-                self.handle_interrupt(msg)); */ 
+                self.handle_interrupt(msg);
             }
             DEV_OP_IO_READ => {
-                self.handle_io_read(msg)); */ 
+                self.handle_io_read(msg);
             }
             DEV_OP_IO_WRITE => {
-                self.handle_io_write(msg)); */ 
+                self.handle_io_write(msg);
             }
             DEV_OP_GIC_INIT => {
-                self.handle_gic_init(msg)); */ 
+                self.handle_gic_init(msg);
             }
             DEV_OP_GIC_ENABLE_IRQ => {
-                self.handle_gic_enable_irq(msg)); */ 
+                self.handle_gic_enable_irq(msg);
             }
             DEV_OP_GIC_DISABLE_IRQ => {
-                self.handle_gic_disable_irq(msg)); */ 
+                self.handle_gic_disable_irq(msg); 
             }
             DEV_OP_GIC_SET_PRIORITY => {
-                self.handle_gic_set_priority(msg)); */ 
+                self.handle_gic_set_priority(msg);
             }
             _ => {
-                /* log_message(crate::println!(format!(*/ "Device driver server received unknown opcode: {}", msg.op)); */ 
+                /* log_message(crate::println!(format!( "Device driver server received unknown opcode: {}", msg.op)); */ 
                 
                 // Send error response back to kernel
                 let response_msg = IpcMessage {
@@ -236,7 +236,7 @@ impl DeviceDriverServer {
                 };
                 
                 if let Err(e) = endpoint_send_sync(msg.src_pid, response_msg, None) {
-                    /* log_message(crate::println!(format!(*/ "Failed to send error response: {:?}", e)); */ 
+                    /* log_message(crate::println!(format!( "Failed to send error response: {:?}", e)); */ 
                 }
             }
         }
@@ -244,7 +244,7 @@ impl DeviceDriverServer {
     
     /// Handle device registration request
     fn handle_register_driver(&self, msg: IpcMessage) {
-        /* log_message(crate::println!(format!(*/ "Handling device registration request")); */ 
+        /* log_message(crate::println!(format!( "Handling device registration request")); */ 
         
         // Parse device registration request from message data
         // In a real implementation, we would deserialize the request properly
@@ -265,13 +265,13 @@ impl DeviceDriverServer {
         };
         
         if let Err(e) = endpoint_send_sync(msg.src_pid, response_msg, None) {
-            /* log_message(crate::println!(format!(*/ "Failed to send registration response: {:?}", e)); */ 
+            /* log_message(crate::println!(format!( "Failed to send registration response: {:?}", e)); */ 
         }
     }
     
     /// Handle IRQ request
     fn handle_request_irq(&self, msg: IpcMessage) {
-        /* log_message(crate::println!(format!(*/ "Handling IRQ request")); */ 
+        /* log_message(crate::println!(format!(* "Handling IRQ request")); */ 
         
         // Parse IRQ request from message data
         // In a real implementation, we would deserialize the request properly
@@ -292,13 +292,13 @@ impl DeviceDriverServer {
         };
         
         if let Err(e) = endpoint_send_sync(msg.src_pid, response_msg, None) {
-            /* log_message(crate::println!(format!(*/ "Failed to send IRQ response: {:?}", e)); */ 
+            /* log_message(crate::println!(format!(* "Failed to send IRQ response: {:?}", e)); */ 
         }
     }
     
     /// Handle MMIO mapping request
     fn handle_mmio_map(&self, msg: IpcMessage) {
-        /* log_message(crate::println!(format!(*/ "Handling MMIO mapping request")); */ 
+        /* log_message(crate::println!(format!(* "Handling MMIO mapping request")); */ 
         
         // Parse MMIO request from message data
         // In a real implementation, we would deserialize the request properly
@@ -319,13 +319,13 @@ impl DeviceDriverServer {
         };
         
         if let Err(e) = endpoint_send_sync(msg.src_pid, response_msg, None) {
-            /* log_message(crate::println!(format!(*/ "Failed to send MMIO response: {:?}", e)); */ 
+            /* log_message(crate::println!(format!(*"Failed to send MMIO response: {:?}", e)); */ 
         }
     }
     
     /// Handle DMA allocation request
     fn handle_dma_alloc(&self, msg: IpcMessage) {
-        /* log_message(crate::println!(format!(*/ "Handling DMA allocation request")); */ 
+        /* log_message(crate::println!(format!(*Handling DMA allocation request")); */ 
         
         // Parse DMA request from message data
         // In a real implementation, we would deserialize the request properly
@@ -346,31 +346,31 @@ impl DeviceDriverServer {
         };
         
         if let Err(e) = endpoint_send_sync(msg.src_pid, response_msg, None) {
-            /* log_message(crate::println!(format!(*/ "Failed to send DMA response: {:?}", e)); */ 
+            /* log_message(crate::println!(format!(*Failed to send DMA response: {:?}", e)); */ 
         }
     }
     
     /// Handle interrupt notification from kernel
     fn handle_interrupt(&self, msg: IpcMessage) {
-        /* log_message(crate::println!(format!(*/ "Handling interrupt notification from kernel")); */ 
+        /* log_message(crate::println!(format!(*Handling interrupt notification from kernel")); */ 
         
         // Parse interrupt notification from message data
         if msg.data_len >= 4 {
-            let irq_number = u32::from_le_bytes([msg.data[0], msg.data[1], msg.data[2], msg.data[3]])); */ 
-            /* log_message(crate::println!(format!(*/ "Received interrupt for IRQ {}", irq_number)); */ 
+            let irq_number = u32::from_le_bytes([msg.data[0], msg.data[1], msg.data[2], msg.data[3]]);
+            /* log_message(crate::println!(format!(*Received interrupt for IRQ {}", irq_number)); */ 
             
             // Handle specific interrupts
             match irq_number {
                 30 => {
                     // Timer interrupt
-                    self.handle_timer_interrupt()); */ 
+                    self.handle_timer_interrupt( ); 
                 }
                 33 => {
                     // UART interrupt
-                    self.handle_uart_interrupt()); */ 
+                    self.handle_uart_interrupt( ); 
                 }
                 _ => {
-                    /* log_message(crate::println!(format!(*/ "Unhandled interrupt for IRQ {}", irq_number)); */ 
+                    /* log_message(crate::println!(format!(*Unhandled interrupt for IRQ {}", irq_number)); */ 
                 }
             }
         }
@@ -391,13 +391,13 @@ impl DeviceDriverServer {
         };
         
         if let Err(e) = endpoint_send_sync(msg.src_pid, response_msg, None) {
-            /* log_message(crate::println!(format!(*/ "Failed to send interrupt acknowledgment: {:?}", e)); */ 
+            /* log_message(crate::println!(format!(*Failed to send interrupt acknowledgment: {:?}", e)); */ 
         }
     }
     
     /// Handle timer interrupt
     fn handle_timer_interrupt(&self) {
-        /* log_message(crate::println!(format!(*/ "Handling timer interrupt")); */ 
+        /* log_message(crate::println!(format!(*Handling timer interrupt")); */ 
         
         // In a real implementation, we would handle timer events
         // For now, we'll just log that we received the interrupt
@@ -405,7 +405,7 @@ impl DeviceDriverServer {
     
     /// Handle UART interrupt
     fn handle_uart_interrupt(&self) {
-        /* log_message(crate::println!(format!(*/ "Handling UART interrupt")); */ 
+        /* log_message(crate::println!(format!(*Handling UART interrupt")); */ 
         
         // In a real implementation, we would read data from the UART FIFO
         // and process it accordingly
@@ -414,7 +414,7 @@ impl DeviceDriverServer {
     
     /// Handle I/O read request
     fn handle_io_read(&self, msg: IpcMessage) {
-        /* log_message(crate::println!(format!(*/ "Handling I/O read request")); */ 
+        /* log_message(crate::println!(format!(*Handling I/O read request")); */ 
         
         // In a real implementation, we would perform the I/O read operation
         // For now, we'll just send a success response
@@ -434,13 +434,13 @@ impl DeviceDriverServer {
         };
         
         if let Err(e) = endpoint_send_sync(msg.src_pid, response_msg, None) {
-            /* log_message(crate::println!(format!(*/ "Failed to send I/O read response: {:?}", e)); */ 
+            /* log_message(crate::println!(format!(*Failed to send I/O read response: {:?}", e)); */ 
         }
     }
     
     /// Handle I/O write request
     fn handle_io_write(&self, msg: IpcMessage) {
-        /* log_message(crate::println!(format!(*/ "Handling I/O write request")); */ 
+        /* log_message(crate::println!(format!(*Handling I/O write request")); */ 
         
         // In a real implementation, we would perform the I/O write operation
         // For now, we'll just send a success response
@@ -460,13 +460,13 @@ impl DeviceDriverServer {
         };
         
         if let Err(e) = endpoint_send_sync(msg.src_pid, response_msg, None) {
-            /* log_message(crate::println!(format!(*/ "Failed to send I/O write response: {:?}", e)); */ 
+            /* log_message(crate::println!(format!(*Failed to send I/O write response: {:?}", e)); */ 
         }
     }
     
     /// Handle GIC initialization request
     fn handle_gic_init(&self, msg: IpcMessage) {
-        /* log_message(crate::println!(format!(*/ "Handling GIC initialization request")); */ 
+        /* log_message(crate::println!(format!(*Handling GIC initialization request")); */ 
         
         // Initialize GIC driver
         drivers::gic::GICV2_DRIVER.init();
@@ -487,21 +487,21 @@ impl DeviceDriverServer {
         };
         
         if let Err(e) = endpoint_send_sync(msg.src_pid, response_msg, None) {
-            /* log_message(crate::println!(format!(*/ "Failed to send GIC init response: {:?}", e)); */ 
+            /* log_message(crate::println!(format!(*Failed to send GIC init response: {:?}", e)); */ 
         }
     }
     
     /// Handle GIC enable IRQ request
     fn handle_gic_enable_irq(&self, msg: IpcMessage) {
-        /* log_message(crate::println!(format!(*/ "Handling GIC enable IRQ request")); */ 
+        /* log_message(crate::println!(format!(*Handling GIC enable IRQ request")); */ 
         
         // Parse IRQ number from message data
         if msg.data_len >= 4 {
-            let irq_number = u32::from_le_bytes([msg.data[0], msg.data[1], msg.data[2], msg.data[3]])); */ 
-            /* log_message(crate::println!(format!(*/ "Enabling IRQ {}", irq_number)); */ 
+            let irq_number = u32::from_le_bytes([msg.data[0], msg.data[1], msg.data[2], msg.data[3]] ); 
+            /* log_message(crate::println!(format!(*Enabling IRQ {}", irq_number)); */ 
             
             // Enable the IRQ in GIC
-            drivers::gic::GICV2_DRIVER.enable_irq(irq_number)); */ 
+            drivers::gic::GICV2_DRIVER.enable_irq(irq_number ); 
         }
         
         // Send success response
@@ -520,21 +520,21 @@ impl DeviceDriverServer {
         };
         
         if let Err(e) = endpoint_send_sync(msg.src_pid, response_msg, None) {
-            /* log_message(crate::println!(format!(*/ "Failed to send GIC enable IRQ response: {:?}", e)); */ 
+            /* log_message(crate::println!(format!(*Failed to send GIC enable IRQ response: {:?}", e)); */ 
         }
     }
     
     /// Handle GIC disable IRQ request
     fn handle_gic_disable_irq(&self, msg: IpcMessage) {
-        /* log_message(crate::println!(format!(*/ "Handling GIC disable IRQ request")); */ 
+        /* log_message(crate::println!(format!(*Handling GIC disable IRQ request")); */ 
         
         // Parse IRQ number from message data
         if msg.data_len >= 4 {
-            let irq_number = u32::from_le_bytes([msg.data[0], msg.data[1], msg.data[2], msg.data[3]])); */ 
-            /* log_message(crate::println!(format!(*/ "Disabling IRQ {}", irq_number)); */ 
+            let irq_number = u32::from_le_bytes([msg.data[0], msg.data[1], msg.data[2], msg.data[3]] ); 
+            /* log_message(crate::println!(format!(*Disabling IRQ {}", irq_number)); */ 
             
             // Disable the IRQ in GIC
-            drivers::gic::GICV2_DRIVER.disable_irq(irq_number)); */ 
+            drivers::gic::GICV2_DRIVER.disable_irq(irq_number ); 
         }
         
         // Send success response
@@ -553,22 +553,22 @@ impl DeviceDriverServer {
         };
         
         if let Err(e) = endpoint_send_sync(msg.src_pid, response_msg, None) {
-            /* log_message(crate::println!(format!(*/ "Failed to send GIC disable IRQ response: {:?}", e)); */ 
+            /* log_message(crate::println!(format!(*Failed to send GIC disable IRQ response: {:?}", e)); */ 
         }
     }
     
     /// Handle GIC set priority request
     fn handle_gic_set_priority(&self, msg: IpcMessage) {
-        /* log_message(crate::println!(format!(*/ "Handling GIC set priority request")); */ 
+        /* log_message(crate::println!(format!(*Handling GIC set priority request")); */ 
         
         // Parse IRQ number and priority from message data
         if msg.data_len >= 5 {
-            let irq_number = u32::from_le_bytes([msg.data[0], msg.data[1], msg.data[2], msg.data[3]])); */ 
+            let irq_number = u32::from_le_bytes([msg.data[0], msg.data[1], msg.data[2], msg.data[3]] ); 
             let priority = msg.data[4];
-            /* log_message(crate::println!(format!(*/ "Setting priority for IRQ {} to {}", irq_number, priority)); */ 
+            /* log_message(crate::println!(format!(*Setting priority for IRQ {} to {}", irq_number, priority)); */ 
             
             // Set the IRQ priority in GIC
-            drivers::gic::GICV2_DRIVER.set_interrupt_priority(irq_number, priority)); */ 
+            drivers::gic::GICV2_DRIVER.set_interrupt_priority(irq_number, priority ); 
         }
         
         // Send success response
@@ -587,21 +587,21 @@ impl DeviceDriverServer {
         };
         
         if let Err(e) = endpoint_send_sync(msg.src_pid, response_msg, None) {
-            /* log_message(crate::println!(format!(*/ "Failed to send GIC set priority response: {:?}", e)); */ 
+            /* log_message(crate::println!(format!(*Failed to send GIC set priority response: {:?}", e)); */ 
         }
     }
 }
 
 /// Initialize and start the device driver server
 pub fn start_device_driver_server() -> ! {
-    /* log_message(crate::println!(format!(*/ "Starting user-space device driver server...")); */ 
+    /* log_message(crate::println!(format!(*Starting user-space device driver server...")); */ 
     
     // Create device driver server instance
-    let server = DeviceDriverServer::new().expect("Failed to create device driver server")); */ 
+    let server = DeviceDriverServer::new().expect("Failed to create device driver server" ); 
     
     // Register with kernel
-    server.register_with_kernel().expect("Failed to register with kernel")); */ 
+    server.register_with_kernel().expect("Failed to register with kernel" ); 
     
     // Start server loop
-    server.run()); */ 
+    server.run( ); 
 }
