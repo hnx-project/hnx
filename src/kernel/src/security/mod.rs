@@ -1,32 +1,23 @@
-//! Security framework for HNX kernel
+//! Security and Capability System
 //!
-//! This module implements the capability-based security model and access control mechanisms
-//! that form the foundation of HNX's security architecture.
+//! This module implements the capability-based security model for HNX microkernel:
+//! - **Capabilities**: Fine-grained access control tokens
+//! - **Rights Management**: READ, WRITE, EXECUTE, MANAGE permissions
+//! - **System Call Authorization**: Validating syscall access rights
+//! - **Object Protection**: Ensuring only authorized processes access resources
+//!
+//! The capability model ensures that processes can only perform operations
+//! for which they have been explicitly granted rights, following the principle
+//! of least privilege.
 
 pub mod capability;
 pub mod test;
 
-pub use capability::{validate_capability as validate_security_capability, rights as security_rights};
-
 use core::sync::atomic::{AtomicU32, Ordering};
 use spin::Mutex;
 
-/// Security module initialization
-pub fn init() {
-    // Initialize security subsystem
-    crate::info!("security: initialized");
-}
-
-/// Represents a security capability granting specific rights to a resource
-#[derive(Copy, Clone, Debug)]
-pub struct Capability {
-    /// Unique identifier for this capability
-    pub id: u32,
-    /// The object this capability grants access to
-    pub object_id: u32,
-    /// Rights granted by this capability (bitmask)
-    pub rights: u32,
-}
+// Re-export commonly used items
+pub use capability::{validate_capability as validate_security_capability, rights as security_rights};
 
 /// Rights that can be granted by capabilities
 pub mod rights {
@@ -43,15 +34,31 @@ pub mod rights {
     pub const ALL: u32 = READ | WRITE | EXECUTE | MANAGE;
 }
 
-/// Maximum number of capabilities per process
+/// Represents a security capability granting specific rights to a resource
+#[derive(Copy, Clone, Debug)]
+pub struct Capability {
+    /// Unique identifier for this capability
+    pub id: u32,
+    /// The object this capability grants access to
+    pub object_id: u32,
+    /// Rights granted by this capability (bitmask)
+    pub rights: u32,
+}
+
+/// Maximum number of capabilities in the system
 const MAX_CAPABILITIES: usize = 256;
 
-/// Table storing all active capabilities in the system
+/// Global capability table
 static CAPABILITY_TABLE: Mutex<[Option<Capability>; MAX_CAPABILITIES]> = 
     Mutex::new([None; MAX_CAPABILITIES]);
 
 /// Next available capability ID
 static NEXT_CAP_ID: AtomicU32 = AtomicU32::new(1);
+
+/// Initialize the security subsystem
+pub fn init() {
+    crate::info!("security: initializing capability system");
+}
 
 /// Allocates a new capability with the specified rights to an object
 pub fn allocate_capability(object_id: u32, rights: u32) -> Option<u32> {
