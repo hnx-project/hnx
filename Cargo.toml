@@ -22,6 +22,7 @@ opt-level = 0
 debug = true
 debug-assertions = true
 overflow-checks = true
+panic = "abort"
 
 [profile.release]
 opt-level = "s"

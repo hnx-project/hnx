@@ -1,292 +1,175 @@
 // build.rs
+// unuse warnings
+#![allow(unused)]
 use std::env;
 use std::fs;
 use std::path::PathBuf;
 use toml::Value;
 
 fn main() {
+    // 1. 获取目标架构
     let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap();
     let target = env::var("TARGET").unwrap();
-    
-    println!("Building HNX kernel for {} {}", target_arch, target);
-    
-    // 生成链接脚本和配置
-    generate_linker_script_and_config(&target_arch);
-    
-    // 设置重新编译条件
+
+    println!("Building HNX kernel for {}", target_arch);
+
+    // 2. 生成链接脚本 和 配置头文件
+    generate_linker_script_and_config_header(&target_arch, &target);
+
+    // 3. 链接 libc 库
+    // link_libc();
+
+    // 4. 设置重新编译条件
     println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-changed=../../configs/scripts/link.ld.S");
+    println!("cargo:rerun-if-changed=src/scripts/link.ld.S");
+    println!("cargo:rerun-if-changed=src/configs/");
 }
 
-fn generate_linker_script_and_config(arch: &str) {
-    // 1. 读取新配置文件（workspace级别）
-    let workspace_config = load_workspace_config(arch);
-    
-    // 2. 读取旧内核配置文件（如存在，用于兼容）
-    let kernel_config = load_kernel_config_if_exists(arch);
-    
-    // 3. 合并配置，新配置优先，旧配置作后备
-    let config = merge_configs(&workspace_config, &kernel_config);
-    
-    // 4. 生成链接脚本
-    generate_linker_script(&config, arch);
-    
-    // 5. 生成内核配置文件
-    generate_kernel_config(&config);
+// fn link_libc() {
+//     // 链接 libc 库
+//     let libc_path = "../libc/libhnxc.a";
+//     println!("cargo:rustc-link-search=native=../libc");
+//     println!("cargo:rustc-link-lib=static=hnxc");
+//     println!("cargo:rerun-if-changed={}", libc_path);
+// }
 
-    // 6. 生成汇编头文件
-    generate_asm_header(&config, arch);
-    
-    // 7. 导出环境变量给内核使用
-    export_config_to_env(&config);
-}
-
-fn load_workspace_config(arch: &str) -> Value {
+fn generate_linker_script_and_config_header(arch: &str, _target: &str) {
+    // 读取模板（优先使用仓库模板）
+    let template = fs::read_to_string("src/scripts/link.ld.S").unwrap();
+    let config = match arch {
+        "aarch64" => {
+            r#"
+                #define ARCH_AARCH64 1
+                #define PAGE_SIZE {{PAGE_SIZE}}
+                #define KERNEL_BASE {{KERNEL_BASE}}
+                #define STACK_SIZE {{STACK_SIZE}}
+                "#
+        }
+        _ => "",
+    };
     // 读取架构配置
-    let arch_path = format!("../../configs/arch/{}.toml", arch);
-    let arch_str = fs::read_to_string(&arch_path)
-        .unwrap_or_else(|_| String::new());
-    let mut config: Value = toml::from_str(&arch_str).unwrap();
-    
-    // 读取板级配置（如果指定了环境变量）
-    if let Ok(board) = env::var("BOARD") {
-        let board_path = format!("../../configs/board/{}.toml", board);
-        if let Ok(board_str) = fs::read_to_string(&board_path) {
-            let board_config: Value = toml::from_str(&board_str).unwrap();
-            // 合并板级配置
-            merge_value(&mut config, board_config);
-        }
-    }
-    
-    // 读取profile配置
-    if let Ok(profile) = env::var("PROFILE") {
-        let profile_path = format!("../../configs/profile/{}.toml", profile);
-        if let Ok(profile_str) = fs::read_to_string(&profile_path) {
-            let profile_config: Value = toml::from_str(&profile_str).unwrap();
-            merge_value(&mut config, profile_config);
-        }
-    }
-    
-    config
-}
+    let config_path = format!("src/configs/{}.toml", arch);
+    let cfg_str = fs::read_to_string(&config_path).unwrap_or_else(|_| String::new());
+    let cfg: Value = toml::from_str(&cfg_str).unwrap_or(Value::Table(Default::default()));
 
-fn load_kernel_config_if_exists(arch: &str) -> Option<Value> {
-    let kernel_config_path = format!("src/configs/{}.toml", arch);
-    fs::read_to_string(&kernel_config_path).ok().and_then(|s| {
-        toml::from_str(&s).ok()
-    })
-}
+    // 提取配置项，带默认值
+    let endian = cfg
+        .get("arch")
+        .and_then(|a| a.get("endian"))
+        .and_then(Value::as_str)
+        .unwrap_or("little");
+    let kernel_base = cfg
+        .get("arch")
+        .and_then(|a| a.get("kernel_base"))
+        .and_then(Value::as_str)
+        .unwrap_or("0xffff000000000000");
+    let page_size = cfg
+        .get("arch")
+        .and_then(|a| a.get("page_size"))
+        .and_then(Value::as_integer)
+        .unwrap_or(4096);
+    let stack_size = cfg
+        .get("arch")
+        .and_then(|a| a.get("stack_size"))
+        .and_then(Value::as_integer)
+        .unwrap_or(65536);
+    let phys_base = cfg
+        .get("arch")
+        .and_then(|a| a.get("physical_base"))
+        .and_then(Value::as_str)
+        .unwrap_or("0x40000000");
 
-fn merge_configs(workspace: &Value, kernel: &Option<Value>) -> Config {
-    let mut config = Config::default();
-    
-    // 1. 从workspace配置获取核心字段
-    if let Some(arch) = workspace.get("arch") {
-        config.name = arch.get("name").and_then(Value::as_str).unwrap_or("unknown").to_string();
-        config.page_size = arch.get("page_size").and_then(Value::as_integer).unwrap_or(4096) as u64;
-        config.kernel_base = arch.get("kernel_base").and_then(Value::as_str)
-            .unwrap_or("0xffff000000000000").to_string();
-        config.endian = arch.get("endian").and_then(Value::as_str)
-            .unwrap_or("little").to_string();
-    }
-    
-    if let Some(memory) = workspace.get("memory") {
-        config.phys_base = memory.get("physical_base").and_then(Value::as_str)
-            .unwrap_or("0x40000000").to_string();
-        config.stack_size = memory.get("stack_size").and_then(Value::as_integer)
-            .unwrap_or(65536) as u64;
-    }
-    
-    if let Some(kernel_cfg) = workspace.get("kernel") {
-        config.max_processes = kernel_cfg.get("max_processes").and_then(Value::as_integer)
-            .unwrap_or(256) as u64;
-        config.max_threads = kernel_cfg.get("max_threads").and_then(Value::as_integer)
-            .unwrap_or(1024) as u64;
-    }
-
-    config.pl011_base = get_config_string(workspace, "devices.uart.base", "0x09000000");
-    config.gicd_base = get_config_string(workspace, "devices.gic.distributor_base", "0x08000000");
-    config.gicc_base = get_config_string(workspace, "devices.gic.cpu_interface_base", "0x08010000");
-    
-    // 2. 从旧配置获取兼容字段（仅当新配置不存在时）
-    if let Some(ref kernel_config) = kernel {
-        // 填充新配置缺少的字段
-        if config.endian.is_empty() {
-            config.endian = kernel_config.get("arch")
-                .and_then(|a| a.get("endian"))
-                .and_then(Value::as_str)
-                .unwrap_or("little")
-                .to_string();
-        }
-        
-        // 获取平台默认值
-        if let Some(defaults) = kernel_config.get("defaults") {
-            config.default_platform = defaults.get("platform")
-                .and_then(Value::as_str)
-                .unwrap_or("virt")
-                .to_string();
-        }
-        
-        // 获取平台特定配置
-        if let Some(platforms) = kernel_config.get("platforms") {
-            if let Some(plat) = platforms.get(&config.default_platform) {
-                config.uart_driver = plat.get("uart")
-                    .and_then(Value::as_str)
-                    .unwrap_or("pl011")
-                    .to_string();
-                
-                if let Some(mmio) = plat.get("mmio") {
-                    config.pl011_base = mmio.get("pl011_base")
-                        .and_then(Value::as_str)
-                        .unwrap_or("0x09000000")
-                        .to_string();
-                }
-            }
-        }
-    }
-    
-    config
-}
-
-fn get_config_string(config: &Value, path: &str, default: &str) -> String {
-    let parts: Vec<&str> = path.split('.').collect();
-    let mut current = config;
-    
-    for part in parts {
-        current = current.get(part).unwrap();
-    }
-    
-    current.as_str().unwrap_or(default).to_string()
-}
-
-fn generate_linker_script(config: &Config, arch: &str) {
-    // 读取模板
-    let template = fs::read_to_string("../../configs/scripts/link.ld.S")
-        .expect("Failed to read linker template");
-    
-    // 设置输出格式
-    let output_format = match (arch, config.endian.as_str()) {
+    // 输出格式
+    let output_format = match (arch, endian) {
         ("aarch64", "little") => "elf64-littleaarch64",
         ("aarch64", "big") => "elf64-bigaarch64",
-        _ => panic!("Unsupported architecture: {} with endian: {}", arch, config.endian.as_str()),
+        _ => panic!("Unsupported architecture: {}", arch),
     };
-    
-    // 替换变量
+    let output_arch = arch;
+
+    // 替换模板变量
     let script = template
         .replace("{{OUTPUT_FORMAT}}", output_format)
-        .replace("{{OUTPUT_ARCH}}", arch)
-        .replace("{{KERNEL_BASE}}", &config.kernel_base)
-        .replace("{{PAGE_SIZE}}", &config.page_size.to_string())
-        .replace("{{STACK_SIZE}}", &format!("0x{:x}", config.stack_size))
-        .replace("{{PHYS_BASE}}", &config.phys_base);
-    
+        .replace("{{OUTPUT_ARCH}}", output_arch)
+        .replace("{{KERNEL_BASE}}", kernel_base)
+        .replace("{{PAGE_SIZE}}", &page_size.to_string())
+        .replace("{{STACK_SIZE}}", &format!("0x{:x}", stack_size))
+        .replace("{{PHYS_BASE}}", phys_base);
+    let header_h = config
+        .replace("{{OUTPUT_FORMAT}}", output_format)
+        .replace("{{OUTPUT_ARCH}}", output_arch)
+        .replace("{{KERNEL_BASE}}", kernel_base)
+        .replace("{{PAGE_SIZE}}", &page_size.to_string())
+        .replace("{{STACK_SIZE}}", &format!("0x{:x}", stack_size))
+        .replace("{{PHYS_BASE}}", phys_base);
+
+    // 读取运行期配置并导出环境变量
+    let defaults_platform = cfg
+        .get("defaults")
+        .and_then(|d| d.get("platform"))
+        .and_then(Value::as_str)
+        .unwrap_or("virt");
+    let platforms = cfg.get("platforms");
+    let binding_plat = Value::Table(Default::default());
+    let plat_tbl = platforms
+        .and_then(|p| p.get(defaults_platform))
+        .unwrap_or(&binding_plat);
+    let uart_driver = plat_tbl
+        .get("uart")
+        .and_then(Value::as_str)
+        .or_else(|| cfg.get("uart").and_then(|u| u.get("driver")).and_then(Value::as_str))
+        .unwrap_or("pl011");
+    let irq_ctl = plat_tbl
+        .get("irq_controller")
+        .and_then(Value::as_str)
+        .unwrap_or("gicv2");
+    let timer_tick_ms = cfg
+        .get("timer")
+        .and_then(|t| t.get("tick_ms"))
+        .and_then(Value::as_integer)
+        .unwrap_or(500);
+    let mmio_tbl = plat_tbl.get("mmio");
+    let binding_mmio = Value::Table(Default::default());
+    let virt_mmio = mmio_tbl.unwrap_or(&binding_mmio);
+    let pl011_base_hex = virt_mmio
+        .get("pl011_base")
+        .and_then(Value::as_str)
+        .unwrap_or("0x09000000");
+    let gicd_base_hex = virt_mmio
+        .get("gicd_base")
+        .and_then(Value::as_str)
+        .unwrap_or("0x08000000");
+    let gicc_base_hex = virt_mmio
+        .get("gicc_base")
+        .and_then(Value::as_str)
+        .unwrap_or("0x08010000");
+    fn hex_str_to_u64(s: &str) -> u64 {
+        let t = s.trim().trim_start_matches("0x");
+        u64::from_str_radix(t, 16).unwrap_or(0)
+    }
+    let pl011_base_dec = hex_str_to_u64(pl011_base_hex);
+    let gicd_base_dec = hex_str_to_u64(gicd_base_hex);
+    let gicc_base_dec = hex_str_to_u64(gicc_base_hex);
+    println!("cargo:rustc-env=HNX_PLATFORM_DEFAULT={}", defaults_platform);
+    println!("cargo:rustc-env=HNX_UART_DEFAULT={}", uart_driver);
+    println!("cargo:rustc-env=HNX_IRQ_DEFAULT={}", irq_ctl);
+    println!("cargo:rustc-env=HNX_TIMER_DEFAULT_MS={}", timer_tick_ms);
+    println!("cargo:rustc-env=HNX_FALLBACK_PL011_BASE_DEC={}", pl011_base_dec);
+    println!("cargo:rustc-env=HNX_FALLBACK_GICD_BASE_DEC={}", gicd_base_dec);
+    println!("cargo:rustc-env=HNX_FALLBACK_GICC_BASE_DEC={}", gicc_base_dec);
+
     // 写入输出目录
     let out_dir = env::var("OUT_DIR").unwrap();
     let script_path = PathBuf::from(out_dir).join("link.ld");
     fs::write(&script_path, script).unwrap();
-    
-    // 告诉Cargo使用这个链接脚本
+    let out_dir2 = env::var("OUT_DIR").unwrap();
+    let header_path: PathBuf = PathBuf::from(out_dir2).join("config.h");
+    fs::write(header_path, header_h).unwrap();
+
+    // 告诉 Cargo 使用这个链接脚本
     println!("cargo:rustc-link-arg=-T{}", script_path.display());
     println!("cargo:rustc-link-arg=-nostdlib");
     println!("cargo:rustc-link-arg=-no-pie");
-}
-
-fn generate_kernel_config(config: &Config) {
-    // 生成Rust配置文件
-    let out_dir = env::var("OUT_DIR").unwrap();
-    let config_rs = format!(r#"
-        pub const PAGE_SIZE: usize = {};
-        pub const KERNEL_BASE: usize = 0x{:x};
-        pub const PHYS_BASE: usize = 0x{:x};
-        pub const STACK_SIZE: usize = {};
-        pub const MAX_PROCESSES: usize = {};
-        pub const MAX_THREADS: usize = {};
-    "#,
-        config.page_size,
-        parse_hex(&config.kernel_base),
-        parse_hex(&config.phys_base),
-        config.stack_size,
-        config.max_processes,
-        config.max_threads
-    );
+    println!("cargo:rerun-if-changed={}", config_path);
     
-    let config_path = PathBuf::from(out_dir).join("config.rs");
-    fs::write(config_path, config_rs).unwrap();
-}
-
-
-// 生成汇编头文件
-fn generate_asm_header(config: &Config, arch: &str) {
-
-    // 生成汇编头文件 (config.inc.S)
-    let asm_header = format!(
-        r#"/* Auto-generated by build.rs */
-        
-#define KERNEL_BASE {kernel_base_hex}
-#define PHYS_BASE {phys_base_hex}
-#define UART_BASE {uart_base_hex}
-        
-/* 栈相关符号声明 */
-.global __stack_top
-.global __stack_bottom
-.global __bss_start
-.global __bss_end
-"#,
-        kernel_base_hex = config.kernel_base,
-        phys_base_hex = config.phys_base,
-        uart_base_hex = config.pl011_base // 从配置获取，默认 "0x09000000"
-    );
-
-    let asm_header_path = PathBuf::from(format!("src/arch/{}/boot/config.inc.S", arch));
-    fs::write(asm_header_path, asm_header).unwrap();
-    
-}
-
-fn export_config_to_env(config: &Config) {
-    // 导出关键配置为环境变量
-    println!("cargo:rustc-env=HNX_PAGE_SIZE={}", config.page_size);
-    println!("cargo:rustc-env=HNX_KERNEL_BASE={}", config.kernel_base);
-    println!("cargo:rustc-env=HNX_PHYS_BASE={}", config.phys_base);
-    
-    if !config.uart_driver.is_empty() {
-        println!("cargo:rustc-env=HNX_UART_DRIVER={}", config.uart_driver);
-    }
-    if !config.pl011_base.is_empty() {
-        println!("cargo:rustc-env=HNX_PL011_BASE={}", config.pl011_base);
-    }
-}
-
-// 辅助函数
-fn merge_value(target: &mut Value, source: Value) {
-    if let (Value::Table(t), Value::Table(s)) = (target, source) {
-        for (k, v) in s {
-            if let Some(existing) = t.get_mut(&k) {
-                merge_value(existing, v);
-            } else {
-                t.insert(k, v);
-            }
-        }
-    }
-}
-
-fn parse_hex(hex_str: &str) -> u64 {
-    let trimmed = hex_str.trim().trim_start_matches("0x");
-    u64::from_str_radix(trimmed, 16).unwrap_or(0)
-}
-
-#[derive(Default)]
-struct Config {
-    name: String,
-    endian: String,
-    page_size: u64,
-    kernel_base: String,
-    phys_base: String,
-    stack_size: u64,
-    max_processes: u64,
-    max_threads: u64,
-    default_platform: String,
-    uart_driver: String,
-    pl011_base: String,
-    gicd_base: String,
-    gicc_base: String,
 }
