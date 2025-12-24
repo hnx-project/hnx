@@ -1,0 +1,16 @@
+[package]
+name = "vfs-service"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+spin = "0.9"
+hnx-abi = { path = "../../../abi-bindings" }
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+opt-level = "z"
+lto = true

@@ -7,6 +7,7 @@ members = [
     "services/filesystem-server",
     "services/network-server",
     "services/device-driver-server",
+    "services/vfs-service",
     #"services/init",
     #"services/device-manager",
     #"services/display-server",
