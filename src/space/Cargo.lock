@@ -67,13 +67,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "device-driver-server"
-version = "0.1.0"
-dependencies = [
- "spin",
-]
-
-[[package]]
 name = "either"
 version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -87,13 +80,6 @@ checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc 0.2.178",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "filesystem-server"
-version = "0.1.0"
-dependencies = [
- "spin",
 ]
 
 [[package]]
@@ -120,6 +106,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cc627f471c528ff0c4a49e1d5e60450c8f6461dd6d10ba9dcd3a61d3dff7728d"
 dependencies = [
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "init"
+version = "0.1.0"
+dependencies = [
+ "hnx-abi",
 ]
 
 [[package]]
@@ -164,6 +157,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d26c52dbd32dccf2d10cac7725f8eae5296885fb5703b261f7d0a0739ec807ab"
 
 [[package]]
+name = "loader-service"
+version = "0.1.0"
+dependencies = [
+ "hnx-abi",
+]
+
+[[package]]
 name = "lock_api"
 version = "0.4.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -189,13 +189,6 @@ name = "minimal-lexical"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
-
-[[package]]
-name = "network-server"
-version = "0.1.0"
-dependencies = [
- "spin",
-]
 
 [[package]]
 name = "nom"

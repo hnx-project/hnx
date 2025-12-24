@@ -27,6 +27,7 @@ mod process;        // Process/thread management
 mod security;       // Capability-based security
 mod sync;           // Synchronization primitives
 mod user;           // User space process support
+mod loader;         // ELF/CPIO loader and service manager
 
 // ===== Non-Core Modules (TODO: Move to User Space) =====
 // These modules should eventually be moved to user space services:
@@ -107,12 +108,14 @@ fn init_phase3_processes() {
     crate::info!("Initializing process subsystem...");
     process::init();
     
-    // Initialize IPC service delegation framework
-    // This creates well-known endpoints for VFS, Network, Loader services
     crate::info!("Initializing IPC service delegation...");
     if let Err(_) = ipc_services::delegate::init() {
         crate::warn!("Failed to initialize IPC service endpoints (services won't be available)");
     }
+    
+    let boot_info = crate::arch::boot::get_boot_info();
+    crate::info!("Initializing initrd accessor (dtb_ptr=0x{:X})...", boot_info.dtb_ptr);
+    loader::initrd::init(boot_info.dtb_ptr as usize);
     
     crate::info!("Process and IPC subsystems ready");
 }
@@ -125,16 +128,45 @@ fn init_phase3_processes() {
 /// - Begins round-robin scheduling
 fn init_phase4_scheduler() -> ! {
     crate::info!("Kernel core ready");
-    crate::info!("Starting scheduler...");
     
-    // TODO: Create first user space process (init or procmgr)
-    // This process will be responsible for launching user space services:
-    // - File System Service
-    // - Network Stack Service
-    // - Device Driver Services
-    
-    // Enter scheduler loop (never returns)
-    crate::core::scheduler::run();
+    crate::info!("Attempting to bootstrap init process...");
+    match loader::bootstrap_init_process() {
+        Ok((entry, sp, pt_base)) => {
+            crate::info!("Init process loaded successfully!");
+            crate::info!("  Entry: 0x{:X}", entry);
+            crate::info!("  Stack: 0x{:X}", sp);
+            crate::info!("  PT:    0x{:X}", pt_base);
+            
+            let pid = process::create_process(128).expect("Failed to create init process");
+            process::update_process_memory(pid as usize, pt_base, 0);
+            
+            let mut task = process::Task::new_kernel(unsafe {
+                ::core::mem::transmute::<usize, fn() -> !>(entry)
+            });
+            
+            unsafe {
+                task.ttbr0_base = pt_base;
+                task.context.sp = sp;
+                task.entry_point = entry;
+            }
+            
+            process::set_process_state(pid as usize, process::ProcState::Ready);
+            
+            crate::info!("Init process created with PID {}", pid);
+            crate::info!("Starting scheduler - init will run at EL0...");
+            
+            crate::core::scheduler::run_task(task);
+        }
+        Err(_) => {
+            crate::error!("Failed to load init process!");
+            crate::error!("System cannot boot without init.");
+            crate::error!("Ensure initrd contains a valid 'init' ELF binary.");
+            
+            loop {
+                unsafe { ::core::arch::asm!("wfi"); }
+            }
+        }
+    }
 }
 
 /// Parse boot command line parameters (currently unused)

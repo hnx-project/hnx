@@ -141,3 +141,8 @@ pub unsafe fn syscall4(n: u32, arg0: usize, arg1: usize, arg2: usize, arg3: usiz
     ret
 }
 
+pub const HNX_SYS_EP_CREATE: u32 = 0x012F;
+pub const HNX_SYS_EP_SEND: u32 = 0x0130;
+pub const HNX_SYS_EP_RECV: u32 = 0x0131;
+pub const HNX_SYS_WRITE: u32 = 0x1001;
+pub const HNX_SYS_READ: u32 = 0x1002;

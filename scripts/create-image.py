@@ -18,7 +18,8 @@ import struct
 class ImageBuilder:
     """系统镜像构建器"""
     
-    def __init__(self, kernel_path, space_dir, output_path, arch="aarch64", board="qemu-virt"):
+    def __init__(self, kernel_path, space_dir, output_path, arch="aarch64", board="qemu-virt", 
+                 simple_initrd=False, no_compress=False):
         """
         初始化镜像构建器
         
@@ -28,12 +29,16 @@ class ImageBuilder:
             output_path: 输出镜像路径
             arch: 目标架构
             board: 开发板类型
+            simple_initrd: 创建简单的 init-only initrd（仅包含 init 二进制）
+            no_compress: 不压缩 initrd（使用 .cpio 而不是 .cpio.gz）
         """
         self.kernel_path = Path(kernel_path).resolve()
         self.space_dir = Path(space_dir).resolve()
         self.output_path = Path(output_path).resolve()
         self.arch = arch
         self.board = board
+        self.simple_initrd = simple_initrd
+        self.no_compress = no_compress
         
         # 验证输入文件
         if not self.kernel_path.exists():
@@ -59,6 +64,40 @@ class ImageBuilder:
         """创建 initrd（初始 RAM 磁盘）"""
         print("Creating initrd...")
         
+        if self.simple_initrd:
+            return self._create_simple_initrd()
+        else:
+            return self._create_full_initrd()
+    
+    def _create_simple_initrd(self):
+        """创建简单的 init-only initrd（仅包含 init 二进制文件）"""
+        print("Creating simple init-only initrd...")
+        
+        # 创建 initrd 目录
+        initrd_root = self.temp_dir / "initrd"
+        initrd_root.mkdir(parents=True, exist_ok=True)
+        
+        # 查找并复制 init 二进制文件
+        init_found = self._copy_init_binary(initrd_root)
+        
+        if not init_found:
+            raise FileNotFoundError("No init binary found in space directory for simple initrd")
+        
+        # 打包为 cpio 归档
+        if self.no_compress:
+            initrd_path = self.temp_dir / "initrd.cpio"
+        else:
+            initrd_path = self.temp_dir / "initrd.cpio.gz"
+        
+        self._pack_cpio(initrd_root, initrd_path, compress=not self.no_compress)
+        
+        print(f"Simple initrd created: {initrd_path}")
+        return initrd_path
+    
+    def _create_full_initrd(self):
+        """创建完整的 initrd（包含目录结构、设备节点等）"""
+        print("Creating full initrd...")
+        
         # 创建 initrd 目录结构
         initrd_root = self.temp_dir / "initrd"
         initrd_root.mkdir(parents=True, exist_ok=True)
@@ -81,11 +120,53 @@ class ImageBuilder:
         self._create_config_files(initrd_root)
         
         # 打包为 cpio 归档
-        initrd_path = self.temp_dir / "initrd.cpio.gz"
-        self._pack_cpio(initrd_root, initrd_path)
+        if self.no_compress:
+            initrd_path = self.temp_dir / "initrd.cpio"
+        else:
+            initrd_path = self.temp_dir / "initrd.cpio.gz"
         
-        print(f"Initrd created: {initrd_path}")
+        self._pack_cpio(initrd_root, initrd_path, compress=not self.no_compress)
+        
+        print(f"Full initrd created: {initrd_path}")
         return initrd_path
+    
+    def _copy_init_binary(self, initrd_root):
+        """复制 init 二进制文件到 initrd（用于 simple_initrd 模式）"""
+        print("Looking for init binary...")
+        
+        # 查找 init 二进制文件
+        init_binary = None
+        
+        # 优先查找 release 版本
+        for build_type in ["release", "debug"]:
+            init_path = self.space_dir / build_type / "init"
+            if init_path.exists() and init_path.is_file():
+                init_binary = init_path
+                print(f"  Found init binary: {init_path} ({build_type})")
+                break
+        
+        # 如果没有找到，尝试直接在 space_dir 查找
+        if not init_binary:
+            init_path = self.space_dir / "init"
+            if init_path.exists() and init_path.is_file():
+                init_binary = init_path
+                print(f"  Found init binary: {init_path}")
+        
+        if not init_binary:
+            print("  Warning: No init binary found in space directory")
+            return False
+        
+        # 复制到 initrd 根目录
+        dest_path = initrd_root / "init"
+        try:
+            shutil.copy2(init_binary, dest_path)
+            dest_path.chmod(0o755)
+            size = dest_path.stat().st_size
+            print(f"  Copied init binary: {size:,} bytes")
+            return True
+        except Exception as e:
+            print(f"  Warning: Failed to copy init binary: {e}")
+            return False
     
     def _copy_space_programs(self, initrd_root):
         """复制用户空间程序到 initrd"""
@@ -229,15 +310,22 @@ devtmpfs        /dev            devtmpfs defaults       0       0
 """
         (etc_dir / "fstab").write_text(fstab_content)
     
-    def _pack_cpio(self, initrd_root, output_path):
+    def _pack_cpio(self, initrd_root, output_path, compress=True):
         """打包为 cpio 归档"""
         print("Packing initrd...")
         
         # 进入 initrd 目录并打包
-        cmd = f"cd {initrd_root} && find . | cpio -o -H newc | gzip -9 > {output_path}"
+        if compress:
+            cmd = f"cd {initrd_root} && find . -print | cpio -o -H newc | gzip -9 > {output_path}"
+            format_desc = "newc format, gzip compressed"
+        else:
+            cmd = f"cd {initrd_root} && find . -print | cpio -o -H newc > {output_path}"
+            format_desc = "newc format, uncompressed"
         
         try:
-            subprocess.run(cmd, shell=True, check=True, capture_output=True)
+            result = subprocess.run(cmd, shell=True, check=True, capture_output=True)
+            size = output_path.stat().st_size
+            print(f"  Packed initrd: {size:,} bytes ({format_desc})")
         except subprocess.CalledProcessError as e:
             print(f"Error packing initrd: {e}")
             print(f"stdout: {e.stdout.decode()}")
@@ -371,6 +459,7 @@ def main():
 Examples:
   %(prog)s --kernel build/kernel/hnx-kernel.bin --space-dir build/space --output hnx.img
   %(prog)s --kernel kernel.bin --space-dir programs --arch aarch64 --board qemu-virt --qcow2
+  %(prog)s --kernel kernel.bin --space-dir programs --simple-initrd --no-compress
         """
     )
     
@@ -387,6 +476,10 @@ Examples:
                        help="Board type (qemu-virt, raspberry-pi4, etc.)")
     parser.add_argument("--qcow2", action="store_true",
                        help="Also create QCOW2 format image")
+    parser.add_argument("--simple-initrd", action="store_true",
+                       help="Create simple init-only initrd (no directories/scripts)")
+    parser.add_argument("--no-compress", action="store_true",
+                       help="Do not compress initrd (use .cpio instead of .cpio.gz)")
     parser.add_argument("--verbose", "-v", action="count", default=0,
                        help="Increase verbosity level")
     
@@ -403,7 +496,9 @@ Examples:
             space_dir=args.space_dir,
             output_path=args.output,
             arch=args.arch,
-            board=args.board
+            board=args.board,
+            simple_initrd=args.simple_initrd,
+            no_compress=args.no_compress
         )
         
         success = builder.build(create_qcow2=args.qcow2)

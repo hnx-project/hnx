@@ -10,9 +10,12 @@
 
 pub mod syscall;
 pub mod task;
+pub mod spawn;
 
 use core::sync::atomic::{AtomicUsize, Ordering};
 use spin::Mutex;
+
+pub use spawn::{sys_process_create_empty, sys_mmap_process, sys_process_start};
 
 /// Process state enumeration
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
