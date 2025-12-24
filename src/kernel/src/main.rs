@@ -1,63 +1,63 @@
-//! HNX 微内核主入口
-//! 微内核仅提供核心功能：
-//! 1. 进程与线程管理
-//! 2. 内存管理
-//! 3. 进程间通信（IPC）
-//! 4. 中断与异常处理
-//! 5. 基本设备抽象
-//! 6. 安全与能力
+//! HNX Microkernel - Main Entry Point
+//!
+//! The HNX microkernel provides only the essential functionality:
+//! 1. **Process & Thread Management**: Scheduling, context switching
+//! 2. **Memory Management**: Virtual memory, physical page allocation
+//! 3. **Inter-Process Communication (IPC)**: Message passing, shared memory
+//! 4. **Interrupt & Exception Handling**: Hardware interrupt routing
+//! 5. **Minimal Device Abstractions**: UART, GIC, timer
+//! 6. **Security & Capabilities**: Fine-grained access control
+//!
+//! All other functionality (filesystem, networking, device drivers) runs in user space.
+
 #![no_std]
 #![no_main]
 #![feature(format_args_nl)]
 
-// 核心模块
-mod arch;
-mod console;
-mod error;
-mod sync;
+// ===== Core Microkernel Modules =====
+mod arch;           // Architecture-specific code (aarch64, riscv64, x86_64)
+mod console;        // Debug console output
+mod core;           // IPC and Scheduler
+mod drivers;        // Minimal drivers (UART, GIC, DTB)
+mod error;          // Error types
+mod memory;         // Memory management
+mod panic;          // Panic handler
+mod process;        // Process/thread management
+mod security;       // Capability-based security
+mod sync;           // Synchronization primitives
 
-// 核心内核模块（IPC、调度器）
-mod core;
-mod memory;
-mod panic;
-mod process;
-mod drivers;
-mod security;
-
-// TODO: 添加以下模块（待实现）
-// mod ipc;       // 进程间通信
-// mod syscall;   // 系统调用处理
-// mod capability; // 能力管理（可从security模块拆分）
+// ===== Non-Core Modules (TODO: Move to User Space) =====
+// These modules should eventually be moved to user space services:
+// - fs/        → File System Service
+// - network/   → Network Stack Service
+// - debug/     → Debugging Service
+// - testing/   → Test Framework
 
 const KERNEL_NAME: &str = env!("CARGO_PKG_NAME");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const ARCH: &str = crate::arch::ARCH_NAME;
 
-/// HNX 微内核 Rust 入口点（由汇编代码调用）
+/// HNX Microkernel Rust entry point (called from assembly boot code)
 #[no_mangle]
 pub extern "C" fn rust_main() -> ! {
-    // 阶段1：基础初始化
-    init_phase1();
-    
-    // 阶段2：内存管理初始化
-    init_phase2();
-    
-    // // 阶段3：进程与IPC初始化
-    init_phase3();
-    
-    // // 阶段4：启动调度器
-    init_phase4();
-
-    // 启动调度器（永不返回）
-    crate::core::scheduler::run();
+    init_phase1_hardware();
+    init_phase2_memory();
+    init_phase3_processes();
+    init_phase4_scheduler();
 }
 
-/// 阶段1：基础硬件初始化
-fn init_phase1() {
-    // 1. 初始化控制台（仅用于内核调试输出）
+/// Phase 1: Hardware Initialization
+///
+/// Initializes the minimal hardware required for kernel operation:
+/// - Debug console (UART)
+/// - Device Tree Blob (DTB) parsing
+/// - Interrupt controller (GIC)
+/// - Timer
+fn init_phase1_hardware() {
+    // Initialize debug console (UART)
     crate::console::init();
     
-    // 2. 设备树解析和基本设备映射
+    // Parse Device Tree and initialize core drivers
     let boot_info = crate::arch::boot::get_boot_info();
     crate::drivers::init_from_dtb(&boot_info);
     crate::console::driver_ready();
@@ -65,64 +65,69 @@ fn init_phase1() {
     println_raw!("======= HNX Microkernel Booting =======");
     crate::info!("Kernel: {} {} ({})", KERNEL_NAME, VERSION, ARCH);
     
-    // 3. 初始化架构相关组件（中断、定时器、MMU）
+    // Initialize architecture-specific components (interrupts, timer, MMU)
     crate::info!("Initializing architecture...");
     crate::arch::init();
     crate::info!("Architecture initialized");
-    
-    // 4. 解析启动参数
-    // parse_boot_params(&boot_info);
-    
-    // 5. 打印关键寄存器状态（调试用）
-    // print_cpu_state();
 }
 
-/// 阶段2：内存管理初始化
-fn init_phase2() {
+/// Phase 2: Memory Management Initialization
+///
+/// Initializes the memory management subsystem:
+/// - Physical memory allocator (buddy allocator)
+/// - Virtual memory management (page tables)
+/// - Slab allocator for small objects
+/// - Memory mapping manager
+fn init_phase2_memory() {
     let boot_info = crate::arch::boot::get_boot_info();
     
-    // 1. 初始化物理内存管理
     crate::info!("Initializing memory subsystem...");
     memory::init(boot_info);
     
-    // 2. 初始化内核堆分配器
+    // Initialize kernel heap allocator
     crate::info!("Initializing buddy allocator...");
-    let heap_start = 0x40000000; // TODO: 从设备树获取
-    let heap_size = 0x10000000;  // TODO: 从设备树获取
+    let heap_start = 0x40000000; // TODO: Get from device tree
+    let heap_size = 0x10000000;  // TODO: Get from device tree
     unsafe {
-        crate::memory::buddy_allocator::ALLOCATOR.init(heap_start, heap_size);
+        crate::memory::BUDDY_ALLOCATOR.init(heap_start, heap_size);
     }
     crate::info!("Memory subsystem ready");
 }
 
-/// 阶段3：进程管理与IPC初始化
-fn init_phase3() {
-    // 1. 初始化进程管理
+/// Phase 3: Process Management and IPC Initialization
+///
+/// Initializes process and IPC subsystems:
+/// - Process Control Blocks (PCB)
+/// - IPC endpoints and message queues
+/// - Capability system (security)
+fn init_phase3_processes() {
     crate::info!("Initializing process subsystem...");
     process::init();
-    
-    // 2. TODO: 初始化IPC子系统
-    // ipc::init();
-    
-    // 3. TODO: 初始化能力安全系统
-    // capability::init();
-    
-    // 4. TODO: 初始化系统调用处理
-    // syscall::init();
-    
     crate::info!("Process and IPC subsystems ready");
 }
 
-/// 阶段4：启动第一个进程并进入调度循环
-fn init_phase4() {
+/// Phase 4: Start Scheduler
+///
+/// Enters the scheduler loop (never returns):
+/// - Creates the idle task
+/// - TODO: Launch the first user space process (init/procmgr)
+/// - Begins round-robin scheduling
+fn init_phase4_scheduler() -> ! {
     crate::info!("Kernel core ready");
     crate::info!("Starting scheduler...");
     
-    // TODO: 创建第一个用户空间进程（init或procmgr）
-    // 这个进程将负责启动用户空间服务
+    // TODO: Create first user space process (init or procmgr)
+    // This process will be responsible for launching user space services:
+    // - File System Service
+    // - Network Stack Service
+    // - Device Driver Services
+    
+    // Enter scheduler loop (never returns)
+    crate::core::scheduler::run();
 }
 
-/// 解析启动参数
+/// Parse boot command line parameters (currently unused)
+#[allow(dead_code)]
 fn parse_boot_params(boot_info: &crate::arch::common::BootInfo) {
     unsafe {
         let mut len = 0usize;
@@ -148,11 +153,11 @@ fn parse_boot_params(boot_info: &crate::arch::common::BootInfo) {
         crate::console::loglvl::set_log_level(log_level);
         
         crate::info!("Boot command line: {}", cmdline);
-        // crate::info!("Log level: {:?}", log_level);
     }
 }
 
-/// 打印CPU状态（调试用）
+/// Print CPU state for debugging (currently unused)
+#[allow(dead_code)]
 fn print_cpu_state() {
     // VBAR_EL1
     let mut vbar: u64;
@@ -167,8 +172,6 @@ fn print_cpu_state() {
         ::core::arch::asm!("mrs {c}, CurrentEL", c = out(reg) cur_el);
     }
     crate::info!("CurrentEL = 0x{:016X}", cur_el);
-    
-    // TODO: 添加更多架构相关的状态信息
 }
 
 #[no_mangle]
