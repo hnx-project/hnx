@@ -1,0 +1,54 @@
+/* 只保留必需字段 */
+OUTPUT_FORMAT("{{OUTPUT_FORMAT}}")
+OUTPUT_ARCH({{OUTPUT_ARCH}})
+ENTRY(_start)
+
+SECTIONS {
+    /* 内核物理地址 */
+    . = {{PHYS_BASE}};
+    
+    /* 启动代码 */
+    .text.boot : {
+        KEEP(*(.text.boot))
+    }
+    
+    /* 内核代码 */
+    .text : ALIGN(4096) {
+        *(.text .text.*)
+    }
+    
+    /* 只读数据 */
+    .rodata : ALIGN(4096) {
+        *(.rodata .rodata.*)
+    }
+    
+    /* 数据段 */
+    .data : ALIGN(4096) {
+        *(.data .data.*)
+    }
+    
+    /* BSS段 */
+    .bss : ALIGN(4096) {
+        __bss_start = .;
+        *(.bss .bss.*)
+        *(COMMON)
+        __bss_end = .;
+    }
+    
+    /* 内核栈 */
+    .stack (NOLOAD) : ALIGN(16) {
+        __stack_bottom = .;
+        . += {{STACK_SIZE}};
+        __stack_top = .;
+    }
+    
+    /* 内核结束 */
+    . = ALIGN(4096);
+    __kernel_end = .;
+    
+    /DISCARD/ : {
+        *(.comment)
+        *(.note.*)
+        *(.eh_frame)
+    }
+}

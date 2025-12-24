@@ -53,7 +53,7 @@ toolchain:
 # 构建内核（简化版）
 kernel: configure check-abi
 	@echo "========= Building kernel for target: $(KERNEL_TARGET) ========="
-	@RUSTFLAGS="-A warnings" cargo build  -p hnx-kernel \
+	@RUSTFLAGS="-A warnings" RUST_BACKTRACE=1 cargo build  -p hnx-kernel \
 			--target $(KERNEL_TARGET)
 	@mkdir -p $(BUILD_ROOT)/kernel/$(PROFILE)
 	@cp target/$(KERNEL_TARGET)/$(PROFILE)/hnx-kernel \
@@ -163,6 +163,7 @@ clean:
 	@echo "========= Cleaning build artifacts ========="
 	@cargo clean
 	@rm -rf $(BUILD_ROOT)
+	@find . -type d -name "target" -exec rm -rf {} +
 	@echo "========= Build artifacts cleaned ========="
 	@echo ""
 

@@ -3,11 +3,14 @@
 name = "aarch64"
 data-layout = "e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128"
 features = ["+strict-align", "+neon", "+fp-armv8"]
+endian = "little"  # 新增：字节序
 
 [memory]
 page_size = 4096
 kernel_base = "0xffff000000000000"
 user_base = "0x0000000000400000"
+physical_base = "0x40000000"  # 新增：物理基地址
+stack_size = 65536  
 
 [kernel]
 max_processes = 256
