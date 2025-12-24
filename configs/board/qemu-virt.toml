@@ -14,6 +14,14 @@ virtio-mouse = "-device virtio-mouse-pci"
 virtio-net = "-device virtio-net-device,netdev=net0"
 virtio-blk = "-device virtio-blk-device,drive=hd0"
 
+# 板级特定设备地址（可选，如果与默认不同）
+[devices.uart]
+base = "0x09000000"
+
+[devices.gic]
+distributor_base = "0x08000000"
+cpu_interface_base = "0x08010000"
+
 [qemu]
 machine_type = "virt"
 cpu_type = "cortex-a72"

@@ -12,6 +12,17 @@ user_base = "0x0000000000400000"
 physical_base = "0x40000000"  # 新增：物理基地址
 stack_size = 65536  
 
+# 新增：设备默认地址
+[devices.uart]
+base = "0x09000000"
+driver = "pl011"
+
+[devices.gic]
+distributor_base = "0x08000000"
+cpu_interface_base = "0x08010000"
+version = "v2"
+
+
 [kernel]
 max_processes = 256
 max_threads = 1024
