@@ -13,7 +13,8 @@ use hnx_abi::{
     HNX_SYS_MMAP, HNX_SYS_MUNMAP, HNX_SYS_MPROTECT, HNX_SYS_FORK, HNX_SYS_KILL, HNX_SYS_SETPGID, HNX_SYS_GETPGID,
     HNX_SYS_GETPPID, HNX_SYS_WAIT4, HNX_SYS_DRIVER_REGISTER, HNX_SYS_DRIVER_REQUEST_IRQ,
     HNX_SYS_DRIVER_MAP_MMIO, HNX_SYS_DRIVER_DMA_ALLOC, HNX_SYS_SOCKET, HNX_SYS_BIND, HNX_SYS_CONNECT,
-    HNX_SYS_LISTEN, HNX_SYS_ACCEPT, HNX_SYS_SEND, HNX_SYS_RECV, SysResult
+    HNX_SYS_LISTEN, HNX_SYS_ACCEPT, HNX_SYS_SEND, HNX_SYS_RECV,
+    HNX_SYS_PROCESS_CREATE, SysResult
 };
 
 #[derive(Copy, Clone)]
@@ -401,6 +402,10 @@ pub fn dispatch(
         HNX_SYS_MPROTECT => {
             crate::debug!("syscall enter mprotect");
             sys_mprotect(x0, x1, x2)
+        }
+        HNX_SYS_PROCESS_CREATE => {
+            crate::debug!("syscall enter process_create");
+            crate::user::sys_process_create(x0, x1)
         }
         _ => -1,
     }

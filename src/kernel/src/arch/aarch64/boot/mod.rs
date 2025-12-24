@@ -5,8 +5,7 @@ use core::arch::global_asm;
 
 // 汇编启动代码
 global_asm!(include_str!("../boot.S"));
-// 用户态自检片段 - ⚠️
-// global_asm!(include_str!("../selftest.S"));
+global_asm!(include_str!("../selftest.S"));
 
 /// 清零 BSS 段
 pub unsafe fn zero_bss() {
