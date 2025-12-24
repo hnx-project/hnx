@@ -20,6 +20,7 @@ mod console;        // Debug console output
 mod core;           // IPC and Scheduler
 mod drivers;        // Minimal drivers (UART, GIC, DTB)
 mod error;          // Error types
+mod ipc_services;   // IPC service delegation framework
 mod memory;         // Memory management
 mod panic;          // Panic handler
 mod process;        // Process/thread management
@@ -100,9 +101,18 @@ fn init_phase2_memory() {
 /// - Process Control Blocks (PCB)
 /// - IPC endpoints and message queues
 /// - Capability system (security)
+/// - Well-known service endpoints for user space services
 fn init_phase3_processes() {
     crate::info!("Initializing process subsystem...");
     process::init();
+    
+    // Initialize IPC service delegation framework
+    // This creates well-known endpoints for VFS, Network, Loader services
+    crate::info!("Initializing IPC service delegation...");
+    if let Err(_) = ipc_services::delegate::init() {
+        crate::warn!("Failed to initialize IPC service endpoints (services won't be available)");
+    }
+    
     crate::info!("Process and IPC subsystems ready");
 }
 

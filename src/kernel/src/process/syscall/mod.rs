@@ -2,6 +2,9 @@ use core::ptr;
 use spin::Mutex;
 use crate::security::{self, validate_capability, rights};
 
+// Syscall stubs that delegate to user space services
+mod fs_stubs;
+
 // 使用 abi 中定义的系统调用号和类型
 use hnx_abi::{
     HNX_SYS_WRITE, HNX_SYS_EXIT, HNX_SYS_GETPID, HNX_SYS_OPEN, HNX_SYS_READ, HNX_SYS_CLOSE, HNX_SYS_YIELD,
@@ -234,7 +237,7 @@ pub fn dispatch(
     match num {
         HNX_SYS_WRITE => {
             crate::debug!("syscall enter write");
-            sys_write(x0, x1, x2)
+            fs_stubs::sys_write(x0, x1, x2)
         }
         HNX_SYS_EXIT => {
             crate::debug!("syscall enter exit");
@@ -270,32 +273,31 @@ pub fn dispatch(
         }
         HNX_SYS_OPEN => {
             crate::debug!("syscall enter open");
-            sys_open(x0, x1 as u32, x2 as u32)
+            fs_stubs::sys_open(x0, x1 as u32, x2 as u32)
         }
         HNX_SYS_READ => {
             crate::debug!("syscall enter read");
-            sys_read(x0, x1, x2)
+            fs_stubs::sys_read(x0, x1, x2)
         }
         HNX_SYS_CLOSE => {
             crate::debug!("syscall enter close");
-            // For now, just call the regular close function
-            sys_close(x0)
+            fs_stubs::sys_close(x0)
         }
         HNX_SYS_CREAT => {
             crate::debug!("syscall enter creat");
-            sys_creat(x0, x1 as u32)
+            fs_stubs::sys_creat(x0, x1 as u32)
         }
         HNX_SYS_UNLINK => {
             crate::debug!("syscall enter unlink");
-            sys_unlink(x0)
+            fs_stubs::sys_unlink(x0)
         }
         HNX_SYS_MKDIR => {
             crate::debug!("syscall enter mkdir");
-            sys_mkdir(x0, x1 as u32)
+            fs_stubs::sys_mkdir(x0, x1 as u32)
         }
         HNX_SYS_RMDIR => {
             crate::debug!("syscall enter rmdir");
-            sys_rmdir(x0)
+            fs_stubs::sys_rmdir(x0)
         }
         HNX_SYS_YIELD => {
             crate::core::scheduler::on_tick();

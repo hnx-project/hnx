@@ -59,7 +59,7 @@ pub enum AsyncStatus {
 }
 
 /// Error types for IPC operations
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IpcError {
     InvalidEndpoint,
     PermissionDenied,
