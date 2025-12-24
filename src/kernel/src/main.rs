@@ -40,13 +40,13 @@ pub extern "C" fn rust_main() -> ! {
     init_phase1();
     
     // 阶段2：内存管理初始化
-    // init_phase2();
+    init_phase2();
     
     // // 阶段3：进程与IPC初始化
-    // init_phase3();
+    init_phase3();
     
     // // 阶段4：启动调度器
-    // init_phase4();
+    init_phase4();
 
     // 启动调度器（永不返回）
     crate::core::scheduler::run();
@@ -58,8 +58,8 @@ fn init_phase1() {
     crate::console::init();
     
     // 2. 设备树解析和基本设备映射
-    // let boot_info = crate::arch::boot::get_boot_info();
-    // crate::drivers::init_from_dtb(&boot_info);
+    let boot_info = crate::arch::boot::get_boot_info();
+    crate::drivers::init_from_dtb(&boot_info);
     crate::console::driver_ready();
     
     println_raw!("======= HNX Microkernel Booting =======");
