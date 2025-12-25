@@ -49,6 +49,7 @@ def main():
     parser.add_argument("--board", required=True, help="Board name")
     parser.add_argument("--profile", default="debug", choices=["debug", "release"])
     parser.add_argument("--output-dir", required=True, help="Output directory for config files")
+
     
     args = parser.parse_args()
     

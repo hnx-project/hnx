@@ -1,0 +1,9 @@
+[version]
+major = 0
+minor = 1
+patch = 0
+prerelease = alpha.1
+
+[metadata]
+build_date = ${BUILD_DATE}
+git_hash = ${GIT_HASH}

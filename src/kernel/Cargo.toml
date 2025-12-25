@@ -1,6 +1,6 @@
 [package]
 name = "hnx-kernel"
-version = "0.0.1"
+version = "0.1.0-alpha.1"
 edition = "2021"
 authors = ["HNX Developer"]
 
@@ -22,6 +22,6 @@ quote = "1.0"
 proc-macro2 = "1.0"
 toml = "0.8"
 
-# Link with libc
-[package.metadata.link]
-links = ["../../space/libc/libhnxc.a"]
+[features]
+default = []
+version = []  # 添加版本特性

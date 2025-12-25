@@ -5,3 +5,4 @@ target
 *.old
 *.backup
 *.moved
+__pycache__

@@ -32,7 +32,7 @@ hnx-libc = { path = "libc" }
 hnx-lib = { path = "hnxlib" }
 
 [workspace.package]
-version = "0.0.1"
+version = "0.1.0-alpha.1"
 edition = "2021"
 authors = ["HNX Developers"]
 license = "MIT"
@@ -45,3 +45,7 @@ debug = true
 opt-level = "s"
 lto = true
 codegen-units = 1
+
+[features]
+default=[]
+version = []  # 添加版本特性

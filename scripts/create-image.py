@@ -483,6 +483,7 @@ Examples:
                        help="Do not compress initrd (use .cpio instead of .cpio.gz)")
     parser.add_argument("--verbose", "-v", action="count", default=0,
                        help="Increase verbosity level")
+
     
     args = parser.parse_args()
     
