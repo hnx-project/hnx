@@ -153,11 +153,26 @@ class QEMURunner:
             if dtb_path.exists():
                 cmd.extend(["-dtb", str(dtb_path)])
         else:
-            # 标准处理
-            if self.image_path.suffix == '.qcow2':
-                cmd.extend(["-drive", f"file={self.image_path},format=qcow2"])
-            else:
-                cmd.extend(["-kernel", str(self.image_path)])
+            # 标准处理 - 直接使用镜像文件作为 kernel
+            cmd.extend(["-kernel", str(self.image_path)])
+            
+            # 检查是否有 initrd.cpio 文件
+            # 优先在 image 同目录查找，然后在 build/ 目录查找
+            initrd_candidates = [
+                self.image_path.parent / "initrd.cpio",
+                Path("build") / "initrd.cpio",
+            ]
+            initrd_path = None
+            for candidate in initrd_candidates:
+                if candidate.exists():
+                    initrd_path = candidate
+                    break
+            
+            if initrd_path:
+                # 使用 -device loader 加载 initrd 到固定地址 0x42000000
+                cmd.extend(["-device", f"loader,file={initrd_path},addr=0x42000000"])
+                print(f"  Using initrd: {initrd_path} (loaded at 0x42000000)")
+        
         
         # 网络配置
         if self.board == "qemu-virt":

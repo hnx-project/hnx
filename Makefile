@@ -231,15 +231,14 @@ run: image
 	@echo ""
 
 # 运行带超时的 QEMU
-run-simple: simple-image
+run-simple: kernel space
 	@echo "========= Running QEMU test v$(VERSION) (30s timeout) ========="
 	@$(PYTHON) scripts/run-qemu.py \
 		--arch $(ARCH) \
 		--board $(BOARD) \
-		--config-dir $(BUILD_ROOT)/config \
 		--headless \
 		--timeout 30 \
-		$(BUILD_ROOT)/images/hnx-simple-$(VERSION)-$(ARCH)-$(BOARD).img
+		$(BUILD_ROOT)/kernel/$(PROFILE)/hnx-kernel-$(VERSION).bin
 	@echo "========= QEMU test completed ========="
 	@echo ""
 

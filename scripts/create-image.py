@@ -428,6 +428,12 @@ devtmpfs        /dev            devtmpfs defaults       0       0
             # 创建 initrd
             initrd_path = self.create_initrd()
             
+            # 复制 initrd.cpio 到 build/ 目录（供 run-qemu.py 使用）
+            build_initrd = Path("build") / "initrd.cpio"
+            if initrd_path.suffix == ".cpio":
+                print(f"Copying initrd to {build_initrd} for QEMU...")
+                shutil.copy2(initrd_path, build_initrd)
+            
             # 创建原始镜像
             self.create_raw_image(initrd_path)
             

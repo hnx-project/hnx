@@ -48,6 +48,7 @@ impl<'a> BootstrapElfLoader<'a> {
         let phnum = self.read_u16(56) as usize;
         
         info!("bootstrap: ELF entry=0x{:X}, {} program headers", entry, phnum);
+        info!("bootstrap: phoff=0x{:X}, phentsize={}, phnum={}", phoff, phentsize, phnum);
         
         let pt_base = create_user_l1().ok_or("Failed to create page table")?;
         
@@ -67,7 +68,12 @@ impl<'a> BootstrapElfLoader<'a> {
             let p_filesz = self.read_u64_at(ph_offset + 32) as usize;
             let p_memsz = self.read_u64_at(ph_offset + 40) as usize;
             
-            info!("bootstrap: LOAD segment vaddr=0x{:X}, memsz=0x{:X}", p_vaddr, p_memsz);
+            let r = if p_flags & 0x4 != 0 { 'R' } else { '-' };
+            let w = if p_flags & 0x2 != 0 { 'W' } else { '-' };
+            let x = if p_flags & 0x1 != 0 { 'X' } else { '-' };
+            
+            info!("bootstrap: LOAD segment[{}] vaddr=0x{:X}, offset=0x{:X}, filesz=0x{:X}, memsz=0x{:X}, flags={}{}{}", 
+                  i, p_vaddr, p_offset, p_filesz, p_memsz, r, w, x);
             
             self.load_segment(pt_base, p_vaddr, p_offset, p_filesz, p_memsz, p_flags)?;
             
@@ -115,6 +121,9 @@ impl<'a> BootstrapElfLoader<'a> {
         if flags & 0x2 != 0 { mmu_flags = mmu_flags.combine(MmuFlags::WRITE); }
         if flags & 0x1 != 0 { mmu_flags = mmu_flags.combine(MmuFlags::EXECUTE); }
         
+        info!("bootstrap: loading segment: page_start=0x{:X}, page_end=0x{:X}, num_pages={}", 
+              page_start, page_end, num_pages);
+        
         for i in 0..num_pages {
             let page_va = page_start + i * 0x1000;
             let page_pa = crate::memory::physical::alloc_pages(1)
@@ -126,20 +135,38 @@ impl<'a> BootstrapElfLoader<'a> {
                 core::ptr::write_bytes(page_pa as *mut u8, 0, 0x1000);
             }
             
-            let seg_offset_in_page = if i == 0 { vaddr & 0xFFF } else { 0 };
-            let copy_start_va = page_va + seg_offset_in_page;
-            let remaining_in_seg = filesz.saturating_sub(copy_start_va - vaddr);
-            let copy_size = core::cmp::min(remaining_in_seg, 0x1000 - seg_offset_in_page);
+            let page_offset_in_seg = if page_va >= vaddr { 
+                page_va - vaddr 
+            } else { 
+                0 
+            };
+            let bytes_to_copy_in_page = if page_offset_in_seg < filesz {
+                core::cmp::min(filesz - page_offset_in_seg, 0x1000)
+            } else {
+                0
+            };
             
-            if copy_size > 0 {
-                let src_offset = offset + (copy_start_va - vaddr);
-                if src_offset + copy_size <= self.data.len() {
+            if bytes_to_copy_in_page > 0 {
+                let src_offset = offset + page_offset_in_seg;
+                let dst_offset_in_page = if page_va < vaddr {
+                    vaddr - page_va
+                } else {
+                    0
+                };
+                
+                if src_offset + bytes_to_copy_in_page <= self.data.len() {
                     unsafe {
-                        let dst = (page_pa + seg_offset_in_page) as *mut u8;
+                        let dst = (page_pa + dst_offset_in_page) as *mut u8;
                         let src = self.data.as_ptr().add(src_offset);
-                        core::ptr::copy_nonoverlapping(src, dst, copy_size);
+                        core::ptr::copy_nonoverlapping(src, dst, bytes_to_copy_in_page);
                     }
+                    
+                    info!("bootstrap:   page[{}] va=0x{:X} pa=0x{:X} copied {} bytes from offset 0x{:X}", 
+                          i, page_va, page_pa, bytes_to_copy_in_page, src_offset);
                 }
+            } else {
+                info!("bootstrap:   page[{}] va=0x{:X} pa=0x{:X} (zero-filled)", 
+                      i, page_va, page_pa);
             }
         }
         
