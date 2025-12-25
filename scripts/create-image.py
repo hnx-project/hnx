@@ -76,6 +76,7 @@ class ImageBuilder:
         # 创建 initrd 目录
         initrd_root = self.temp_dir / "initrd"
         initrd_root.mkdir(parents=True, exist_ok=True)
+        print(f"  Created initrd root directory, {initrd_root}")
         
         # 查找并复制 init 二进制文件
         init_found = self._copy_init_binary(initrd_root)

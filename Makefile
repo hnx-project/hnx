@@ -95,6 +95,21 @@ image: kernel space
 	@echo "========= System image created ========="
 	@echo ""
 
+# 创建系统镜像 simple_initrd no_compress
+simple-image: kernel space
+	@echo "========= Creating system image ========="
+	@mkdir -p $(BUILD_ROOT)/images
+	@$(PYTHON) scripts/create-image.py \
+		--kernel $(BUILD_ROOT)/kernel/$(PROFILE)/hnx-kernel.bin \
+		--space-dir $(BUILD_ROOT)/space/$(PROFILE) \
+		--arch $(ARCH) \
+		--board $(BOARD) \
+		--simple-initrd \
+		--no-compress \
+		--output $(BUILD_ROOT)/images/hnx-$(ARCH)-$(BOARD).img
+	@echo "========= System image created ========="
+	@echo ""
+
 run-kernel: kernel
 	@echo "========= Running kernel in QEMU ========="
 	@$(PYTHON) scripts/run-qemu.py \
@@ -118,7 +133,7 @@ run: image
 	@echo ""
 
 # 运行带超时的 QEMU
-run-test: image
+run-simple: simple-image
 	@echo "========= Running QEMU test (30s timeout) ========="
 	@$(PYTHON) scripts/run-qemu.py \
 		--arch $(ARCH) \
