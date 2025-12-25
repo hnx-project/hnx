@@ -127,7 +127,7 @@ macro_rules! println_raw {
 }
 
 pub fn log(level: &str, module: &str, args: fmt::Arguments) {
-    write(format_args!("[{}] {} {}\n", level, module, args));
+    write(format_args!("[{}] {} => {}\n", level, module, args));
 }
 
 pub mod loglvl {
