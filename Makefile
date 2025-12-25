@@ -77,7 +77,7 @@ space: kernel
 			--workspace \
 			--target $(SPACE_TARGET)
 	@mkdir -p $(BUILD_ROOT)/space/$(PROFILE)
-	@cp -r src/space/target/$(ARCH)-unknown-hnx/$(PROFILE)/* \
+	@cp -r src/space/target/$(SPACE_TARGET)/$(PROFILE)/* \
 		$(BUILD_ROOT)/space/$(PROFILE)/
 	@echo "========= Space components built ========="
 	@echo ""
