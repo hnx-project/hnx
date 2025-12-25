@@ -141,7 +141,7 @@ toolchain:
 	@echo ""
 
 # 构建内核（集成版本信息）
-kernel: configure check-abi
+kernel: configure check-abi version-sync
 	@echo "========= Building kernel v$(VERSION) for target: $(KERNEL_TARGET) ========="
 	@RUSTFLAGS="-A warnings" RUST_BACKTRACE=1 cargo build -p hnx-kernel \
 		--target $(KERNEL_TARGET)
