@@ -1,5 +1,100 @@
-# HNX Kernel Development Session Summary - ONGOING
+# HNX Microkernel - Agent Development Guide
 
+## 项目概述
+HNX是一个基于Rust编写的微内核操作系统，采用类似Zircon的能力安全模型。项目包含：
+- include/ - 公共头文件
+- scripts/ - 辅助脚本 (版本管理、ABI检查等)
+- src/ - 源代码目录
+- 公共定义 (`src/abi-bindings`) - 定义系统调用接口、能力模型等，供内核和用户空间使用。（由`include/hnx/abi`生成rust绑定）
+- 微内核 (`src/kernel/`) - 核心IPC、进程、内存管理
+- 用户空间 (`src/space/`) - 系统服务和应用程序
+- 跨平台支持 (aarch64, x86_64, riscv64)
+
+## 开发环境设置
+- **构建工具**：Rust toolchain + cargo-make
+- **Python环境**：Poetry管理 (Python 3.11)
+- **编译目标**：默认 `aarch64-unknown-none`
+- **初始化**：运行 `make init` 初始化Python环境
+- **配置**：默认配置为 `aarch64-unknown-none`，可通过 `ARCH` 和 `BOARD` 环境变量自定义
+
+## 构建命令
+```bash
+# 完整构建流程
+make configure          # 配置系统 (ARCH=aarch64 BOARD=qemu-virt)
+make kernel            # 构建微内核
+make space             # 构建用户空间组件
+make image             # 创建完整系统镜像
+
+# 测试与运行
+make test              # 运行测试
+make run               # 在QEMU中运行系统
+make run-kernel        # 在QEMU中运行微内核
+make run-simple        # 30秒超时测试运行
+```
+## 代码架构规范
+
+1. ### 微内核核心职责：
+
+- 进程/线程调度与管理
+- IPC消息传递与共享内存
+- 内存管理（分页、分配）
+- 能力安全模型检查
+- 系统调用分发
+2. ### 用户空间/内核分离：
+
+- 文件系统 → 用户空间服务
+- 网络协议栈 → 用户空间服务
+- 设备驱动 → 用户空间服务
+- 内核仅保留核心抽象（中断控制器、定时器等）
+3. ### 版本管理：
+
+- 使用语义化版本 (SemVer)
+- scripts/version.py 管理版本号
+- 运行 make version-sync 同步所有子项目
+
+## 测试策略
+
+- 内核单元测试：cd src/kernel && cargo test --lib
+- 用户空间测试：cd src/space && cargo test --workspace
+- QEMU集成测试：使用 make run-simple 进行30秒超时测试
+- GDB调试：使用 make debug 启动调试会话
+## 内存与启动管理
+
+- Initrd系统：支持简单initrd和完整initramfs
+- 内存布局：内核与用户空间明确分离
+- 启动流程：内核 → initrd → 用户空间服务
+## 安全注意事项
+
+- 能力模型：所有操作需要对应能力
+- IPC安全检查：消息传递进行权限验证
+- 内存隔离：进程间地址空间完全隔离
+- 系统调用验证：参数和权限双重检查
+## 提交与合并规范 
+
+- 版本更新：修改 VERSION 文件后运行 make version-sync
+- ABI检查：make check-abi 确保接口一致性
+- 镜像命名：hnx-{版本}-{架构}-{板型}.img
+- Git工作流：使用版本标签 v{主版本}.{次版本}.{修订版本}
+
+## 常用调试命令
+
+```bash
+# 查看当前配置
+make config
+
+# 快速内核构建
+make quick
+
+# 清理构建产物
+make clean          # 清理构建产物
+make distclean      # 完全清理（包括版本文件）
+
+# 版本管理
+make version        # 查看版本信息
+make version-bump-patch    # 递增修订版本
+make version-check  # 检查版本一致性
+```
+<!-- 以下是 AGENTS 可更新的部分 -->
 ## 问题描述
 HNX microkernel 的 init 进程无法成功切换到 EL0 用户态执行。系统在 ERET 后立即触发 Prefetch Abort 异常，无限循环在异常向量表地址 `0xFFFF800000000A00`。
 
@@ -177,21 +272,4 @@ Taking exception 3 [Prefetch Abort]
 make kernel
 
 # 运行
-timeout 20 qemu-system-aarch64 -machine virt -cpu cortex-a72 -m 512M \
-    -kernel build/kernel/debug/hnx-kernel-0.1.0-alpha.1.bin \
-    -device loader,file=build/initrd.cpio,addr=0x42000000 \
-    -nographic -serial mon:stdio -no-reboot
-
-# LLDB 调试
-qemu-system-aarch64 -machine virt -cpu cortex-a72 -m 512M \
-    -kernel build/kernel/debug/hnx-kernel-0.1.0-alpha.1.bin \
-    -device loader,file=build/initrd.cpio,addr=0x42000000 \
-    -nographic -serial mon:stdio -no-reboot -s -S
-
-# 另一终端
-lldb target/aarch64-unknown-none/debug/hnx-kernel
-(lldb) gdb-remote localhost:1234
-(lldb) b arch_do_exec
-(lldb) c
-(lldb) x/gx 0x40081800  # L1_TABLE[256]
-```
+make run-simple
