@@ -208,6 +208,21 @@ simple-image: kernel space version-check
 	@echo "Image saved as: $(BUILD_ROOT)/images/hnx-simple-$(VERSION)-$(ARCH)-$(BOARD).img"
 	@echo ""
 
+# 创建简单的 initrd.cpio
+initrd-simple: kernel space
+	@echo "========= Creating simple initrd ========="
+	@mkdir -p $(BUILD_ROOT)
+	@$(PYTHON) scripts/create-image.py \
+		--kernel $(BUILD_ROOT)/kernel/$(PROFILE)/hnx-kernel-$(VERSION).bin \
+		--space-dir $(BUILD_ROOT)/space/$(PROFILE) \
+		--arch $(ARCH) \
+		--board $(BOARD) \
+		--simple-initrd \
+		--no-compress \
+		--output $(BUILD_ROOT)/dummy.img
+	@echo "========= Simple initrd created at $(BUILD_ROOT)/initrd.cpio ========="
+	@echo ""
+
 run-kernel: kernel
 	@echo "========= Running kernel v$(VERSION) in QEMU ========="
 	@$(PYTHON) scripts/run-qemu.py \
@@ -231,7 +246,7 @@ run: image
 	@echo ""
 
 # 运行带超时的 QEMU
-run-simple: kernel space
+run-simple: initrd-simple
 	@echo "========= Running QEMU test v$(VERSION) (30s timeout) ========="
 	@$(PYTHON) scripts/run-qemu.py \
 		--arch $(ARCH) \

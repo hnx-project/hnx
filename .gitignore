@@ -6,3 +6,4 @@ target
 *.backup
 *.moved
 __pycache__
+outputs.log
