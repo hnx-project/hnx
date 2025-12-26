@@ -148,12 +148,24 @@ fn init_phase4_scheduler() -> ! {
                 task.ttbr0_base = pt_base;
                 task.context.sp = sp;
                 task.entry_point = entry;
+                task.asid = pid as u16;
             }
             
             process::set_process_state(pid as usize, process::ProcState::Ready);
             
             crate::info!("Init process created with PID {}", pid);
             crate::info!("Starting scheduler - init will run at EL0...");
+            
+            let mut task = process::Task::new_kernel(unsafe {
+                ::core::mem::transmute::<usize, fn() -> !>(entry)
+            });
+            
+            unsafe {
+                task.ttbr0_base = pt_base;
+                task.context.sp = sp;
+                task.entry_point = entry;
+                task.asid = pid as u16;
+            }
             
             crate::core::scheduler::run_task(task);
         }

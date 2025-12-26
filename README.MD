@@ -1,3 +1,5 @@
+# HNX
+## 项目结构
 ```shell
 hnx/                              # 项目根目录
 ├── .github/                      # GitHub 工作流

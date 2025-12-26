@@ -41,19 +41,15 @@ pub fn run_task(task: Task) -> ! {
             
             info!("=> About to call arch_do_exec - THIS NEVER RETURNS");
             
-            // Use naked inline assembly to avoid ANY Rust-generated code
-            // This jumps directly to arch_do_exec without stack frame or prologue
+            // Direct call to arch_do_exec (kernel uses identity mapping now)
             unsafe {
                 core::arch::asm!(
-                    // Load parameters into registers
                     "mov x0, {elr}",
                     "mov x1, {sp0}",
                     "mov x2, {ttbr0}",
                     "mov x3, xzr",
                     "mov x4, xzr",
                     "mov x5, xzr",
-                    "mov x6, xzr",
-                    // Jump directly (not call) to arch_do_exec
                     "b {func}",
                     elr = in(reg) elr,
                     sp0 = in(reg) sp0,

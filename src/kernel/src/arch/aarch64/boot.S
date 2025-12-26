@@ -56,74 +56,21 @@ _start_el1:
     ldr x0, =early_msg
     bl early_uart_print
     
-    
-    /* 启用 MMU（最小流程）后跳转到 Rust */
-    ldr x2, =__text_lma_start
-    ldr x3, =__text_lma_value
-    str x2, [x3]
+    /* Enable MMU with identity mapping */
     bl mmu_enable_boot
-    /* 跳转到高地址入口 _start_high */
-    adrp x0, _start_high
-    add  x0, x0, :lo12:_start_high      /* 低地址 VA 的 _start_high */
-    adrp x1, __text_vma_start
-    add  x1, x1, :lo12:__text_vma_start /* 低地址 VA 的 .text 起始 */
-    sub  x0, x0, x1                     /* 计算偏移 */
-    ldr  x2, =0xFFFF800000000000        /* KERNEL_BASE */
-    add  x0, x2, x0                     /* 高地址 VA = KERNEL_BASE + 偏移 */
-    br   x0
-
-.section .text
-.global _start_high
-_start_high:
-    /* 现在在高地址空间执行，设置栈并输出 POST */
+    
+    /* MMU enabled, continue at physical address (identity mapped) */
+    /* Setup main kernel stack */
     ldr x0, =__stack_top
     and x0, x0, #0xFFFFFFFFFFFFFFF0
     mov sp, x0
     
-    /* CRITICAL: Initialize L1_TABLE[256] to point to L2_TABLE1 
-     * This MUST be done here because:
-     * - In mmu_enable_boot, adrp uses physical addresses (0x4008xxxx)
-     * - Here in _start_high, we're at high-half but need to access physical page tables
-     * - We use movz/movk to load absolute physical addresses */
-    
-    /* Load L1_TABLE physical address = 0x40081000 */
-    movz x2, #0x1000, lsl #0
-    movk x2, #0x4008, lsl #16
-    
-    /* Calculate L1_TABLE[256] address = L1_TABLE + 256*8 = 0x40081000 + 0x800 = 0x40081800 */
-    add x2, x2, #0x800
-    
-    /* Load L2_TABLE1 physical address = 0x40084000 */
-    movz x3, #0x4000, lsl #0
-    movk x3, #0x4008, lsl #16
-    
-    /* Create page table entry = L2_TABLE1 | 0x3 */
-    orr x3, x3, #3
-    
-    /* Write L1_TABLE[256] = L2_TABLE1 | 0x3 */
-    str x3, [x2]
-    
-    /* Flush to ensure write completes */
-    dsb ish
-    tlbi vmalle1
-    dsb ish
-    isb
-    
-    /* 重新设置异常向量到高半地址，保证在切换 TTBR0 后 EL1 始终可用 */
-    adrp x0, exception_vector_table
-    add  x0, x0, :lo12:exception_vector_table /* 低地址 VA 的向量表 */
-    adrp x1, __text_vma_start
-    add  x1, x1, :lo12:__text_vma_start      /* 低地址 VA 的 .text 起始 */
-    sub  x0, x0, x1                          /* 计算偏移 */
-    ldr x2, =0xFFFF800000000000             /* KERNEL_BASE */
-    add  x0, x2, x0                          /* 高地址 VA = KERNEL_BASE + 偏移 */
-    msr  vbar_el1, x0
-    isb
-    
+    /* Jump to Rust main */
     bl rust_main
     
-    /* 6. 如果返回，则停止 */
+    /* If rust_main returns, halt */
     b .
+
 
 /* 异常向量表 */
 .align 11
@@ -257,7 +204,7 @@ exception_panic:
 .section .text.boot
 .global early_uart_init
 early_uart_init:
-    ldr x0, =0x09000000
+    mov x0, #0x9000000
     mov x1, #0
     str w1, [x0, #0x30]
     mov x1, #13
@@ -274,7 +221,7 @@ early_uart_init:
 
 .global early_uart_print
 early_uart_print:
-    ldr x1, =0x09000000
+    mov x1, #0x9000000
     mov w4, #512
 1:
     ldrb w2, [x0], #1
@@ -292,6 +239,12 @@ early_uart_print:
 .section .rodata.boot
 early_msg:
     .asciz "Welcome\n"
+msg_before_mmu:
+    .asciz "[BOOT] Before MMU enable\n"
+msg_after_mmu:
+    .asciz "[BOOT] After MMU enable\n"
+msg_before_rust:
+    .asciz "[BOOT] Jumping to rust_main\n"
 
 /* 汇编版 EL0 切换入口 - 完全无栈版本 */
 .section .text
@@ -308,7 +261,7 @@ arch_do_exec:
     /* Set ELR_EL1 */
     msr elr_el1, x0
     
-    /* Set SPSR_EL1 = 0 (EL0t) */
+    /* Set SPSR_EL1 = 0 (EL0t with interrupts enabled) */
     msr spsr_el1, xzr
     
     /* Ensure SPSel = 1 (use SP_EL1 for exceptions) */
@@ -368,6 +321,13 @@ arch_do_exec:
     
     /* Final ISB */
     isb
+    
+    /* Debug: Read back critical registers before ERET */
+    mrs x10, elr_el1
+    mrs x11, sp_el0
+    mrs x12, spsr_el1
+    mrs x13, ttbr0_el1
+    /* Registers checked: x10=ELR, x11=SP_EL0, x12=SPSR, x13=TTBR0 */
     
     /* ERET to EL0 - NEVER returns */
     eret

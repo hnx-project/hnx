@@ -24,8 +24,8 @@ pub struct Vma {
 static VMA_TABLE: Mutex<[(usize, Option<Vma>); 64]> = Mutex::new([(0, None); 64]);
 
 extern "C" {
-    static mut L2_TABLE0: [u64; 512];
-    static mut L2_TABLE1: [u64; 512];
+    static mut L2_TABLE_USER: [u64; 512];
+    static mut L2_TABLE_KERNEL: [u64; 512];
 }
 
 pub fn init() {
@@ -39,12 +39,43 @@ pub fn create_user_l1() -> Option<usize> {
             core::ptr::write_bytes(l1_pa as *mut u8, 0, 4096);
         }
         unsafe {
-            if let Some(l2_pa) = alloc_pages(1) {
-                core::ptr::write_bytes(l2_pa as *mut u8, 0, 4096);
-                let l1 = l1_pa as *mut u64;
-                let desc = ((l2_pa as u64) & !((PAGE_SIZE_4K as u64) - 1)) | 3u64;
-                core::ptr::write_volatile(l1, desc);
-                crate::info!("mm/vmm create_user_l1: l2_pa=0x{:016X}", l2_pa);
+            // Allocate L2 table for low addresses (0x00000000 - 0x3FFFFFFF)
+            if let Some(l2_low_pa) = alloc_pages(1) {
+                core::ptr::write_bytes(l2_low_pa as *mut u8, 0, 4096);
+                
+                // Allocate L2 table for kernel addresses (0x40000000 - 0x7FFFFFFF)
+                if let Some(l2_kernel_pa) = alloc_pages(1) {
+                    core::ptr::write_bytes(l2_kernel_pa as *mut u8, 0, 4096);
+                    
+                    let l1_ptr = l1_pa as *mut u64;
+                    
+                    // Map L2 table for low addresses (index 0) - contains devices like UART
+                    let l2_low_desc = ((l2_low_pa as u64) & !((PAGE_SIZE_4K as u64) - 1)) | 3u64; // Table descriptor
+                    core::ptr::write_volatile(l1_ptr.add(0), l2_low_desc);
+                    
+                    // Map L2 table for kernel addresses (index 1) - contains kernel code/data
+                    let l2_kernel_desc = ((l2_kernel_pa as u64) & !((PAGE_SIZE_4K as u64) - 1)) | 3u64; // Table descriptor
+                    core::ptr::write_volatile(l1_ptr.add(1), l2_kernel_desc);
+                    
+                    // Map devices in the low address L2 table
+                    let l2_low_ptr = l2_low_pa as *mut u64;
+                    
+                    // Map UART at its virtual address (0x09000000)
+                    // L2 index for 0x09000000 is (0x09000000 >> 21) = 72
+                    let uart_l2_idx = (UART_BASE_PL011 >> 21) & 0x1FF;
+                    let uart_entry = ((UART_BASE_PL011 as u64) & !((BLOCK_SIZE_2M as u64) - 1)) | (1u64 << 2) | (1u64 << 10) | 1u64; // Device memory, AF=1, valid
+                    core::ptr::write_volatile(l2_low_ptr.add(uart_l2_idx), uart_entry);
+                    
+                    // Map kernel physical memory in the kernel address L2 table
+                    let l2_kernel_ptr = l2_kernel_pa as *mut u64;
+                    for i in 0..128 {  // Map 256MB of kernel memory (0x40000000 - 0x4FFFFFFF)
+                        let phys_addr = 0x40000000u64 + (i as u64 * 2 * 1024 * 1024);
+                        let entry = (phys_addr & !((BLOCK_SIZE_2M as u64) - 1)) | (0u64 << 12) | (1u64 << 10) | (0u64 << 2) | 1u64; // Normal memory, AF=1, valid
+                        core::ptr::write_volatile(l2_kernel_ptr.add(i), entry);
+                    }
+                    
+                    crate::info!("mm/vmm create_user_l1: l2_low_pa=0x{:016X}, l2_kernel_pa=0x{:016X}", l2_low_pa, l2_kernel_pa);
+                }
             }
         }
         Some(l1_pa)
@@ -68,9 +99,9 @@ fn l3_index(vaddr: VirtAddr) -> usize {
 unsafe fn ensure_l3_table(vaddr: VirtAddr) -> Option<*mut u64> {
     let idx = l2_index(vaddr);
     let l2_ptr = if is_kernel_va(vaddr) {
-        core::ptr::addr_of_mut!(L2_TABLE1) as *mut u64
+        core::ptr::addr_of_mut!(L2_TABLE_KERNEL) as *mut u64
     } else {
-        core::ptr::addr_of_mut!(L2_TABLE0) as *mut u64
+        core::ptr::addr_of_mut!(L2_TABLE_USER) as *mut u64
     };
     let entry = core::ptr::read_volatile(l2_ptr.add(idx));
     let ty = entry & 0x3;
@@ -138,9 +169,9 @@ pub fn map(vaddr: VirtAddr, paddr: PhysAddr, flags: MmuFlags) {
             let idx = l2_index(vaddr);
             let desc = ((paddr as u64) & !((BLOCK_SIZE_2M as u64) - 1)) | 1u64 | attrs;
             let l2_ptr = if is_kernel_va(vaddr) {
-                core::ptr::addr_of_mut!(L2_TABLE1) as *mut u64
+                core::ptr::addr_of_mut!(L2_TABLE_KERNEL) as *mut u64
             } else {
-                core::ptr::addr_of_mut!(L2_TABLE0) as *mut u64
+                core::ptr::addr_of_mut!(L2_TABLE_USER) as *mut u64
             };
             core::ptr::write_volatile(l2_ptr.add(idx), desc);
         } else if vaddr.is_multiple_of(PAGE_SIZE_4K) && paddr.is_multiple_of(PAGE_SIZE_4K) {
@@ -160,9 +191,9 @@ pub fn remap(vaddr: VirtAddr, new_flags: MmuFlags) {
         if vaddr.is_multiple_of(BLOCK_SIZE_2M) {
             let idx = l2_index(vaddr);
             let l2_ptr = if is_kernel_va(vaddr) {
-                core::ptr::addr_of_mut!(L2_TABLE1) as *mut u64
+                core::ptr::addr_of_mut!(L2_TABLE_KERNEL) as *mut u64
             } else {
-                core::ptr::addr_of_mut!(L2_TABLE0) as *mut u64
+                core::ptr::addr_of_mut!(L2_TABLE_USER) as *mut u64
             };
             let entry = core::ptr::read_volatile(l2_ptr.add(idx));
             if entry & 0x3 != 0 {
@@ -263,9 +294,9 @@ pub fn unmap(vaddr: VirtAddr) {
         if vaddr.is_multiple_of(BLOCK_SIZE_2M) {
             let idx = l2_index(vaddr);
             let l2_ptr = if is_kernel_va(vaddr) {
-                core::ptr::addr_of_mut!(L2_TABLE1) as *mut u64
+                core::ptr::addr_of_mut!(L2_TABLE_KERNEL) as *mut u64
             } else {
-                core::ptr::addr_of_mut!(L2_TABLE0) as *mut u64
+                core::ptr::addr_of_mut!(L2_TABLE_USER) as *mut u64
             };
             core::ptr::write_volatile(l2_ptr.add(idx), 0u64);
         } else if vaddr.is_multiple_of(PAGE_SIZE_4K) {
@@ -297,9 +328,9 @@ pub fn query_mapping(vaddr: VirtAddr) -> Option<(PhysAddr, MmuFlags)> {
         if vaddr.is_multiple_of(BLOCK_SIZE_2M) {
             let idx = l2_index(vaddr);
             let l2_ptr = if is_kernel_va(vaddr) {
-                core::ptr::addr_of_mut!(L2_TABLE1) as *mut u64
+                core::ptr::addr_of_mut!(L2_TABLE_KERNEL) as *mut u64
             } else {
-                core::ptr::addr_of_mut!(L2_TABLE0) as *mut u64
+                core::ptr::addr_of_mut!(L2_TABLE_USER) as *mut u64
             };
             let entry = core::ptr::read_volatile(l2_ptr.add(idx));
             if entry & 0x1 != 0 {

@@ -69,7 +69,7 @@ pub fn init(boot: BootInfo) {
         let k_end = &__kernel_end as *const u8 as usize;
         
         // CRITICAL: Reserve boot page tables (0x40081000-0x40085000)
-        // These are L1_TABLE, L1_TABLE0, L2_TABLE1, L2_TABLE0 used by MMU
+        // These are L1_TABLE_KERNEL, L1_TABLE_USER, L2_TABLE_KERNEL, L2_TABLE_USER used by MMU
         // They are in .data.boot/.bss.boot sections and MUST NOT be reused
         const BOOT_PAGE_TABLES_START: usize = 0x40081000;
         const BOOT_PAGE_TABLES_END: usize = 0x40085000;
