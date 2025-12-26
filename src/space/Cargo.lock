@@ -113,6 +113,8 @@ name = "init"
 version = "0.1.0"
 dependencies = [
  "hnx-abi",
+ "hnxlib",
+ "libc 0.0.1",
 ]
 
 [[package]]

@@ -5,6 +5,8 @@ edition = "2021"
 
 [dependencies]
 hnx-abi = { path = "../../../abi-bindings" }
+libc = { path = "../../libc" }
+hnxlib = { path = "../../hnxlib" }
 
 [profile.dev]
 panic = "abort"
