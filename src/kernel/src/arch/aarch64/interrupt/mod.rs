@@ -196,7 +196,55 @@ pub extern "C" fn rust_sync_panic(
     sctlr: u64,
     spsr: u64,
 ) -> ! {
-    panic!("sync exception: ESR=0x{:016X} ELR=0x{:016X} FAR=0x{:016X} TCR=0x{:016X} SCTLR=0x{:016X} SPSR=0x{:016X}", esr, elr, far, tcr, sctlr, spsr);
+    let ec = (esr >> 26) & 0x3F;
+    let iss = esr & 0xFFFFFF;
+    crate::error!("SYNC EXCEPTION:");
+    crate::error!("  EC=0x{:02X} ({}) ISS=0x{:06X}", ec, exception_class_name(ec), iss);
+    crate::error!("  ESR=0x{:016X} ELR=0x{:016X} FAR=0x{:016X}", esr, elr, far);
+    crate::error!("  TCR=0x{:016X} SCTLR=0x{:016X} SPSR=0x{:016X}", tcr, sctlr, spsr);
+    
+    let mut ttbr0: u64 = 0;
+    let mut ttbr1: u64 = 0;
+    unsafe {
+        core::arch::asm!("mrs {t0}, ttbr0_el1", t0 = out(reg) ttbr0);
+        core::arch::asm!("mrs {t1}, ttbr1_el1", t1 = out(reg) ttbr1);
+    }
+    crate::error!("  TTBR0=0x{:016X} TTBR1=0x{:016X}", ttbr0, ttbr1);
+    
+    panic!("sync exception: EC=0x{:X} ESR=0x{:016X} ELR=0x{:016X} FAR=0x{:016X} TCR=0x{:016X} SCTLR=0x{:016X} SPSR=0x{:016X}", ec, esr, elr, far, tcr, sctlr, spsr);
+}
+
+fn exception_class_name(ec: u64) -> &'static str {
+    match ec {
+        0x00 => "Unknown",
+        0x01 => "Trapped WFI/WFE",
+        0x03 => "Trapped MCR/MRC (CP15)",
+        0x04 => "Trapped MCRR/MRRC (CP15)",
+        0x05 => "Trapped MCR/MRC (CP14)",
+        0x06 => "Trapped LDC/STC (CP14)",
+        0x07 => "Trapped access to SVE/SIMD/FP",
+        0x0C => "Trapped MRRC (CP14)",
+        0x0E => "Illegal Execution State",
+        0x11 => "SVC in AArch32",
+        0x15 => "SVC in AArch64",
+        0x18 => "Trapped MSR/MRS/System (AArch64)",
+        0x19 => "Trapped access to SVE",
+        0x20 => "Instruction Abort (lower EL)",
+        0x21 => "Instruction Abort (same EL)",
+        0x22 => "PC alignment fault",
+        0x24 => "Data Abort (lower EL)",
+        0x25 => "Data Abort (same EL)",
+        0x26 => "SP alignment fault",
+        0x30 => "Breakpoint (lower EL)",
+        0x31 => "Breakpoint (same EL)",
+        0x32 => "Software Step (lower EL)",
+        0x33 => "Software Step (same EL)",
+        0x34 => "Watchpoint (lower EL)",
+        0x35 => "Watchpoint (same EL)",
+        0x38 => "BKPT in AArch32",
+        0x3C => "BRK in AArch64",
+        _ => "Reserved/Unknown",
+    }
 }
 
 #[no_mangle]

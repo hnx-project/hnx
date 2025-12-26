@@ -196,6 +196,8 @@ pub fn map_in_pt(pt_base: usize, vaddr: VirtAddr, paddr: PhysAddr, flags: MmuFla
                 let idx3 = l3_index(vaddr);
                 let entry = ((paddr as u64) & !((PAGE_SIZE_4K as u64) - 1)) | 3u64 | attrs;
                 core::ptr::write_volatile(l3.add(idx3), entry);
+                crate::info!("mm/vmm map_in_pt: pt=0x{:X} va=0x{:X} pa=0x{:X} l3=0x{:X} idx3={} entry=0x{:016X} flags={:?}", 
+                    pt_base, vaddr, paddr, l3 as usize, idx3, entry, flags);
             }
             core::arch::asm!("dsb ish", "isb");
         }

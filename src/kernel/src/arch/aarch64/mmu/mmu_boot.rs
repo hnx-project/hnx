@@ -6,16 +6,16 @@ struct AlignedTable([u64; 512]);
 
 #[no_mangle]
 #[link_section = ".data.boot"]
-static mut L1_TABLE: AlignedTable = AlignedTable([0; 512]);
+pub static mut L1_TABLE: AlignedTable = AlignedTable([0; 512]);
 #[no_mangle]
 #[link_section = ".data.boot"]
-static mut L1_TABLE0: AlignedTable = AlignedTable([0; 512]);
+pub static mut L1_TABLE0: AlignedTable = AlignedTable([0; 512]);
 #[no_mangle]
 #[link_section = ".data.boot"]
-static mut L2_TABLE1: AlignedTable = AlignedTable([0; 512]);
+pub static mut L2_TABLE1: AlignedTable = AlignedTable([0; 512]);
 #[no_mangle]
 #[link_section = ".data.boot"]
-static mut L2_TABLE0: AlignedTable = AlignedTable([0; 512]);
+pub static mut L2_TABLE0: AlignedTable = AlignedTable([0; 512]);
 
 #[no_mangle]
 #[link_section = ".text.boot"]
@@ -36,25 +36,22 @@ pub unsafe extern "C" fn mmu_enable_boot() {
         | (0b01u64 << 26)
         | (0b01u64 << 24)))
         | (0b010u64 << 32);
+    crate::info!("mmu_boot: TCR_EL1=0x{:016X} (T0SZ=25, T1SZ=25, TG0=4KB, TG1=4KB, IPS=1TB)", tcr);
+    
+    // CRITICAL: Initialize L1_TABLE[256] AFTER jumping to high-half
+    // At this point we're still at low physical address, L1_TABLE symbols point to 0x40081000
+    // After jumping to _start_high, we need to re-initialize using high-half addresses
+    
     core::arch::asm!(
         "mov x0, {uart}",
         "msr mair_el1, {mair}",
         "msr tcr_el1, {tcr}",
         "isb",
-        "adrp x2, {l1sym}",
-        "add  x2, x2, :lo12:{l1sym}",
-        "movz x4, #0x0000, lsl #0",
-        "movk x4, #0x0000, lsl #16",
-        "movk x4, #0x8000, lsl #32",
-        "movk x4, #0xFFFF, lsl #48",
-        "lsr  x6, x4, #39",
-        "and  x6, x6, #0x1FF",
-        "lsl  x5, x6, #3",
-        "add  x10, x2, x5",
-        "adrp x11, {l2sym}",
-        "add  x11, x11, :lo12:{l2sym}",
-        "orr  x11, x11, #3",
-        "str  x11, [x10]",
+        
+        // SKIP L1_TABLE[256] initialization here - will be done in _start_high
+        // At this point adrp/add uses physical addresses (0x4008xxxx)
+        // But after jumping to high-half, we need high-half addresses (0xFFFF8000008xxxx)
+        
         "adrp x5, {l2sym}",
         "add  x5, x5, :lo12:{l2sym}",
         "adrp x7, {text_lma}",
@@ -151,6 +148,7 @@ pub unsafe extern "C" fn mmu_enable_boot() {
         "add  x11, x11, :lo12:{l20sym}",
         "orr  x11, x11, #3",
         "str  x11, [x3]",
+        
         "adrp x9, {l1sym}",
         "add  x9, x9, :lo12:{l1sym}",
         "msr ttbr1_el1, x9",

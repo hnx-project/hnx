@@ -44,15 +44,14 @@ SECTIONS {
     }
     __data_lma_start = LOADADDR(.data);
     __lma = __lma + SIZEOF(.data);
-    .bss : {
+    .bss (NOLOAD) : {
         __bss_vma_start = .;
+        __bss_start = .;
         *(.bss) *(.bss.*) *(COMMON)
         . = ALIGN(8);
         __bss_vma_end = .;
+        __bss_end = .;
     }
-    __bss_lma_start = LOADADDR(.data) + SIZEOF(.data);
-    __bss_start = __bss_vma_start;
-    __bss_end = __bss_vma_end;
     .stack (NOLOAD) : {
         . = ALIGN(16);
         __stack_bottom = .;

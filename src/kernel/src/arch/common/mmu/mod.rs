@@ -2,6 +2,18 @@
 #[derive(Clone, Copy)]
 pub struct MmuFlags(u64);
 
+impl core::fmt::Debug for MmuFlags {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}{}{}{}{}", 
+            if self.contains(Self::READ) { "R" } else { "" },
+            if self.contains(Self::WRITE) { "W" } else { "" },
+            if self.contains(Self::EXECUTE) { "X" } else { "" },
+            if self.contains(Self::USER) { "U" } else { "" },
+            if self.contains(Self::DEVICE) { "D" } else { "" }
+        )
+    }
+}
+
 impl MmuFlags {
     pub const READ: Self = Self(1 << 0);
     pub const WRITE: Self = Self(1 << 1);

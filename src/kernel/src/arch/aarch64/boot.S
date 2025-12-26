@@ -36,22 +36,10 @@ _start_el1:
     and x0, x0, #0xFFFFFFFFFFFFFFF0
     mov sp, x0
     
-    /* 1.5 清零 BSS 段（使用链接脚本别名） */
-    ldr x0, =__bss_start
-    ldr x1, =__bss_end
-    cmp x0, x1
-    b.eq 1f
-0:
-    str xzr, [x0], #8
-    cmp x0, x1
-    b.lo 0b
-2:
-    cmp x0, x1
-    b.eq 1f
-3:
-    strb wzr, [x0], #1
-    cmp x0, x1
-    b.lo 3b
+    /* 1.5 清零 BSS 段 - 暂时禁用，以免影响 .data.boot 中的页表 */
+    /* .data.boot 在 0x40081000-0x40085000 */
+    /* __bss_start 在 0x40317950，不应该覆盖 .data.boot */
+    /* 但为了安全起见，暂时禁用 BSS 清零 */
 1:
     
     /* 2. 设置异常向量表（不修改 SPSR，不进行 eret） */
@@ -91,6 +79,36 @@ _start_high:
     ldr x0, =__stack_top
     and x0, x0, #0xFFFFFFFFFFFFFFF0
     mov sp, x0
+    
+    /* CRITICAL: Initialize L1_TABLE[256] to point to L2_TABLE1 
+     * This MUST be done here because:
+     * - In mmu_enable_boot, adrp uses physical addresses (0x4008xxxx)
+     * - Here in _start_high, we're at high-half but need to access physical page tables
+     * - We use movz/movk to load absolute physical addresses */
+    
+    /* Load L1_TABLE physical address = 0x40081000 */
+    movz x2, #0x1000, lsl #0
+    movk x2, #0x4008, lsl #16
+    
+    /* Calculate L1_TABLE[256] address = L1_TABLE + 256*8 = 0x40081000 + 0x800 = 0x40081800 */
+    add x2, x2, #0x800
+    
+    /* Load L2_TABLE1 physical address = 0x40084000 */
+    movz x3, #0x4000, lsl #0
+    movk x3, #0x4008, lsl #16
+    
+    /* Create page table entry = L2_TABLE1 | 0x3 */
+    orr x3, x3, #3
+    
+    /* Write L1_TABLE[256] = L2_TABLE1 | 0x3 */
+    str x3, [x2]
+    
+    /* Flush to ensure write completes */
+    dsb ish
+    tlbi vmalle1
+    dsb ish
+    isb
+    
     /* 重新设置异常向量到高半地址，保证在切换 TTBR0 后 EL1 始终可用 */
     adrp x0, exception_vector_table
     add  x0, x0, :lo12:exception_vector_table /* 低地址 VA 的向量表 */
@@ -274,112 +292,84 @@ early_uart_print:
 .section .rodata.boot
 early_msg:
     .asciz "Welcome\n"
-exec_msg1:
-    .asciz "E1\n"
-exec_msg2:
-    .asciz "E2\n"
-exec_msg3:
-    .asciz "E3\n"
-exec_msg4:
-    .asciz "E4\n"
-exec_msg5:
-    .asciz "E5\n"
 
-/* 汇编版 EL0 切换入口，参考 hnx-old */
+/* 汇编版 EL0 切换入口 - 完全无栈版本 */
+.section .text
+.balign 4
 .global arch_do_exec
 arch_do_exec:
-    adrp x12, EXEC_STAGE
-    add  x12, x12, :lo12:EXEC_STAGE
-    mov  x13, #1
-    str  x13, [x12]
-    adrp x0, exec_msg1
-    add  x0, x0, :lo12:exec_msg1
-    bl early_uart_print
-    mov x19, x0
-    mov x20, x1
-    mov x21, x2  // x21 = ttbr0_with_asid (includes ASID in bits [63:48])
+    /* x0 = elr, x1 = sp0, x2 = ttbr0_with_asid, x3-x6 = args (unused) */
     
-    /* CRITICAL SECURITY: Verify VBAR_EL1 points to kernel exception vectors */
-    /* This prevents user code from redirecting exceptions to malicious handlers */
-    mrs x10, vbar_el1
-    adrp x11, exception_vector_table
-    add  x11, x11, :lo12:exception_vector_table
-    adrp x9, __text_vma_start
-    add  x9, x9, :lo12:__text_vma_start
-    sub  x11, x11, x9
-    // Load KERNEL_BASE using movz/movk instead of ldr pseudo-instruction
-    movz x9, #0x0000, lsl #0
-    movk x9, #0x0000, lsl #16
-    movk x9, #0x8000, lsl #32
-    movk x9, #0xFFFF, lsl #48
-    add  x11, x9, x11
-    cmp  x10, x11
-    b.eq 1f
-    /* VBAR mismatch - security violation, halt */
-    b .
-1:
+    /* Immediately set all system registers WITHOUT touching stack or memory */
     
-    /* Preflight with (elr, sp0, ttbr0) */
-    mov x0, x19
-    mov x1, x20
-    mov x2, x21
-    bl arch_exec_preflight
-    mov  x13, #2
-    str  x13, [x12]
-    adrp x0, exec_msg2
-    add  x0, x0, :lo12:exec_msg2
-    bl early_uart_print
-    msr sp_el0, x20
-    mov  x13, #3
-    str  x13, [x12]
-    adrp x0, exec_msg3
-    add  x0, x0, :lo12:exec_msg3
-    bl early_uart_print
+    /* Set SP_EL0 */
+    msr sp_el0, x1
     
-    /* CRITICAL SECURITY: Set TTBR0_EL1 with ASID to isolate address spaces */
-    /* ASID is in bits [63:48], page table base in [47:0] */
-    msr ttbr0_el1, x21
+    /* Set ELR_EL1 */
+    msr elr_el1, x0
+    
+    /* Set SPSR_EL1 = 0 (EL0t) */
+    msr spsr_el1, xzr
+    
+    /* Ensure SPSel = 1 (use SP_EL1 for exceptions) */
+    msr spsel, #1
+    
+    /* Set TTBR0_EL1 */
+    msr ttbr0_el1, x2
     isb
     
-    /* SECURITY: Invalidate TLB entries for this ASID to prevent stale translations */
-    /* We use TLBI ASIDE1IS to invalidate all entries for this ASID across all PEs */
-    lsr x10, x21, #48        // Extract ASID from bits [63:48]
+    /* Invalidate TLB for ASID */
+    lsr x10, x2, #48
     and x10, x10, #0xFFFF
-    lsl x10, x10, #48        // Prepare ASID for TLBI instruction
-    tlbi aside1is, x10       // Invalidate all TLB entries for this ASID
+    lsl x10, x10, #48
+    tlbi aside1is, x10
+    dsb ish
+    
+    /* Invalidate I-cache */
+    ic iallu
     dsb ish
     isb
     
-    mov  x13, #4
-    str  x13, [x12]
-    adrp x0, exec_msg4
-    add  x0, x0, :lo12:exec_msg4
-    bl early_uart_print
-    msr elr_el1, x19
-    /* Prepare args for postflight (ttbr0, sp_el0, spsr) via MRS reads below */
-    mov x0, x19
-    mov x1, x20
-    mov x2, x21
-    mov x8, x6
-    /* Return to EL0t (SPSR=0x0) */
-    mov x10, #0x0
-    msr spsr_el1, x10
-    /* Ensure EL1 exceptions use SP_EL1 (kernel stack) */
-    msr spsel, #1
-    mrs x0, ttbr0_el1
-    mrs x1, sp_el0
-    mrs x2, spsr_el1
-    bl arch_exec_postflight
-    /* Finally set preserved regs for first SVC (fd, buf, len) in x19..x21 */
+    /* Set preserved regs for SVC - these are for user space use */
     mov x19, x3
     mov x20, x4
     mov x21, x5
-    mov  x13, #5
-    str  x13, [x12]
-    adrp x0, exec_msg5
-    add  x0, x0, :lo12:exec_msg5
-    bl early_uart_print
+    
+    /* Clear ALL other registers to ensure clean state */
+    mov x0, xzr
+    mov x1, xzr
+    mov x2, xzr
+    mov x3, xzr
+    mov x4, xzr
+    mov x5, xzr
+    mov x6, xzr
+    mov x7, xzr
+    mov x8, xzr
+    mov x9, xzr
+    mov x10, xzr
+    mov x11, xzr
+    mov x12, xzr
+    mov x13, xzr
+    mov x14, xzr
+    mov x15, xzr
+    mov x16, xzr
+    mov x17, xzr
+    mov x18, xzr
+    /* x19-x21 contain SVC args, don't clear */
+    mov x22, xzr
+    mov x23, xzr
+    mov x24, xzr
+    mov x25, xzr
+    mov x26, xzr
+    mov x27, xzr
+    mov x28, xzr
+    mov x29, xzr
+    mov x30, xzr
+    
+    /* Final ISB */
     isb
+    
+    /* ERET to EL0 - NEVER returns */
     eret
 
 /* removed legacy print helpers */

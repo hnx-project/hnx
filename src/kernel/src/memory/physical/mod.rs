@@ -67,10 +67,24 @@ pub fn init(boot: BootInfo) {
             static __kernel_end: u8;
         }
         let k_end = &__kernel_end as *const u8 as usize;
-        let start = core::cmp::max(k_end, boot.phys_mem_start as usize);
+        
+        // CRITICAL: Reserve boot page tables (0x40081000-0x40085000)
+        // These are L1_TABLE, L1_TABLE0, L2_TABLE1, L2_TABLE0 used by MMU
+        // They are in .data.boot/.bss.boot sections and MUST NOT be reused
+        const BOOT_PAGE_TABLES_START: usize = 0x40081000;
+        const BOOT_PAGE_TABLES_END: usize = 0x40085000;
+        
+        // Start allocating after both kernel end and boot page tables
+        let reserved_end = core::cmp::max(k_end, BOOT_PAGE_TABLES_END);
+        let start = core::cmp::max(reserved_end, boot.phys_mem_start as usize);
         let end = (boot.phys_mem_start as usize).saturating_add(boot.phys_mem_size as usize);
         REGION_START = (start + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
         REGION_END = end & !(PAGE_SIZE - 1);
+        
+        crate::info!("phys alloc: k_end=0x{:X}, pt_end=0x{:X}, reserved_end=0x{:X}", 
+                     k_end, BOOT_PAGE_TABLES_END, reserved_end);
+        crate::info!("phys alloc: REGION_START=0x{:X}, REGION_END=0x{:X}", 
+                     REGION_START, REGION_END);
         for o in 0..=MAX_ORDER {
             FREE_COUNT[o] = 0;
         }
