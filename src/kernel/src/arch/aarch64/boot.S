@@ -118,14 +118,22 @@ exception_vector_table:
 
 /* 异常处理程序（简化版） */
 exception_handler_sync:
-    /* 保存用户寄存器到可保留寄存器，防止被参数覆盖 */
-    mov x19, x0
-    mov x20, x1
-    mov x21, x2
-    mov x22, x3
-    mov x23, x4
-    mov x24, x5
-    mov x25, x8
+    /* 保存所有被调用者保存寄存器到栈中 (x19-x25) */
+    stp x19, x20, [sp, #-16]!
+    stp x21, x22, [sp, #-16]!
+    stp x23, x24, [sp, #-16]!
+    stp x25, xzr, [sp, #-16]!
+    /* 保存所有调用者保存寄存器到栈中 (x0-x18) */
+    stp x0, x1, [sp, #-16]!
+    stp x2, x3, [sp, #-16]!
+    stp x4, x5, [sp, #-16]!
+    stp x6, x7, [sp, #-16]!
+    stp x8, x9, [sp, #-16]!
+    stp x10, x11, [sp, #-16]!
+    stp x12, x13, [sp, #-16]!
+    stp x14, x15, [sp, #-16]!
+    stp x16, x17, [sp, #-16]!
+    stp x18, xzr, [sp, #-16]!
 
     /* 读取异常信息 */
     mrs x0, esr_el1
@@ -133,25 +141,53 @@ exception_handler_sync:
     mrs x2, far_el1
     lsr x10, x0, #26
     and x10, x10, #0x3F
-    mov x26, x0
-    mov x27, x1
-    mov x28, x2
-    mov x0, x10
-    mov x1, x26
-    mov x2, x27
-    mov x3, x28
+    mov x23, x0               /* 保存esr到x23 */
+    mov x24, x1               /* 保存elr到x24 */
+    mov x25, x2               /* 保存far到x25 */
+    mov x14, x10              /* 保存ec到x14 */
+    mov x0, x10               /* 参数1: ec */
+    mov x1, x23               /* 参数2: esr */
+    mov x2, x24               /* 参数3: elr */
+    mov x3, x25               /* 参数4: far */
     bl rust_exc_mark
-    mov x0, x26
-    mov x1, x27
-    mov x2, x28
+    /* 恢复esr/elr/far从x23-x25到x0-x2 */
+    mov x0, x23               /* 恢复esr到x0 */
+    mov x1, x24               /* 恢复elr到x1 */
+    mov x2, x25               /* 恢复far到x2 */
+    mov x10, x14              /* 恢复ec到x10 */
     cmp x10, #0x15
     b.ne 9f
-    /* 传递 esr/elr/far 给 Rust 处理函数 */
-    /* x0=esr, x1=elr, x2=far */
+    /* 传递 esr/elr/far/saved_x8/saved_sp 给 Rust 处理函数 */
+    /* x0=esr, x1=elr, x2=far, x3=saved_x8, x4=saved_sp */
+    mov x22, x1               /* 保存elr到x22 */
+    /* 读取保存的x8从栈上 (sp+80) 到 x3 */
+    add x3, sp, #80
+    ldr x3, [x3]
+    /* 传递当前sp (寄存器保存区域的开始) 到 x4 */
+    mov x4, sp
     bl rust_svc_handler
+    /* 保存系统调用返回值到栈上x0的位置 (sp+144) */
+    add x9, sp, #144
+    str x0, [x9]
     /* 跳过触发异常的指令：ELR += 4 */
-    add x1, x1, #4
-    msr elr_el1, x1
+    add x22, x22, #4
+    msr elr_el1, x22
+    /* 恢复所有调用者保存寄存器从栈中 */
+    ldp x18, xzr, [sp], #16
+    ldp x16, x17, [sp], #16
+    ldp x14, x15, [sp], #16
+    ldp x12, x13, [sp], #16
+    ldp x10, x11, [sp], #16
+    ldp x8, x9, [sp], #16
+    ldp x6, x7, [sp], #16
+    ldp x4, x5, [sp], #16
+    ldp x2, x3, [sp], #16
+    ldp x0, x1, [sp], #16
+    /* 恢复所有被调用者保存寄存器从栈中 (x19-x25) */
+    ldp x25, xzr, [sp], #16
+    ldp x23, x24, [sp], #16
+    ldp x21, x22, [sp], #16
+    ldp x19, x20, [sp], #16
     eret
 9:
     mrs x0, esr_el1
@@ -166,6 +202,22 @@ exception_handler_sync:
     bl rust_sync_panic
     b exception_panic
 10:
+    /* 恢复所有调用者保存寄存器从栈中 */
+    ldp x18, xzr, [sp], #16
+    ldp x16, x17, [sp], #16
+    ldp x14, x15, [sp], #16
+    ldp x12, x13, [sp], #16
+    ldp x10, x11, [sp], #16
+    ldp x8, x9, [sp], #16
+    ldp x6, x7, [sp], #16
+    ldp x4, x5, [sp], #16
+    ldp x2, x3, [sp], #16
+    ldp x0, x1, [sp], #16
+    /* 恢复所有被调用者保存寄存器从栈中 (x19-x25) */
+    ldp x25, xzr, [sp], #16
+    ldp x23, x24, [sp], #16
+    ldp x21, x22, [sp], #16
+    ldp x19, x20, [sp], #16
     eret
 
 exception_handler_irq:

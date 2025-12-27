@@ -4,7 +4,7 @@
 #define HNX_ABI_VERSION_MAJOR 0
 #define HNX_ABI_VERSION_MINOR 1
 #define HNX_ABI_VERSION_PATCH 0
-#define HNX_ABI_VERSION "0.1.0-alpha.1+20251226.18c58b6"
+#define HNX_ABI_VERSION "0.1.0-alpha.1+20251227.708c209"
 
 // 检查兼容性的宏
 #define HNX_ABI_CHECK_VERSION(major, minor, patch) \

@@ -122,8 +122,21 @@ impl crate::arch::common::traits::InterruptController for GicV2Controller {
 pub static GICV2: GicV2Controller = GicV2Controller;
 
 pub fn set_bases(gicd: usize, gicc: usize) {
-    GICD_BASE.store(gicd, Ordering::Relaxed);
-    GICC_BASE.store(gicc, Ordering::Relaxed);
+    // Convert physical addresses to virtual addresses
+    // Physical GICD at 0x0800_0000 mapped to virtual 0x5000_0000
+    // Physical GICC at 0x0801_0000 mapped to virtual 0x5001_0000
+    const GIC_PHYS_BASE: usize = 0x0800_0000;
+    const GIC_VIRT_BASE: usize = 0x5000_0000;
+    const GIC_OFFSET: usize = GIC_VIRT_BASE - GIC_PHYS_BASE;
+
+    let gicd_virt = gicd + GIC_OFFSET;
+    let gicc_virt = gicc + GIC_OFFSET;
+
+    crate::info!("GICv2: mapping phys gicd=0x{:016X}->virt=0x{:016X}, gicc=0x{:016X}->virt=0x{:016X}",
+        gicd, gicd_virt, gicc, gicc_virt);
+
+    GICD_BASE.store(gicd_virt, Ordering::Relaxed);
+    GICC_BASE.store(gicc_virt, Ordering::Relaxed);
 }
 
 /// Set priority for a specific interrupt

@@ -87,9 +87,10 @@ pub fn sys_read(fd: usize, buf_user: usize, len: usize) -> SysResult {
 
 /// Write to file - Delegate to VFS service
 pub fn sys_write(fd: usize, buf_user: usize, len: usize) -> SysResult {
-    crate::debug!("sys_write: fd={} buf=0x{:x} len={}", fd, buf_user, len);
-    
+    crate::info!("sys_write: fd={} buf=0x{:x} len={}", fd, buf_user, len);
+
     if !super::user_range_ok(buf_user, len, false) {
+        crate::info!("sys_write: user_range_ok failed for buf=0x{:x} len={}", buf_user, len);
         return -14; // -EFAULT
     }
     
@@ -98,6 +99,7 @@ pub fn sys_write(fd: usize, buf_user: usize, len: usize) -> SysResult {
     let write_len = len.min(200); // Leave room for fd in message
     
     // Copy data from user space
+    crate::info!("sys_write: copying {} bytes from 0x{:X}", write_len, buf_user);
     let mut data = [0u8; 200];
     unsafe {
         core::ptr::copy_nonoverlapping(
@@ -106,14 +108,18 @@ pub fn sys_write(fd: usize, buf_user: usize, len: usize) -> SysResult {
             write_len
         );
     }
+    crate::info!("sys_write: copy completed, first byte=0x{:X}", data[0]);
     
-    crate::debug!("sys_write: delegating to VFS service");
-    
-    ipc_delegate(
+    crate::info!("sys_write: delegating to VFS service, fd={}, len={}", fd, write_len);
+
+    let result = ipc_delegate(
         VFS_EPID,
         ServiceOp::VfsWrite,
         |req| req.with_u32(fd as u32).with_bytes(&data[..write_len])
-    )
+    );
+
+    crate::info!("sys_write: ipc_delegate returned {}", result);
+    result
 }
 
 /// Close file - Delegate to VFS service

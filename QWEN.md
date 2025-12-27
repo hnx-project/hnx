@@ -72,6 +72,10 @@ make configure         # 配置系统（默认ARCH=aarch64 BOARD=qemu-virt）
 
 ## 构建命令
 
+### 请勿使用
+```bash
+timeout xx make run-simple # 因为脚本自带超时 30s
+```
 ### 完整构建流程
 ```bash
 make configure          # 配置系统 (ARCH=aarch64 BOARD=qemu-virt)

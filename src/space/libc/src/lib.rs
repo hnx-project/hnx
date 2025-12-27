@@ -8,22 +8,8 @@
 use core::arch::asm;
 
 // System call numbers (must match kernel definitions)
-const HNX_SYS_WRITE: usize = 0x1001;
-const HNX_SYS_EXIT: usize = 0x1002;
-const HNX_SYS_READ: usize = 0x1003;
-const HNX_SYS_OPEN: usize = 0x1004;
-const HNX_SYS_CLOSE: usize = 0x1005;
-const HNX_SYS_SOCKET: usize = 0x1006;
-const HNX_SYS_BIND: usize = 0x1007;
-const HNX_SYS_CONNECT: usize = 0x1008;
-const HNX_SYS_SEND: usize = 0x1009;
-const HNX_SYS_RECV: usize = 0x100A;
-const HNX_SYS_LISTEN: usize = 0x100B;
-const HNX_SYS_ACCEPT: usize = 0x100C;
-const HNX_SYS_IOCTL: usize = 0x100D;
-const HNX_SYS_CHANNEL_CREATE: usize = 0x100E;
-const HNX_SYS_CHANNEL_WRITE: usize = 0x100F;
-const HNX_SYS_CHANNEL_READ: usize = 0x1010;
+// Use constants from hnx_abi crate
+use hnx_abi::*;
 
 /// System call wrappers
 pub mod syscalls {
@@ -93,7 +79,8 @@ pub mod syscalls {
     /// # Returns
     /// Number of bytes written on success, negative error code on failure
     pub unsafe fn sys_write(fd: i32, buf: *const u8, count: usize) -> isize {
-        syscall3(HNX_SYS_WRITE, fd as usize, buf as usize, count) as isize
+        // Debug: hardcode syscall number to verify
+        syscall3(0x1001, fd as usize, buf as usize, count) as isize
     }
 
     /// Exit the current process
@@ -101,7 +88,7 @@ pub mod syscalls {
     /// # Arguments
     /// * `status` - Exit status code
     pub unsafe fn sys_exit(status: i32) -> ! {
-        syscall1(HNX_SYS_EXIT, status as usize);
+        syscall1(HNX_SYS_EXIT as usize, status as usize);
         loop {}
     }
 
@@ -115,7 +102,7 @@ pub mod syscalls {
     /// # Returns
     /// Number of bytes read on success, negative error code on failure
     pub unsafe fn sys_read(fd: i32, buf: *mut u8, count: usize) -> isize {
-        syscall3(HNX_SYS_READ, fd as usize, buf as usize, count) as isize
+        syscall3(HNX_SYS_READ as usize, fd as usize, buf as usize, count) as isize
     }
 
     /// Open a file
@@ -128,7 +115,7 @@ pub mod syscalls {
     /// # Returns
     /// File descriptor on success, negative error code on failure
     pub unsafe fn sys_open(path: *const u8, flags: i32, mode: i32) -> i32 {
-        syscall3(HNX_SYS_OPEN, path as usize, flags as usize, mode as usize) as i32
+        syscall3(HNX_SYS_OPEN as usize, path as usize, flags as usize, mode as usize) as i32
     }
 
     /// Close a file descriptor
@@ -139,7 +126,7 @@ pub mod syscalls {
     /// # Returns
     /// 0 on success, negative error code on failure
     pub unsafe fn sys_close(fd: i32) -> i32 {
-        syscall1(HNX_SYS_CLOSE, fd as usize) as i32
+        syscall1(HNX_SYS_CLOSE as usize, fd as usize) as i32
     }
 
     /// Create a socket
@@ -152,7 +139,7 @@ pub mod syscalls {
     /// # Returns
     /// Socket file descriptor on success, negative error code on failure
     pub unsafe fn sys_socket(domain: i32, type_: i32, protocol: i32) -> i32 {
-        syscall3(HNX_SYS_SOCKET, domain as usize, type_ as usize, protocol as usize) as i32
+        syscall3(HNX_SYS_SOCKET as usize, domain as usize, type_ as usize, protocol as usize) as i32
     }
 
     /// Bind a socket to an address
@@ -165,7 +152,7 @@ pub mod syscalls {
     /// # Returns
     /// 0 on success, negative error code on failure
     pub unsafe fn sys_bind(sockfd: i32, addr: *const u8, addrlen: usize) -> i32 {
-        syscall3(HNX_SYS_BIND, sockfd as usize, addr as usize, addrlen) as i32
+        syscall3(HNX_SYS_BIND as usize, sockfd as usize, addr as usize, addrlen) as i32
     }
 
     /// Connect a socket to an address
@@ -178,7 +165,7 @@ pub mod syscalls {
     /// # Returns
     /// 0 on success, negative error code on failure
     pub unsafe fn sys_connect(sockfd: i32, addr: *const u8, addrlen: usize) -> i32 {
-        syscall3(HNX_SYS_CONNECT, sockfd as usize, addr as usize, addrlen) as i32
+        syscall3(HNX_SYS_CONNECT as usize, sockfd as usize, addr as usize, addrlen) as i32
     }
 
     /// Send data on a socket
@@ -192,7 +179,7 @@ pub mod syscalls {
     /// # Returns
     /// Number of bytes sent on success, negative error code on failure
     pub unsafe fn sys_send(sockfd: i32, buf: *const u8, len: usize, flags: i32) -> isize {
-        syscall3(HNX_SYS_SEND, sockfd as usize, buf as usize, len) as isize
+        syscall3(HNX_SYS_SEND as usize, sockfd as usize, buf as usize, len) as isize
     }
 
     /// Receive data from a socket
@@ -206,7 +193,7 @@ pub mod syscalls {
     /// # Returns
     /// Number of bytes received on success, negative error code on failure
     pub unsafe fn sys_recv(sockfd: i32, buf: *mut u8, len: usize, flags: i32) -> isize {
-        syscall3(HNX_SYS_RECV, sockfd as usize, buf as usize, len) as isize
+        syscall3(HNX_SYS_RECV as usize, sockfd as usize, buf as usize, len) as isize
     }
 
     /// Listen for connections on a socket
@@ -218,7 +205,7 @@ pub mod syscalls {
     /// # Returns
     /// 0 on success, negative error code on failure
     pub unsafe fn sys_listen(sockfd: i32, backlog: i32) -> i32 {
-        syscall2(HNX_SYS_LISTEN, sockfd as usize, backlog as usize) as i32
+        syscall2(HNX_SYS_LISTEN as usize, sockfd as usize, backlog as usize) as i32
     }
 
     /// Accept a connection on a socket
@@ -231,7 +218,7 @@ pub mod syscalls {
     /// # Returns
     /// New socket file descriptor on success, negative error code on failure
     pub unsafe fn sys_accept(sockfd: i32, addr: *mut u8, addrlen: *mut usize) -> i32 {
-        syscall3(HNX_SYS_ACCEPT, sockfd as usize, addr as usize, addrlen as usize) as i32
+        syscall3(HNX_SYS_ACCEPT as usize, sockfd as usize, addr as usize, addrlen as usize) as i32
     }
 
     /// Create a channel pair
@@ -244,7 +231,7 @@ pub mod syscalls {
     /// # Returns
     /// 0 on success, negative error code on failure
     pub unsafe fn sys_channel_create(options: usize, out0: *mut u32, out1: *mut u32) -> i32 {
-        syscall3(HNX_SYS_CHANNEL_CREATE, options, out0 as usize, out1 as usize) as i32
+        syscall3(HNX_SYS_CHANNEL_CREATE as usize, options, out0 as usize, out1 as usize) as i32
     }
 
     /// Write to a channel
@@ -261,7 +248,7 @@ pub mod syscalls {
     /// 0 on success, negative error code on failure
     pub unsafe fn sys_channel_write(handle: usize, options: usize, bytes: *const u8, 
                                    num_bytes: usize, handles: usize, num_handles: usize) -> i32 {
-        syscall3(HNX_SYS_CHANNEL_WRITE, handle, bytes as usize, num_bytes) as i32
+        syscall3(HNX_SYS_CHANNEL_WRITE as usize, handle, bytes as usize, num_bytes) as i32
     }
 
     /// Read from a channel
@@ -281,7 +268,7 @@ pub mod syscalls {
     pub unsafe fn sys_channel_read(handle: usize, options: usize, bytes: *mut u8, handles: usize,
                                   num_bytes: usize, num_handles: usize, 
                                   actual_bytes: *mut usize, actual_handles: *mut usize) -> i32 {
-        syscall3(HNX_SYS_CHANNEL_READ, handle, bytes as usize, num_bytes) as i32
+        syscall3(HNX_SYS_CHANNEL_READ as usize, handle, bytes as usize, num_bytes) as i32
     }
 }
 

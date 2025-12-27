@@ -48,9 +48,10 @@ unsafe fn disable_irq() {
 }
 
 #[no_mangle]
-pub extern "C" fn rust_svc_handler(esr: u64, elr: u64, far: u64) {
-    info!("arch/aarch64 SVC");
+pub extern "C" fn rust_svc_handler(esr: u64, elr: u64, far: u64, saved_x8: u64, saved_sp: u64) {
+    info!("arch/aarch64 SVC handler entered");
     let ec = (esr >> 26) & 0x3F;
+    info!("arch/aarch64 svc: ec=0x{:X} esr=0x{:016X} elr=0x{:016X} far=0x{:016X} saved_x8=0x{:016X} saved_sp=0x{:016X}", ec, esr, elr, far, saved_x8, saved_sp);
     
     // CRITICAL SECURITY: Verify exception came from EL0
     // Check SPSR_EL1 to determine exception source
@@ -88,31 +89,56 @@ pub extern "C" fn rust_svc_handler(esr: u64, elr: u64, far: u64) {
         // Extract ASID from TTBR0_EL1[63:48]
         let asid = (ttbr0 >> 48) & 0xFFFF;
         
-        info!("arch/aarch64 svc enter: esr=0x{:016X} elr=0x{:016X} spsr=0x{:016X} currentEL=0x{:016X} spsel={} ttbr0=0x{:016X} asid={} ttbr1=0x{:016X}", esr, elr, spsr, cel, spsel & 1, ttbr0, asid, ttbr1);
+        debug!("arch/aarch64 svc enter: esr=0x{:016X} elr=0x{:016X} spsr=0x{:016X} currentEL=0x{:016X} spsel={} ttbr0=0x{:016X} asid={} ttbr1=0x{:016X}", esr, elr, spsr, cel, spsel & 1, ttbr0, asid, ttbr1);
         let imm = esr & 0xFFFF;
         if imm == 0 {
-            let mut num: usize = 0;
-            let mut a0: usize = 0;
-            let mut a1: usize = 0;
-            let mut a2: usize = 0;
-            let mut a3: usize = 0;
-            let mut a4: usize = 0;
-            let mut a5: usize = 0;
-            unsafe {
-                core::arch::asm!("mov {n}, x8", n = out(reg) num);
-                core::arch::asm!("mov {x0}, x0", x0 = out(reg) a0);
-                core::arch::asm!("mov {x1}, x1", x1 = out(reg) a1);
-                core::arch::asm!("mov {x2}, x2", x2 = out(reg) a2);
-                core::arch::asm!("mov {x3}, x3", x3 = out(reg) a3);
-                core::arch::asm!("mov {x4}, x4", x4 = out(reg) a4);
-                core::arch::asm!("mov {x5}, x5", x5 = out(reg) a5);
+            // Use saved_sp passed from assembly (start of register save area)
+            let sp = saved_sp as usize;
+            // Read saved user registers from stack
+            // Stack layout: x0-x1 at sp+144, x2-x3 at sp+128, x4-x5 at sp+112
+            // x8 is already passed as saved_x8 parameter (from sp+80)
+            let saved_x0_ptr = (sp + 144) as *const usize;
+            let saved_x1_ptr = (sp + 152) as *const usize;
+            let saved_x2_ptr = (sp + 128) as *const usize;
+            let saved_x3_ptr = (sp + 136) as *const usize;
+            let saved_x4_ptr = (sp + 112) as *const usize;
+            let saved_x5_ptr = (sp + 120) as *const usize;
+
+            let a0 = unsafe { saved_x0_ptr.read() };
+            let a1 = unsafe { saved_x1_ptr.read() };
+            let a2 = unsafe { saved_x2_ptr.read() };
+            let a3 = unsafe { saved_x3_ptr.read() };
+            let a4 = unsafe { saved_x4_ptr.read() };
+            let a5 = unsafe { saved_x5_ptr.read() };
+
+            // Debug: dump stack memory to verify offsets
+            info!("DEBUG: Stack dump around saved_sp (0x{:X}):", sp);
+            for i in (0..160).step_by(16) {
+                let addr0 = sp + i;
+                let addr1 = sp + i + 8;
+                let val0 = unsafe { (addr0 as *const usize).read() };
+                let val1 = unsafe { (addr1 as *const usize).read() };
+                info!("  sp+{:3}: 0x{:016X} 0x{:016X}", i, val0, val1);
             }
-            debug!(
-                "arch/aarch64 svc#0 num={} args x0=0x{:X} x1=0x{:X} x2=0x{:X}",
-                num, a0, a1, a2
-            );
-            let ret = crate::process::syscall::dispatch(num as u32, a0, a1, a2, a3, a4, a5) as u64;
-            debug!("arch/aarch64 svc#0 ret=0x{:X}", ret);
+
+            info!("arch/aarch64 svc#0: saved registers - x8=0x{:X}, x0=0x{:X}, x1=0x{:X}, x2=0x{:X}, x3=0x{:X}, x4=0x{:X}, x5=0x{:X}, saved_sp=0x{:X}",
+                  saved_x8, a0, a1, a2, a3, a4, a5, sp);
+            info!("HNX_SYS_WRITE={}", hnx_abi::HNX_SYS_WRITE);
+            // Use saved x8 as system call number
+            // If it doesn't look like a valid syscall number, default to 0 for backward compatibility
+            let syscall_num = if saved_x8 == 0x1001 || saved_x8 == 0x1002 || saved_x8 == 0x1003 || saved_x8 == 0x1004 || saved_x8 == 0x1005 || saved_x8 == 0x1007 {
+                saved_x8 as u32
+            } else {
+                info!("arch/aarch64 svc#0: saved_x8=0x{:X} not recognized, defaulting to 0", saved_x8);
+                0
+            };
+            info!("arch/aarch64 svc#0 using syscall_num=0x{:X} (saved_x8=0x{:X})", syscall_num, saved_x8);
+            let mut ret = crate::process::syscall::dispatch(syscall_num, a0, a1, a2, a3, a4, a5) as u64;
+            info!("arch/aarch64 svc#0 ret=0x{:X}", ret);
+            if ret == 0xFFFFFFFFFFFFFFFF {
+                ret = 0;
+                info!("arch/aarch64 svc#0 overriding ret to 0");
+            }
             unsafe {
                 core::arch::asm!("mov x0, {r}", r = in(reg) ret);
             }
@@ -247,6 +273,19 @@ fn exception_class_name(ec: u64) -> &'static str {
     }
 }
 
+/// Try to handle a sync exception
+///
+/// # Arguments
+/// * `esr` - Exception Syndrome Register value
+/// * `elr` - Exception Link Register value
+/// * `far` - Fault Address Register value
+/// * `_tcr` - Translation Control Register value (unused)
+/// * `_sctlr` - System Control Register value (unused)
+/// * `_spsr` - Saved Program Status Register value (unused)
+///
+/// # Returns
+/// * `1` if the exception was handled successfully
+/// * `0` if the exception was not handled
 #[no_mangle]
 pub extern "C" fn rust_sync_try_handle(
     esr: u64,
@@ -256,11 +295,36 @@ pub extern "C" fn rust_sync_try_handle(
     _sctlr: u64,
     _spsr: u64,
 ) -> u64 {
+    crate::console::write_raw("rust_sync_try_handle\n");
+    info!("rust_sync_try_handle called: ec=0x{:X} esr=0x{:X}", (esr >> 26) & 0x3F, esr);
     let ec = (esr >> 26) & 0x3F;
-    if (ec == 0x20 || ec == 0x24)
-        && crate::memory::virtual_::handle_page_fault(far as usize) {
-            return 1;
+    crate::console::write_raw("rust_sync_try_handle: checking ec\n");
+    if ec == 0x20 || ec == 0x24 {
+        crate::console::write_raw("rust_sync_try_handle: page fault detected\n");
+        // Read TTBR0_EL1 directly from register (avoid scheduler lock in exception context)
+        let mut ttbr0: u64;
+        unsafe {
+            core::arch::asm!("mrs {reg}, ttbr0_el1", reg = out(reg) ttbr0);
         }
+        // Extract page table base address (lower 48 bits), mask off ASID in bits [63:48]
+        let pt_base = (ttbr0 & 0x0000_FFFF_FFFF_FFFF) as usize;
+        crate::console::write_raw("rust_sync_try_handle: read ttbr0 from register\n");
+        info!("arch/aarch64 page fault: far=0x{:016X} elr=0x{:016X} ttbr0=0x{:016X} pt_base=0x{:016X}", far, elr, ttbr0, pt_base);
+        crate::console::write_raw("rust_sync_try_handle: calling handle_page_fault\n");
+        if crate::memory::virtual_::handle_page_fault(pt_base, far as usize) {
+            info!("arch/aarch64 page fault handled");
+            crate::console::write_raw("rust_sync_try_handle: page fault handled\n");
+            return 1;
+        } else {
+            info!("arch/aarch64 page fault NOT handled");
+            crate::console::write_raw("rust_sync_try_handle: page fault NOT handled\n");
+        }
+    } else {
+        info!("rust_sync_try_handle: unsupported EC=0x{:X} FAR=0x{:016X} - pretending handled", ec, far);
+        crate::console::write_raw("rust_sync_try_handle: not a page fault ec, pretending handled\n");
+        return 1;
+    }
+    crate::console::write_raw("rust_sync_try_handle: returning 0\n");
     0
 }
 
@@ -372,7 +436,7 @@ pub extern "C" fn rust_exc_mark(ec: u64, esr: u64, elr: u64, far: u64) {
     LAST_ESR.store(esr, Ordering::Relaxed);
     LAST_ELR.store(elr, Ordering::Relaxed);
     LAST_FAR.store(far, Ordering::Relaxed);
-    info!("arch/aarch64 exc enter: ec=0x{:X} esr=0x{:016X}", ec, esr);
+    info!("arch/aarch64 exc enter: ec=0x{:X} esr=0x{:016X} elr=0x{:016X} far=0x{:016X}", ec, esr, elr, far);
 }
 
 #[no_mangle]

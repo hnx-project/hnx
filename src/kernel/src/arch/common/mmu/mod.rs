@@ -54,7 +54,9 @@ impl MmuFlags {
                 } else {
                     0b01
                 };
-                bits |= (ap as u64) << 6;
+                // AP[2] at bit 6, AP[1] at bit 7
+                // ap[0] is AP[2], ap[1] is AP[1]
+                bits |= ((ap & 1) << 7) | (((ap >> 1) & 1) << 6);
                 
                 // CRITICAL SECURITY: Set PXN/UXN bits for execute protection
                 // PXN (Privileged eXecute Never) - bit 53: prevents EL1 from executing this page

@@ -11,7 +11,7 @@
 //! All real ELF loading should be done by user space Loader Service.
 
 use crate::arch::common::mmu::MmuFlags;
-use crate::memory::virtual_::{create_user_l1, map_in_pt};
+use crate::memory::virtual_::{create_user_l1, map_in_pt, vma_add};
 use crate::{info, error};
 
 const ELF_MAGIC: &[u8] = &[0x7F, b'E', b'L', b'F'];
@@ -96,8 +96,16 @@ impl<'a> BootstrapElfLoader<'a> {
                 return Err("Failed to allocate stack");
             }
         }
-        
-        info!("bootstrap: init loaded - entry=0x{:X}, sp=0x{:X}, pt=0x{:X}", 
+        // Add VMA for stack
+        let stack_size = 16 * 0x1000;
+        let stack_base = user_sp - stack_size;
+        let stack_flags = MmuFlags::READ
+            .combine(MmuFlags::WRITE)
+            .combine(MmuFlags::USER);
+        vma_add(pt_base, stack_base, stack_size, stack_flags);
+        info!("bootstrap: added VMA for stack: base=0x{:X} size=0x{:X}", stack_base, stack_size);
+
+        info!("bootstrap: init loaded - entry=0x{:X}, sp=0x{:X}, pt=0x{:X}",
               entry, user_sp, pt_base);
         
         Ok((entry, user_sp, pt_base))
@@ -165,11 +173,15 @@ impl<'a> BootstrapElfLoader<'a> {
                           i, page_va, page_pa, bytes_to_copy_in_page, src_offset);
                 }
             } else {
-                info!("bootstrap:   page[{}] va=0x{:X} pa=0x{:X} (zero-filled)", 
+                info!("bootstrap:   page[{}] va=0x{:X} pa=0x{:X} (zero-filled)",
                       i, page_va, page_pa);
             }
         }
-        
+
+        // Add VMA for this segment
+        vma_add(pt_base, vaddr, memsz, mmu_flags);
+        info!("bootstrap: added VMA for segment: base=0x{:X} size=0x{:X} flags={:?}", vaddr, memsz, mmu_flags);
+
         Ok(())
     }
     

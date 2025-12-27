@@ -73,7 +73,20 @@ pub unsafe extern "C" fn mmu_enable_boot() {
         "add  x6, x6, #1",
         "b    1b",
         "2:",
-        
+
+        // Map GIC device memory in L2_TABLE_KERNEL at index 128 (VA 0x50000000)
+        "adrp x5, {l2_kern}",
+        "add  x5, x5, :lo12:{l2_kern}",
+        "mov  x6, #128",
+        "add  x5, x5, x6, lsl #3",
+        "mov  x1, #0",
+        "orr  x1, x1, #(1 << 10)",           // AF
+        "orr  x1, x1, #(1 << 2)",            // Device memory
+        "mov  x2, {gicd}",
+        "orr  x2, x2, #1",                   // Block descriptor
+        "orr  x2, x2, x1",
+        "str  x2, [x5]",
+
         // Setup TTBR0_EL1 for user space
         // L1_TABLE_USER[0] -> L2_TABLE_USER
         "adrp x3, {l1_user}",

@@ -22,23 +22,28 @@ pub mod syscall {
 
     #[inline(always)]
     pub fn debug_print(s: &str) {
+        let _ret: isize;
         unsafe {
             asm!(
-                "mov x8, #0",
                 "svc #0",
-                in("x0") s.as_ptr() as usize,
-                in("x1") s.len(),
-                out("x8") _,  // x8 is modified by the instruction
+                in("x8") 0x1001,  // HNX_SYS_WRITE
+                in("x0") 1usize,   // fd=1 (stdout)
+                in("x1") s.as_ptr() as usize,
+                in("x2") s.len(),
+                lateout("x0") _ret,
+                options(nostack)
             );
         }
     }
 
     #[inline(always)]
     pub fn yield_cpu() {
+        let _ret: isize;
         unsafe {
             asm!(
-                "mov x8, #0x1007",  // HNX_SYS_YIELD
                 "svc #0",
+                in("x8") 0x1007,  // HNX_SYS_YIELD
+                lateout("x0") _ret,
                 options(nostack)
             );
         }

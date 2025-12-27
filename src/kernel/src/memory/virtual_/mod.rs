@@ -227,8 +227,8 @@ pub fn map_in_pt(pt_base: usize, vaddr: VirtAddr, paddr: PhysAddr, flags: MmuFla
                 let idx3 = l3_index(vaddr);
                 let entry = ((paddr as u64) & !((PAGE_SIZE_4K as u64) - 1)) | 3u64 | attrs;
                 core::ptr::write_volatile(l3.add(idx3), entry);
-                crate::info!("mm/vmm map_in_pt: pt=0x{:X} va=0x{:X} pa=0x{:X} l3=0x{:X} idx3={} entry=0x{:016X} flags={:?}", 
-                    pt_base, vaddr, paddr, l3 as usize, idx3, entry, flags);
+                crate::info!("mm/vmm map_in_pt: pt=0x{:X} va=0x{:X} pa=0x{:X} l3=0x{:X} idx3={} entry=0x{:016X} flags={:?} flags.bits=0x{:X} attrs=0x{:X}",
+                    pt_base, vaddr, paddr, l3 as usize, idx3, entry, flags, flags.bits(), attrs);
             }
             core::arch::asm!("dsb ish", "isb");
         }
@@ -264,27 +264,50 @@ pub fn vma_add(pt_base: usize, base: usize, size: usize, flags: MmuFlags) {
     }
 }
 
-pub fn handle_page_fault(vaddr: usize) -> bool {
-    let pt = if let Some(b) = crate::core::scheduler::current_ttbr0_base() { b } else { return false };
+pub fn handle_page_fault(pt: usize, vaddr: usize) -> bool {
+    crate::info!("handle_page_fault: pt=0x{:016X} vaddr=0x{:016X}", pt, vaddr);
     let _g = VMA_LOCK.lock();
     let tbl = VMA_TABLE.lock();
     for (owner, entry) in tbl.iter() {
         if *owner == pt {
             if let Some(vma) = entry {
+                crate::info!("handle_page_fault: vma base=0x{:016X} end=0x{:016X} flags={:?}", vma.base, vma.end, vma.flags);
                 if vaddr >= vma.base && vaddr < vma.end {
                     let va = vaddr & !((PAGE_SIZE_4K) - 1);
+                    crate::info!("handle_page_fault: allocating page for va=0x{:016X}", va);
                     if let Some(pa) = alloc_pages(1) {
                         let mut f = vma.flags;
+                        crate::info!("handle_page_fault: mapping va=0x{:016X} pa=0x{:016X} flags={:?}", va, pa, f);
                         map_in_pt(pt, va, pa, f);
-                        unsafe { core::arch::asm!("dsb ish", "isb") };
+                        // Verify the mapping was written
+                        unsafe {
+                            if let Some(l3) = ensure_l3_table_in_pt(pt, va) {
+                                let idx3 = l3_index(va);
+                                let entry = core::ptr::read_volatile(l3.add(idx3));
+                                crate::info!("handle_page_fault: verified entry=0x{:016X} for va=0x{:016X}", entry, va);
+                                if entry & 0x3 == 0 {
+                                    crate::info!("handle_page_fault: WARNING: entry not valid!");
+                                }
+                            }
+                        }
+                        // Invalidate TLB entry for this page
+                        unsafe {
+                            core::arch::asm!("dsb ish");
+                            // tlbi vmalle1is: Invalidate all EL1 TLB entries, inner shareable
+                            core::arch::asm!("tlbi vmalle1is");
+                            core::arch::asm!("dsb ish", "isb");
+                        }
+                        crate::info!("handle_page_fault: success, TLB invalidated");
                         return true;
                     } else {
+                        crate::info!("handle_page_fault: alloc_pages failed");
                         return false;
                     }
                 }
             }
         }
     }
+    crate::info!("handle_page_fault: no matching VMA");
     false
 }
 

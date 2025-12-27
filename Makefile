@@ -209,7 +209,7 @@ simple-image: kernel space version-check
 	@echo ""
 
 # 创建简单的 initrd.cpio
-initrd-simple: kernel space
+initrd-simple: version-sync kernel space
 	@echo "========= Creating simple initrd ========="
 	@mkdir -p $(BUILD_ROOT)
 	@$(PYTHON) scripts/create-image.py \
