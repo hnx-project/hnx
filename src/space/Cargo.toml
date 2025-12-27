@@ -32,7 +32,7 @@ hnx-libc = { path = "libc" }
 hnx-lib = { path = "hnxlib" }
 
 [workspace.package]
-version = "0.1.0-alpha.1"
+version = "0.2.0-alpha.1"
 edition = "2021"
 authors = ["HNX Developers"]
 license = "MIT"

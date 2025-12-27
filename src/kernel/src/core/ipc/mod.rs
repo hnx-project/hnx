@@ -140,10 +140,20 @@ pub struct Endpoint {
     pub stats: EndpointStats,
 }
 
+/// Pending response tracking for synchronous IPC
+struct PendingResponse {
+    msg_id: u64,
+    sender_pid: u32,
+    response: Option<IpcResponse>,
+}
+
+const MAX_PENDING_RESPONSES: usize = 64;
+
 // Global state
 static NEXT_ENDPOINT_ID: AtomicU32 = AtomicU32::new(1);
 static NEXT_MSG_ID: AtomicU64 = AtomicU64::new(1);
 static ENDPOINTS: Mutex<[Option<Endpoint>; 16]> = Mutex::new([const { None }; 16]);
+static PENDING_RESPONSES: Mutex<[Option<PendingResponse>; MAX_PENDING_RESPONSES]> = Mutex::new([const { None }; MAX_PENDING_RESPONSES]);
 
 /// Initialize the IPC system
 pub fn init() {
@@ -222,6 +232,60 @@ pub fn endpoint_destroy(epid: u32) -> Result<(), IpcError> {
     Err(IpcError::InvalidEndpoint)
 }
 
+/// Add a pending response entry for synchronous IPC
+fn add_pending_response(msg_id: u64, sender_pid: u32) -> Result<(), IpcError> {
+    let mut pending = PENDING_RESPONSES.lock();
+
+    // Find empty slot
+    for slot in pending.iter_mut() {
+        if slot.is_none() {
+            *slot = Some(PendingResponse {
+                msg_id,
+                sender_pid,
+                response: None,
+            });
+            return Ok(());
+        }
+    }
+
+    Err(IpcError::QueueFull)
+}
+
+/// Set response for a pending message and return sender PID
+fn set_pending_response(msg_id: u64, response: IpcResponse) -> Result<u32, IpcError> {
+    let mut pending = PENDING_RESPONSES.lock();
+
+    for slot in pending.iter_mut() {
+        if let Some(pr) = slot {
+            if pr.msg_id == msg_id && pr.response.is_none() {
+                pr.response = Some(response);
+                return Ok(pr.sender_pid);
+            }
+        }
+    }
+
+    Err(IpcError::NotFound)
+}
+
+/// Get and remove a pending response by message ID
+fn get_and_remove_pending_response(msg_id: u64) -> Option<(u32, IpcResponse)> {
+    let mut pending = PENDING_RESPONSES.lock();
+
+    for slot in pending.iter_mut() {
+        if let Some(pr) = slot {
+            if pr.msg_id == msg_id {
+                if let Some(response) = pr.response.take() {
+                    let sender_pid = pr.sender_pid;
+                    *slot = None; // Remove the entry
+                    return Some((sender_pid, response));
+                }
+            }
+        }
+    }
+
+    None
+}
+
 /// Helper function to push a message to a queue
 fn push_message_to_queue(queue: &mut [Option<IpcMessage>; 32], head: &mut usize, tail: &mut usize, len: &mut usize, msg: IpcMessage) -> Result<(), IpcError> {
     if *len >= queue.len() {
@@ -250,10 +314,23 @@ fn pop_message_from_queue(queue: &mut [Option<IpcMessage>; 32], head: &mut usize
 pub fn endpoint_send_sync(dst_epid: u32, mut msg: IpcMessage) -> Result<IpcResponse, IpcError> {
     crate::info!("endpoint_send_sync: sending to endpoint {}, op={}", dst_epid, msg.op);
     let current_pid = super::scheduler::current_pid() as u32;
+
+    // Generate unique message ID
+    let msg_id = NEXT_MSG_ID.fetch_add(1, Ordering::Relaxed);
+    crate::info!("endpoint_send_sync: generated msg_id={}", msg_id);
+
+    // Add pending response entry before sending message
+    if let Err(e) = add_pending_response(msg_id, current_pid) {
+        crate::warn!("endpoint_send_sync: failed to add pending response: {:?}", e);
+        return Err(e);
+    }
+
+    // Set message fields
+    msg.msg_id = msg_id;
     msg.src_pid = current_pid;
     msg.dst_epid = dst_epid;
     msg.timestamp = crate::arch::timer::now_us();
-    
+
     // Get destination endpoint
     crate::info!("endpoint_send_sync: acquiring ENDPOINTS lock");
     let mut endpoints = ENDPOINTS.lock();
@@ -266,13 +343,15 @@ pub fn endpoint_send_sync(dst_epid: u32, mut msg: IpcMessage) -> Result<IpcRespo
                 crate::info!("endpoint_send_sync: found endpoint {}, owner_pid={}", dst_epid, endpoint.owner_pid);
                 // Check write permission
                 if !endpoint.capabilities.write && endpoint.owner_pid != current_pid {
+                    // Clean up pending response before returning error
+                    let _ = get_and_remove_pending_response(msg_id);
                     return Err(IpcError::PermissionDenied);
                 }
-                
+
                 // Increment sent counter
                 endpoint.stats.messages_sent += 1;
                 endpoint.stats.bytes_transferred += msg.data_len as u64;
-                
+
                 // Add to appropriate priority queue
                 let result = match msg.priority {
                     Priority::Critical => {
@@ -312,13 +391,15 @@ pub fn endpoint_send_sync(dst_epid: u32, mut msg: IpcMessage) -> Result<IpcRespo
                         )
                     }
                 };
-                
+
                 if result.is_err() {
                     endpoint.stats.errors += 1;
+                    // Clean up pending response before returning error
+                    let _ = get_and_remove_pending_response(msg_id);
                     // Convert the error to the correct type
                     return Err(result.err().unwrap());
                 }
-                
+
                 // Wake up any waiting processes
                 if endpoint.waiters_len > 0 {
                     let pid = endpoint.waiters[endpoint.waiters_head];
@@ -326,18 +407,41 @@ pub fn endpoint_send_sync(dst_epid: u32, mut msg: IpcMessage) -> Result<IpcRespo
                     endpoint.waiters_len -= 1;
                     let _ = crate::process::wake_process(pid as usize);
                 }
-                
-                // Return a simple response
-                return Ok(IpcResponse {
-                    msg_id: 0,
-                    code: 0,
-                    data_len: 0,
-                    data: [0; 256],
-                });
+
+                // Release endpoint lock before waiting for response
+                drop(endpoints); // Explicitly drop the lock
+
+                // Wait for response with timeout (5000ms)
+                const TIMEOUT_MS: u64 = 5000;
+                let start_time = crate::arch::timer::now_us();
+
+                loop {
+                    // Check if response is ready
+                    if let Some((_sender_pid, response)) = get_and_remove_pending_response(msg_id) {
+                        crate::info!("endpoint_send_sync: received response for msg_id={}, code={}", msg_id, response.code);
+                        return Ok(response);
+                    }
+
+                    // Check timeout
+                    let elapsed_us = crate::arch::timer::now_us().saturating_sub(start_time);
+                    if elapsed_us > TIMEOUT_MS * 1000 {
+                        crate::warn!("endpoint_send_sync: timeout waiting for response, msg_id={}", msg_id);
+                        // Clean up any remaining pending entry
+                        let _ = get_and_remove_pending_response(msg_id);
+                        return Err(IpcError::Timeout);
+                    }
+
+                    // Block the process until woken up by response
+                    crate::info!("endpoint_send_sync: blocking process {} waiting for response msg_id={}", current_pid, msg_id);
+                    let _ = crate::process::block_process(current_pid as usize);
+                    // When woken up, continue loop to check response again
+                }
             }
         }
     }
-    
+
+    // Clean up pending response if endpoint not found
+    let _ = get_and_remove_pending_response(msg_id);
     Err(IpcError::InvalidEndpoint)
 }
 
@@ -475,6 +579,41 @@ pub fn async_wait(handle: AsyncHandle, _timeout_ms: Option<u64>) -> Result<IpcRe
 pub fn async_cancel(_handle: AsyncHandle) -> Result<(), IpcError> {
     // Simplified implementation
     Ok(())
+}
+
+/// Send a response to a synchronous IPC message
+///
+/// This function is called by the receiver (service) to send a response
+/// back to the original sender. The msg_id should come from the received
+/// IpcMessage.
+pub fn endpoint_send_response(msg_id: u64, code: i32, data: &[u8]) -> Result<(), IpcError> {
+    crate::info!("endpoint_send_response: msg_id={}, code={}, data_len={}", msg_id, code, data.len());
+
+    // Create response
+    let mut response_data = [0u8; 256];
+    let data_len = data.len().min(256);
+    response_data[..data_len].copy_from_slice(&data[..data_len]);
+
+    let response = IpcResponse {
+        msg_id,
+        code,
+        data_len,
+        data: response_data,
+    };
+
+    // Set the pending response
+    match set_pending_response(msg_id, response) {
+        Ok(sender_pid) => {
+            crate::info!("endpoint_send_response: response set for msg_id={}, waking sender pid={}", msg_id, sender_pid);
+            // Wake up the sender process
+            let _ = crate::process::wake_process(sender_pid as usize);
+            Ok(())
+        }
+        Err(e) => {
+            crate::warn!("endpoint_send_response: failed to set response for msg_id={}: {:?}", msg_id, e);
+            Err(e)
+        }
+    }
 }
 
 /// Grant capabilities to an endpoint for a specific process
