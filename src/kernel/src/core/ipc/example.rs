@@ -24,6 +24,7 @@ pub fn example_basic_usage() {
             data[4] = 0x6F; // 'o'
             
             let msg = IpcMessage {
+                msg_id: 0, // Will be filled by IPC layer
                 src_pid: 1,
                 dst_epid: epid,
                 op: 1, // Some operation code
@@ -72,6 +73,7 @@ pub fn example_priority_messaging() {
             data[0] = i as u8;
             
             let msg = IpcMessage {
+                msg_id: 0, // Will be filled by IPC layer
                 src_pid: 1,
                 dst_epid: epid,
                 op: 1,
@@ -127,6 +129,7 @@ pub fn example_capabilities() {
         
         // Try to send a message (should fail)
         let msg = IpcMessage {
+            msg_id: 0, // Will be filled by IPC layer
             src_pid: 1,
             dst_epid: epid,
             op: 1,

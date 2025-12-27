@@ -220,7 +220,14 @@ pub fn remap(vaddr: VirtAddr, new_flags: MmuFlags) {
 
 pub fn map_in_pt(pt_base: usize, vaddr: VirtAddr, paddr: PhysAddr, flags: MmuFlags) {
     let _g = PT_LOCK.lock();
-    let attrs = (1u64 << 10) | (2u64 << 8) | flags.to_arch(ArchType::AArch64);
+    let arch_flags = flags.to_arch(ArchType::AArch64);
+    crate::info!("mm/vmm map_in_pt: flags={:?} bits=0x{:X} arch_flags=0x{:X} USER={} READ={} WRITE={} EXECUTE={}",
+        flags, flags.bits(), arch_flags,
+        flags.contains(MmuFlags::USER),
+        flags.contains(MmuFlags::READ),
+        flags.contains(MmuFlags::WRITE),
+        flags.contains(MmuFlags::EXECUTE));
+    let attrs = (1u64 << 10) | (2u64 << 8) | arch_flags;
     unsafe {
         if vaddr.is_multiple_of(PAGE_SIZE_4K) && paddr.is_multiple_of(PAGE_SIZE_4K) {
             if let Some(l3) = ensure_l3_table_in_pt(pt_base, vaddr) {
@@ -236,18 +243,33 @@ pub fn map_in_pt(pt_base: usize, vaddr: VirtAddr, paddr: PhysAddr, flags: MmuFla
 }
 
 pub fn remap_in_pt(pt_base: usize, vaddr: VirtAddr, new_flags: MmuFlags) {
+    crate::info!("remap_in_pt: pt=0x{:X} va=0x{:X} new_flags={:?} bits=0x{:X}",
+        pt_base, vaddr, new_flags, new_flags.bits());
+    let arch_flags = new_flags.to_arch(ArchType::AArch64);
+    crate::info!("remap_in_pt: arch_flags=0x{:X}", arch_flags);
     let _g = PT_LOCK.lock();
     unsafe {
         if let Some(l3) = ensure_l3_table_in_pt(pt_base, vaddr) {
             let idx3 = l3_index(vaddr);
             let entry = core::ptr::read_volatile(l3.add(idx3));
+            crate::info!("remap_in_pt: existing entry=0x{:016X}", entry);
             if entry & 0x3 != 0 {
                 let paddr = entry & !0xFFF;
-                let attrs = (1u64 << 10) | (2u64 << 8) | new_flags.to_arch(ArchType::AArch64);
+                let attrs = (1u64 << 10) | (2u64 << 8) | arch_flags;
+                crate::info!("remap_in_pt: paddr=0x{:X}, attrs=0x{:X}, AP[7:6]=0b{:02b}",
+                    paddr, attrs, (attrs >> 6) & 0x3);
                 let new_entry = paddr | 3u64 | attrs;
+                crate::info!("remap_in_pt: writing new_entry=0x{:016X}", new_entry);
                 core::ptr::write_volatile(l3.add(idx3), new_entry);
                 core::arch::asm!("dsb ish", "isb");
+                // Verify the write
+                let verify = core::ptr::read_volatile(l3.add(idx3));
+                crate::info!("remap_in_pt: verified entry=0x{:016X}", verify);
+            } else {
+                crate::info!("remap_in_pt: entry not valid (0x{:016X})", entry);
             }
+        } else {
+            crate::info!("remap_in_pt: ensure_l3_table_in_pt failed");
         }
     }
 }
@@ -264,8 +286,22 @@ pub fn vma_add(pt_base: usize, base: usize, size: usize, flags: MmuFlags) {
     }
 }
 
-pub fn handle_page_fault(pt: usize, vaddr: usize) -> bool {
-    crate::info!("handle_page_fault: pt=0x{:016X} vaddr=0x{:016X}", pt, vaddr);
+pub fn handle_page_fault(pt: usize, vaddr: usize, esr: u64) -> bool {
+    crate::info!("handle_page_fault: pt=0x{:016X} vaddr=0x{:016X} esr=0x{:X}", pt, vaddr, esr);
+
+    // Parse ESR for detailed error information
+    let ec = (esr >> 26) & 0x3F;
+    let iss = esr & 0xFFFFFF;
+    let dfsc = iss & 0x3F; // Data Fault Status Code (bits 0-5)
+
+    crate::info!("ESR decode: EC=0x{:X} ISS=0x{:X} DFSC=0x{:X}", ec, iss, dfsc);
+
+    // Check if this is a permission fault rather than translation fault
+    if dfsc == 0xF || dfsc == 0xD || dfsc == 0xB {
+        crate::info!("Permission fault detected (DFSC=0x{:X}), not translation fault", dfsc);
+        // For permission faults, we need to check the existing page table entry
+        return handle_permission_fault(pt, vaddr, esr);
+    }
     let _g = VMA_LOCK.lock();
     let tbl = VMA_TABLE.lock();
     for (owner, entry) in tbl.iter() {
@@ -293,8 +329,14 @@ pub fn handle_page_fault(pt: usize, vaddr: usize) -> bool {
                         // Invalidate TLB entry for this page
                         unsafe {
                             core::arch::asm!("dsb ish");
-                            // tlbi vmalle1is: Invalidate all EL1 TLB entries, inner shareable
-                            core::arch::asm!("tlbi vmalle1is");
+                            // Try to invalidate by VA with ASID for more precise invalidation
+                            let ttbr0: u64;
+                            core::arch::asm!("mrs {}, ttbr0_el1", out(reg) ttbr0);
+                            let asid = (ttbr0 >> 48) & 0xFFFF;
+                            let va_bits = (va as u64 >> 12) & 0xFFFFFFFFFFFF;
+                            let value = va_bits | (asid << 48);
+                            // tlbi vae1is: Invalidate TLB entry by VA and ASID, inner shareable
+                            core::arch::asm!("tlbi vae1is, {}", in(reg) value);
                             core::arch::asm!("dsb ish", "isb");
                         }
                         crate::info!("handle_page_fault: success, TLB invalidated");
@@ -308,6 +350,135 @@ pub fn handle_page_fault(pt: usize, vaddr: usize) -> bool {
         }
     }
     crate::info!("handle_page_fault: no matching VMA");
+    false
+}
+
+fn handle_permission_fault(pt: usize, vaddr: usize, esr: u64) -> bool {
+    crate::info!("handle_permission_fault: pt=0x{:016X} vaddr=0x{:016X} esr=0x{:X}", pt, vaddr, esr);
+
+    // Parse ESR to get more details
+    let iss = esr & 0xFFFFFF;
+    let dfsc = iss & 0x3F;
+    let write = (iss >> 6) & 0x1; // WnR bit: 1=write, 0=read
+
+    crate::info!("Permission fault details: DFSC=0x{:X}, Write={}, Vaddr=0x{:X}", dfsc, write, vaddr);
+
+    // Try to read the existing page table entry
+    unsafe {
+        // Walk page table to check existing entry
+        let l1 = pt as *const u64;
+        let l1i = ((vaddr >> 30) & 0x1FF);
+        let l1ent = core::ptr::read_volatile(l1.add(l1i));
+
+        if l1ent & 0x3 == 3 {
+            let l2_pa = (l1ent & !((PAGE_SIZE_4K as u64) - 1)) as usize;
+            let l2 = l2_pa as *const u64;
+            let l2i = ((vaddr >> 21) & 0x1FF);
+            let l2ent = core::ptr::read_volatile(l2.add(l2i));
+
+            if l2ent & 0x3 == 3 {
+                let l3_pa = (l2ent & !((PAGE_SIZE_4K as u64) - 1)) as usize;
+                let l3 = l3_pa as *const u64;
+                let l3i = ((vaddr >> 12) & 0x1FF);
+                let l3ent = core::ptr::read_volatile(l3.add(l3i));
+
+                crate::info!("Existing page table entry at L3[{}]: 0x{:016X}", l3i, l3ent);
+
+                if l3ent & 0x3 != 0 {
+                    // Entry exists, so this is truly a permission fault
+                    crate::info!("Permission fault on existing page: entry=0x{:016X}", l3ent);
+
+                    // Detailed bit-by-bit analysis
+                    crate::info!("Entry bit analysis:");
+                    crate::info!("  Bits 0-1 (type): 0b{:02b} ({})", l3ent & 0x3, if (l3ent & 0x3) == 3 {"table/page"} else {"invalid"});
+                    crate::info!("  Bits 2-4 (AttrIndx): 0b{:03b}", (l3ent >> 2) & 0x7);
+                    crate::info!("  Bit 6 (AP[2]): {}", (l3ent >> 6) & 0x1);
+                    crate::info!("  Bit 7 (AP[1]): {}", (l3ent >> 7) & 0x1);
+                    crate::info!("  Bits 6-7 (AP[2:1]): 0b{:02b}", (l3ent >> 6) & 0x3);
+                    crate::info!("  Bits 8-9: 0b{:02b}", (l3ent >> 8) & 0x3);
+                    crate::info!("  Bit 10 (AF): {}", (l3ent >> 10) & 0x1);
+                    crate::info!("  Bit 53 (PXN): {}", (l3ent >> 53) & 0x1);
+                    crate::info!("  Bit 54 (UXN/XN): {}", (l3ent >> 54) & 0x1);
+                    crate::info!("  Physical address: 0x{:X}", l3ent & !0xFFF);
+
+                    // Extract AP bits for analysis
+                    let ap = (l3ent >> 6) & 0x3;
+                    let pxn = (l3ent >> 53) & 0x1;
+                    let uxn = (l3ent >> 54) & 0x1;
+                    let attr_idx = (l3ent >> 2) & 0x7;
+
+                    crate::info!("Page attributes: AP=0b{:02b}, PXN={}, UXN={}, AttrIdx={}, AP[2]={}, AP[1]={}",
+                        ap, pxn, uxn, attr_idx, (ap & 0b01), ((ap >> 1) & 0b01));
+
+                    // Debug: print full entry breakdown
+                    crate::info!("Entry analysis: 0x{:016X}", l3ent);
+                    crate::info!("  Valid: {}, Type={}", (l3ent & 0x3) != 0, l3ent & 0x3);
+                    crate::info!("  AP bits[7:6]=0b{:02b}, bit6(AP[2])={}, bit7(AP[1])={}",
+                        ap, (l3ent >> 6) & 0x1, (l3ent >> 7) & 0x1);
+                    crate::info!("  PXN(53)={}, UXN(54)={}", pxn, uxn);
+                    crate::info!("  Physical addr: 0x{:X}", l3ent & !0xFFF);
+
+                    // For user stack, we expect AP=0b10 (user read-write)
+                    // AP[2]=1 (user access enabled), AP[1]=0 (read-write)
+                    let ap2 = (ap & 0b01) != 0;  // AP[2] - user access
+                    let ap1 = (ap & 0b10) != 0;  // AP[1] - read-only flag
+
+                    crate::info!("Stack permission analysis: AP[2]={} (user access), AP[1]={} (read-only), need AP[2]=1, AP[1]=0",
+                        ap2, ap1);
+
+                    // Check if permissions need fixing
+                    // Note: ap2/ap1 naming is wrong - ap2 checks ap bit0 (AP[1]), ap1 checks ap bit1 (AP[2])
+                    // Actually: ap bit1 (AP[2]) = user access, ap bit0 (AP[1]) = read-only
+                    let user_access = ap1;  // ap bit1 = AP[2] = user access
+                    let read_only = ap2;    // ap bit0 = AP[1] = read-only
+
+                    crate::info!("Corrected: user_access(AP[2])={}, read_only(AP[1])={}", user_access, read_only);
+
+                    let needs_fix = !user_access || read_only;  // Need user_access=1 and read_only=0
+
+                    if needs_fix {
+                        crate::info!("Fixing stack page permissions: current AP=0b{:02b}, expected AP=0b10", ap);
+                        crate::info!("Current: AP[2]={}, AP[1]={}, Expected: AP[2]=1, AP[1]=0", ap2, ap1);
+
+                        // Remap with correct permissions
+                        let vma_flags = MmuFlags::READ.combine(MmuFlags::WRITE).combine(MmuFlags::USER);
+                        crate::info!("Calling remap_in_pt with flags={:?} bits=0x{:X}", vma_flags, vma_flags.bits());
+                        remap_in_pt(pt, vaddr & !0xFFF, vma_flags);
+
+                        // Verify the fix
+                        let new_l3ent = core::ptr::read_volatile(l3.add(l3i));
+                        let new_ap = (new_l3ent >> 6) & 0x3;
+                        let new_ap2 = (new_ap & 0b01) != 0;
+                        let new_ap1 = (new_ap & 0b10) != 0;
+                        crate::info!("After remap: entry=0x{:016X}, AP=0b{:02b}, AP[2]={}, AP[1]={}",
+                            new_l3ent, new_ap, new_ap2, new_ap1);
+                        return true;
+                    } else {
+                        crate::info!("Stack permissions already correct: AP=0b{:02b}, AP[2]={}, AP[1]={}",
+                            ap, ap2, ap1);
+                        // Permissions are correct, but we still got a fault
+                        // This could be due to other issues (PXN/UXN, memory attributes, SH domain)
+                        crate::warn!("Correct permissions but still got fault - checking other attributes");
+                        crate::info!("PXN={}, UXN={}, AttrIdx={}, SH[8:9]=0b{:02b}, AF={}",
+                            pxn, uxn, attr_idx, (l3ent >> 8) & 0x3, (l3ent >> 10) & 0x1);
+
+                        // Check SH domain - for user memory should be 0b11 (inner shareable) or 0b00 (non-shareable)
+                        let sh = (l3ent >> 8) & 0x3;
+                        let af = (l3ent >> 10) & 0x1;
+
+                        // Force remap to fix any potential attribute issues
+                        crate::warn!("Force remapping stack page to ensure correct attributes");
+                        let vma_flags = MmuFlags::READ.combine(MmuFlags::WRITE).combine(MmuFlags::USER);
+                        remap_in_pt(pt, vaddr & !0xFFF, vma_flags);
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+
+    // If we can't fix the permission fault, return false
+    crate::warn!("Could not fix permission fault for vaddr=0x{:X}", vaddr);
     false
 }
 

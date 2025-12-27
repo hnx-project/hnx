@@ -55,8 +55,10 @@ impl MmuFlags {
                     0b01
                 };
                 // AP[2] at bit 6, AP[1] at bit 7
-                // ap[0] is AP[2], ap[1] is AP[1]
-                bits |= ((ap & 1) << 7) | (((ap >> 1) & 1) << 6);
+                // ap[0] is LSB of ap value, ap[1] is MSB of ap value
+                // ap=0b10 means AP[2]=1 (user access), AP[1]=0 (read-write)
+                // So: AP[2] (bit 6) = (ap >> 1) & 1, AP[1] (bit 7) = ap & 1
+                bits |= (((ap >> 1) & 1) << 6) | ((ap & 1) << 7);
                 
                 // CRITICAL SECURITY: Set PXN/UXN bits for execute protection
                 // PXN (Privileged eXecute Never) - bit 53: prevents EL1 from executing this page

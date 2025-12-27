@@ -159,6 +159,7 @@ impl ServiceRequest {
     /// Build the IPC message
     pub fn build(self) -> IpcMessage {
         IpcMessage {
+            msg_id: 0, // Will be filled by IPC layer
             src_pid: 0, // Will be filled by IPC layer
             dst_epid: self.dst_epid,
             op: self.op,

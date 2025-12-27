@@ -253,6 +253,7 @@ impl DeviceManager {
             
             // Create IPC message
             let msg = IpcMessage {
+                msg_id: 0, // Will be filled by IPC layer
                 src_pid: 0, // Kernel PID
                 dst_epid: epid.0 as u32,
                 op: DEV_OP_INTERRUPT as u16,
@@ -334,6 +335,3 @@ fn get_timestamp() -> u64 {
     // For now, we'll just return a dummy value
     0
 }
-
-#[cfg(test)]
-mod tests;

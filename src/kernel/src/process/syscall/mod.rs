@@ -220,26 +220,23 @@ fn check_page_permissions(entry: u64, write: bool) -> bool {
     let ap = ((entry >> 6) & 0x3) as u8;
     crate::info!("check_page_permissions: AP bits=0b{:02b}", ap);
 
-    // Check if page is accessible to user (AP[1] == 1)
-    if (ap & 0b10) == 0 {
+    // Check if page is accessible to user (AP[2] == 1)
+    // AP[2] (bit 6) controls user access: 0=EL0 no access, 1=EL0 access
+    if (ap & 0b01) == 0 {
         // Kernel-only page, reject user access
-        // TEMPORARY: Allow read-only access to kernel-only pages for testing
-        if !write && ap == 0b01 {
-            crate::info!("check_page_permissions: WARNING allowing read access to kernel-only page (AP=0b01) for testing");
-        } else {
-            crate::info!("check_page_permissions: kernel-only page (AP[1]=0)");
-            return false;
-        }
+        crate::info!("check_page_permissions: kernel-only page (AP[2]=0)");
+        return false;
     }
-    
+
     // Check write permission
     if write {
-        // For write access, AP must be 0b10 (RW for both EL1 and EL0)
-        if ap != 0b10 {
-            crate::info!("check_page_permissions: write denied (AP=0b{:02b}, need 0b10)", ap);
+        // For write access, AP[1] (bit 7) must be 0 (read-write)
+        // AP[1]=0: read-write, AP[1]=1: read-only
+        if (ap & 0b10) != 0 {
+            crate::info!("check_page_permissions: write denied (AP=0b{:02b}, AP[1]=1 read-only)", ap);
             return false;
         }
-        crate::info!("check_page_permissions: write allowed (AP=0b10)");
+        crate::info!("check_page_permissions: write allowed (AP[1]=0 read-write)");
     }
 
     // Additional security: verify UXN is set (bit 54)
@@ -833,6 +830,7 @@ fn sys_ep_send(handle: usize, op: usize, buf_user: usize, len: usize) -> SysResu
     
     // Create message with priority
     let msg = crate::core::ipc::IpcMessage {
+        msg_id: 0, // Will be filled by IPC layer
         src_pid: src,
         dst_epid: 0, // Will be set in endpoint_send_sync
         op: (op & 0xFFFF) as u16,

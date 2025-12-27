@@ -311,7 +311,7 @@ pub extern "C" fn rust_sync_try_handle(
         crate::console::write_raw("rust_sync_try_handle: read ttbr0 from register\n");
         info!("arch/aarch64 page fault: far=0x{:016X} elr=0x{:016X} ttbr0=0x{:016X} pt_base=0x{:016X}", far, elr, ttbr0, pt_base);
         crate::console::write_raw("rust_sync_try_handle: calling handle_page_fault\n");
-        if crate::memory::virtual_::handle_page_fault(pt_base, far as usize) {
+        if crate::memory::virtual_::handle_page_fault(pt_base, far as usize, esr) {
             info!("arch/aarch64 page fault handled");
             crate::console::write_raw("rust_sync_try_handle: page fault handled\n");
             return 1;

@@ -38,6 +38,7 @@ pub fn test_sync_communication() -> bool {
             data[1] = 0x43;
             
             let msg = IpcMessage {
+                msg_id: 0, // Will be filled by IPC layer
                 src_pid: 1,
                 dst_epid: epid,
                 op: 1,
@@ -112,6 +113,7 @@ pub fn test_priority_messaging() -> bool {
                 data[0] = i as u8;
                 
                 let msg = IpcMessage {
+                    msg_id: 0, // Will be filled by IPC layer
                     src_pid: 1,
                     dst_epid: epid,
                     op: 1,

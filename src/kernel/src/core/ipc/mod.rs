@@ -17,6 +17,7 @@ pub enum Priority {
 /// Enhanced IPC message with priority support
 #[derive(Clone)]
 pub struct IpcMessage {
+    pub msg_id: u64,
     pub src_pid: u32,
     pub dst_epid: u32,
     pub op: u16,
@@ -141,6 +142,7 @@ pub struct Endpoint {
 
 // Global state
 static NEXT_ENDPOINT_ID: AtomicU32 = AtomicU32::new(1);
+static NEXT_MSG_ID: AtomicU64 = AtomicU64::new(1);
 static ENDPOINTS: Mutex<[Option<Endpoint>; 16]> = Mutex::new([const { None }; 16]);
 
 /// Initialize the IPC system
@@ -577,6 +579,7 @@ pub struct IpcMsg {
 pub fn endpoint_send(dst_id: u32, msg: IpcMsg) -> bool {
     // Convert to new message format
     let new_msg = IpcMessage {
+        msg_id: 0, // Will be filled by IPC layer
         src_pid: msg.src,
         dst_epid: dst_id,
         op: msg.op,
