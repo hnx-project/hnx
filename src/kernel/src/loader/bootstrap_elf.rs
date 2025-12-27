@@ -129,9 +129,9 @@ impl<'a> BootstrapElfLoader<'a> {
         if flags & 0x2 != 0 { mmu_flags = mmu_flags.combine(MmuFlags::WRITE); }
         if flags & 0x1 != 0 { mmu_flags = mmu_flags.combine(MmuFlags::EXECUTE); }
         
-        info!("bootstrap: loading segment: page_start=0x{:X}, page_end=0x{:X}, num_pages={}", 
-              page_start, page_end, num_pages);
-        
+        info!("bootstrap: loading segment: page_start=0x{:X}, page_end=0x{:X}, num_pages={} mmu_flags={:?}",
+              page_start, page_end, num_pages, mmu_flags);
+
         for i in 0..num_pages {
             let page_va = page_start + i * 0x1000;
             let page_pa = crate::memory::physical::alloc_pages(1)

@@ -1,363 +1,375 @@
-# AGENTS.md
+# HNX Microkernel - Development Guide
 
-This file provides guidance to Qoder (qoder.com) when working with code in this repository.
+## Project Overview
 
-## 项目概述
+**HNX** is a modern microkernel operating system written in Rust, designed with principles of minimalism, security, and modularity. The kernel provides only essential functionality (process management, memory management, IPC, interrupt handling), while all other services (filesystem, networking, device drivers) run in user space as isolated processes communicating via IPC.
 
-HNX是一个基于Rust编写的微内核操作系统，采用类似Zircon的能力安全模型。
+### Key Characteristics
+- **Microkernel Architecture**: Minimal trusted computing base (TCB)
+- **Capability-Based Security**: Fine-grained access control for resources
+- **Modern IPC**: Priority-based message passing with zero-copy support
+- **Multi-Architecture**: Primary target is AArch64 (ARMv8), with support planned for RISC-V and x86_64
+- **Rust-Based**: Memory safety, no undefined behavior, no data races in kernel code
 
-### 关键设计原则
-- **微内核架构**: 内核仅提供核心功能（IPC、进程管理、内存管理、中断处理），文件系统、网络、驱动运行在用户空间
-- **能力安全模型**: 所有操作需要对应能力，系统调用和IPC均需权限验证
-- **IPC委托框架**: 系统调用可委托给用户空间服务处理（VFS、网络、加载器等）
-- **跨平台支持**: aarch64, x86_64, riscv64
+### Current Status
+- **Version**: 0.1.0-alpha.1 (see `VERSION` file)
+- **State**: Actively developed, basic kernel functionality operational
+- **Recent Focus**: System call implementation, IPC delegation, user-space process loading
 
-### 项目结构
+## Technology Stack
+
+### Core Languages & Tools
+- **Kernel**: Rust (no_std, 2021 edition)
+- **User Space**: Rust (with libc compatibility layer)
+- **Build System**: Cargo + Make + Python scripts
+- **Target Architecture**: `aarch64-unknown-none` (bare metal)
+- **Emulation**: QEMU virt machine for testing
+
+### Key Dependencies
+- **Kernel**: `spin` (synchronization), `cortex-a` (ARM), `heapless` (no-std collections), `bitflags`
+- **User Space**: `log`, `anyhow`, `thiserror`, `hnx-libc` (custom libc)
+- **Build Tools**: Poetry (Python environment management)
+
+## Project Structure
+
 ```
 hnx-core/
-├── include/hnx/abi/        # C头文件（生成Rust绑定）
-├── scripts/                # Python构建脚本（版本管理、镜像创建、QEMU运行）
-├── configs/                # 系统配置（TOML格式）
-├── targets/                # Rust目标定义（aarch64-unknown-none等）
-├── src/
-│   ├── abi-bindings/       # ABI定义crate（系统调用、能力、类型）
-│   ├── kernel/             # 微内核核心（库crate）
-│   │   └── src/
-│   │       ├── main.rs     # 内核入口（4阶段启动流程）
-│   │       ├── arch/       # 架构相关（aarch64/x86_64/riscv64）
-│   │       │   └── aarch64/
-│   │       │       ├── boot.S      # 汇编启动代码
-│   │       │       ├── mmu/        # MMU初始化和页表管理
-│   │       │       ├── exceptions/ # 异常/中断处理
-│   │       │       └── context.rs  # 上下文切换
-│   │       ├── core/       # IPC和调度器
-│   │       │   ├── ipc/    # 消息传递、共享内存
-│   │       │   └── scheduler/ # 进程调度
-│   │       ├── memory/     # 内存管理
-│   │       │   ├── physical/  # 物理内存分配器（buddy allocator）
-│   │       │   └── virtual_/  # 虚拟内存管理（页表操作）
-│   │       ├── process/    # 进程/线程管理
-│   │       ├── ipc_services/ # IPC服务委托框架（well-known endpoints）
-│   │       ├── loader/     # ELF/CPIO加载器
-│   │       ├── drivers/    # 最小驱动（UART、GIC、DTB解析）
-│   │       └── scripts/    # 链接脚本（link.ld.S）
-│   └── space/              # 用户空间workspace
-│       ├── libc/           # C标准库实现
-│       ├── hnxlib/         # HNX系统库（封装系统调用）
-│       └── services/       # 系统服务
-│           ├── init/       # Init进程（第一个用户态进程）
-│           ├── vfs-service/    # 文件系统服务
-│           └── loader-service/ # 程序加载器服务
-└── build/                  # 构建产物（不提交到Git）
+├── src/                          # Source code
+│   ├── kernel/                   # Kernel crate (library)
+│   │   ├── src/                  # Kernel source
+│   │   │   ├── arch/            # Architecture-specific (aarch64)
+│   │   │   ├── core/            # IPC, scheduler core
+│   │   │   ├── memory/          # Physical/virtual memory management
+│   │   │   ├── process/         # Process/task management
+│   │   │   ├── ipc_services/    # IPC service delegation framework
+│   │   │   ├── drivers/         # Minimal hardware drivers
+│   │   │   ├── console/         # Debug console (UART)
+│   │   │   └── main.rs          # Kernel entry point
+│   │   └── Cargo.toml           # Kernel dependencies
+│   ├── space/                    # User space workspace
+│   │   ├── libc/                # Custom C library implementation
+│   │   ├── hnxlib/              # HNX system library (IPC wrappers)
+│   │   ├── services/            # System services (init, VFS, loader)
+│   │   └── Cargo.toml           # Workspace configuration
+│   ├── abi-bindings/            # Kernel-user ABI definitions
+│   └── utils/                   # Build utilities (optional)
+├── configs/                      # Build configuration
+│   ├── arch/                    # Architecture-specific configs
+│   ├── board/                   # Board-specific configs (qemu-virt)
+│   └── profile/                 # Build profiles (debug, release)
+├── scripts/                      # Python build scripts
+│   ├── configure.py             # Generate build configuration
+│   ├── create-image.py          # Create bootable system image
+│   ├── run-qemu.py              # Launch QEMU with proper args
+│   ├── version.py               # Version management
+│   └── verify_version.py        # Version consistency checker
+├── include/                      # C headers (ABI definitions)
+├── targets/                      # Rust target specifications
+├── toolchain/                    # Cross-compilation toolchain
+├── tests/                        # Test framework
+├── tools/                        # Development utilities
+├── Cargo.toml                    # Root workspace configuration
+├── Makefile                      # Primary build interface
+├── pyproject.toml                # Python tooling (Poetry)
+├── rust-toolchain.toml           # Rust toolchain specification
+└── VERSION                       # Version metadata (TOML)
 ```
 
-## 开发环境设置
+## Building and Running
 
-### 环境要求
-- **Rust toolchain**: nightly版本，支持`no_std`和目标架构
-- **Python环境**: Poetry管理 (Python 3.11+)
-- **编译目标**: 默认 `aarch64-unknown-none`
-- **QEMU**: 用于运行和调试（qemu-system-aarch64）
+### Prerequisites
+- **Rust Toolchain**: Install via rustup with `rustup target add aarch64-unknown-none`
+- **Python 3.11+**: Required for build scripts
+- **Poetry**: Python dependency management (`pip install poetry`)
+- **QEMU**: System emulator (`brew install qemu` on macOS)
+- **Cross-Compilation Tools**: Optional for custom toolchain
 
-### 初始化
+### Initial Setup
 ```bash
-make init              # 初始化Poetry Python环境
-make configure         # 配置系统（默认ARCH=aarch64 BOARD=qemu-virt）
+# Install Python dependencies
+poetry install
+
+# Initialize version file (first time)
+make version-init
+
+# Configure for default target (aarch64, qemu-virt)
+make configure
 ```
 
-### 环境变量
-- `ARCH`: 目标架构 (aarch64, x86_64, riscv64)
-- `BOARD`: 开发板 (qemu-virt, raspberry-pi4)
-- `PROFILE`: 构建配置 (debug, release)
-
-## 构建命令
-
-### 请勿使用
+### Common Build Commands
 ```bash
-timeout xx make run-simple # 因为脚本自带超时 30s
+# Show help with all available targets
+make help
+
+# Build everything (kernel + user space + system image)
+make all
+
+# Build kernel only
+make kernel
+
+# Build user space components only
+make space
+
+# Create system image (requires kernel and space)
+make image
+
+# Create simple image for quick testing
+make simple-image
+
+# Quick build (kernel only, no configuration)
+make quick
+
+# Clean build artifacts (preserves configs)
+make clean
+
+# Full clean (including configs and version files)
+make distclean
 ```
-### 完整构建流程
+
+### Running in QEMU
 ```bash
-make configure          # 配置系统 (ARCH=aarch64 BOARD=qemu-virt)
-make kernel            # 构建微内核（包含版本同步和ABI检查）
-make space             # 构建用户空间组件
-make image             # 创建完整系统镜像（带压缩）
-make simple-image      # 创建简单系统镜像（无压缩）
-make initrd-simple     # 创建简单initrd.cpio
+# Run full system image
+make run
+
+# Run kernel only with simple initrd (30s timeout)
+make run-simple
+
+# Run kernel only (no timeout)
+make run-kernel
+
+# Run with GDB debugging
+make debug
 ```
 
-### 快速构建
+### Version Management
 ```bash
-make quick             # 快速构建内核（release模式）
-make check-abi         # 仅检查ABI一致性
+# Show current version
+make version
+
+# Sync version to all subprojects
+make version-sync
+
+# Check version consistency
+make version-check
+
+# Bump version numbers
+make version-bump-major   # 1.0.0 → 2.0.0
+make version-bump-minor   # 1.0.0 → 1.1.0
+make version-bump-patch   # 1.0.0 → 1.0.1
+
+# Set prerelease tag
+make version-set-prerelease TAG=beta.1
 ```
 
-### 测试与运行
+### Testing
 ```bash
-make test              # 运行所有测试（内核+用户空间）
-make run               # 在QEMU中运行完整系统
-make run-kernel        # 在QEMU中仅运行微内核
-make run-simple        # 30秒超时测试运行（最常用）
-make debug             # 启动QEMU GDB调试会话
+# Run unit tests for kernel and user space
+make test
+
+# Check ABI consistency between kernel and user space
+make check-abi
 ```
 
-### 版本管理
+## Development Workflow
+
+### Architecture
+The system follows a strict layered architecture:
+
+1. **Kernel (EL1/ring 0)**: Minimal core providing:
+   - Process scheduling and context switching
+   - Virtual memory management (page tables)
+   - IPC message passing endpoints
+   - Interrupt and exception handling
+   - Capability system for resource access control
+
+2. **User Space Services (EL0/ring 3)**: Isolated processes:
+   - **VFS Service**: Filesystem operations
+   - **Init Process**: First user process, spawns other services
+   - **Loader Service**: Process loading and ELF parsing
+   - **Device Drivers**: Hardware access in user space
+
+3. **System Libraries**: Shared between user processes:
+   - **hnxlib**: IPC wrappers, capability management
+   - **libc**: Standard C library compatibility
+
+### System Call Implementation
+System calls follow the AArch64 SVC convention:
+- System call number in register `x8`
+- Arguments in `x0-x5`
+- Return value in `x0`
+- Error handling via negative return values
+
+Current system calls (see `hnx_abi::syscalls`):
+- `HNX_SYS_WRITE` (4097): Write to file descriptor
+- `HNX_SYS_EXIT` (4098): Terminate process
+- `HNX_SYS_FORK` (4099): Create child process
+- `HNX_SYS_EXEC` (4100): Execute new program
+
+### IPC Framework
+The IPC system provides:
+- **Endpoints**: Communication channels with capabilities
+- **Message Queues**: Priority-based (critical, high, normal, low)
+- **Service Delegation**: Kernel-assisted RPC to user space services
+- **Zero-Copy**: Shared memory regions for large data transfers
+
+Services are identified by well-known endpoint IDs:
+- `VFS_EPID = 1`: Filesystem operations
+- `LOADER_EPID = 2`: Process loading
+- `DEVICE_MANAGER_EPID = 3`: Device access
+
+### Memory Management
+- **Physical**: Buddy allocator for page frames
+- **Virtual**: 3-level page tables (L1, L2, L3) with 4KB pages
+- **User Space**: Separate page tables per process (TTBR0)
+- **Kernel Space**: Shared high-half mapping (TTBR1)
+- **Security**: User/kernel isolation, permission checking
+
+## Coding Conventions
+
+### Rust Style
+- **No Standard Library**: Use `#![no_std]` with core/alloc as needed
+- **Error Handling**: Use `Result` with custom error types
+- **Unsafe Code**: Minimize unsafe blocks, document invariants
+- **Documentation**: Use Rustdoc with examples for public APIs
+
+### Kernel-Specific Patterns
+- **Synchronization**: Use `spin::Mutex` for kernel data structures
+- **Interrupt Safety**: Disable interrupts when holding locks
+- **Memory Safety**: Validate all user pointers before dereferencing
+- **Panic Policy**: Kernel panics are fatal; use `panic::abort`
+
+### Logging System
+The kernel uses a structured logging system with levels:
+- `error!`: Critical failures that may affect system stability
+- `warn!`: Non-critical issues that should be addressed
+- `info!`: General operational information (default)
+- `debug!`: Detailed debugging information
+- `trace!`: Very verbose tracing for deep investigation
+
+Set log level via boot command line: `log=debug`
+
+## Debugging and Troubleshooting
+
+### Common Issues
+1. **System Call Failures**: Check register values in SVC handler logs
+2. **Page Table Issues**: Enable `user_range_ok` debugging in `process/syscall/mod.rs`
+3. **IPC Deadlocks**: Add logging to `endpoint_send_sync` in `core/ipc/mod.rs`
+4. **Process Creation**: Verify ELF loading in `loader/bootstrap_elf.rs`
+
+### Debugging Commands
 ```bash
-make version                    # 显示版本信息
-make version-init               # 初始化版本文件
-make version-sync               # 同步版本到所有子项目
-make version-check              # 检查版本一致性
-make version-bump-patch         # 递增修订版本
-make version-bump-minor         # 递增次版本
-make version-bump-major         # 递增主版本
-make version-set-prerelease TAG=alpha.1  # 设置预发布标签
+# Run with GDB (port 1234)
+make debug
+
+# Check kernel logs in QEMU
+# Look for [INFO], [WARN], [ERROR] prefixes
+
+# Examine build configuration
+cat build/config/config.json
 ```
 
-### 清理
-```bash
-make clean             # 清理构建产物（保留版本文件）
-make distclean         # 完全清理（包括版本文件）
-make version-clean     # 清理版本生成的文件
+### Log Analysis
+Key log patterns to monitor:
+- `arch/aarch64 SVC handler entered`: System call entry
+- `sys_write: copying`: User buffer access
+- `ipc_delegate: starting`: IPC service delegation
+- `user_range_ok: TEMPORARY BYPASS`: Page table check disabled (debug)
+- `current_ttbr0_base: temporary bypass`: Lock issue workaround
+
+## Configuration
+
+### Architecture and Board
+- **Default**: `ARCH=aarch64`, `BOARD=qemu-virt`
+- **Override**: `ARCH=riscv64 make configure`
+- **Profiles**: `PROFILE=release make kernel`
+
+### Build Configuration
+Configuration files are generated in `build/config/`:
+- `config.json`: Build parameters and paths
+- `env.sh`: Environment variables for build scripts
+- `Makefile.inc`: Makefile includes for customization
+
+### Cargo Configuration
+The `.cargo/config.toml` file defines custom Rust targets and build settings:
+- **Custom Targets**: `aarch64-unknown-hnx-kernel` (kernel) and `aarch64-unknown-hnx` (user space)
+- **Linker**: Uses `rust-lld` with custom linker scripts
+- **Build Std**: Builds core, alloc, and compiler_builtins from source
+- **Environment Variables**: Sets `ARCH`, `KERNEL_TARGET`, `SPACE_TARGET`
+
+Note: The Makefile currently uses the standard `aarch64-unknown-none` target, but custom targets are available for advanced configurations.
+
+### Kernel Configuration
+Kernel features can be enabled/disabled via Cargo features:
+- `version`: Include version information in kernel binary
+- (Future) `smp`: Symmetric multiprocessing support
+- (Future) `virtio`: VirtIO device drivers
+
+## Contributing Guidelines
+
+### Workflow
+1. **Fork and Branch**: Create feature branches from `main`
+2. **Testing**: Run `make test` before committing
+3. **Versioning**: Use `make version-bump-*` for release changes
+4. **Documentation**: Update QWEN.md for significant changes
+
+### Code Review Checklist
+- [ ] No undefined behavior in unsafe blocks
+- [ ] User pointer validation before use
+- [ ] Proper error handling for all fallible operations
+- [ ] Logging at appropriate levels
+- [ ] Documentation for public APIs
+- [ ] Cross-architecture compatibility considered
+
+### Commit Messages
+Follow conventional commit format:
+```
+type(scope): description
+
+Body explaining the change and rationale.
+
+Fixes #issue
 ```
 
-## 代码架构
+Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`
 
-### 微内核职责边界
+## Future Roadmap
 
-**内核核心职责**（必须在内核实现）：
-- 进程/线程调度与管理（`src/kernel/src/core/scheduler/`）
-- IPC消息传递与共享内存（`src/kernel/src/core/ipc/`）
-- 内存管理（分页、物理分配）（`src/kernel/src/memory/`）
-- 能力安全模型检查（`src/kernel/src/security/`）
-- 系统调用分发（`src/kernel/src/syscall/`）
-- 中断/异常处理（`src/kernel/src/arch/*/exceptions/`）
-- 最小设备驱动（UART调试输出、GIC中断控制器、定时器）
+### Short Term (v0.2.0)
+- [ ] Complete system call implementation
+- [ ] Fix page table mapping issues
+- [ ] Resolve IPC lock deadlocks
+- [ ] Add more user space services
 
-**用户空间职责**（必须移出内核）：
-- 文件系统 → `src/space/services/vfs-service/`
-- 网络协议栈 → （待实现）
-- 设备驱动 → `src/space/drivers/`
-- 调试工具 → （待实现）
+### Medium Term (v0.5.0)
+- [ ] RISC-V architecture support
+- [ ] VirtIO device drivers
+- [ ] Network stack service
+- [ ] Graphical display server
 
-**注意**: 当前 `src/kernel/src/` 中存在 `fs.moved/`, `network.moved/`, `debug.moved/` 等目录，这些是待迁移到用户空间的遗留代码，不应在内核中继续使用。
+### Long Term (v1.0.0)
+- [ ] SMP support for multi-core
+- [ ] Production-ready stability
+- [ ] Comprehensive test suite
+- [ ] Security audit and certification
 
-### 内核启动流程（4阶段）
+## Resources
 
-内核从 `src/kernel/src/main.rs` 的 `rust_main()` 开始，经过4个初始化阶段：
+### Documentation
+- `docs/`: Project documentation (in progress)
+- `include/hnx/abi/`: ABI header files
+- Rustdoc: `cargo doc --open` for API documentation
 
-1. **Phase 1: Hardware** (`init_phase1_hardware`)
-   - 初始化UART调试控制台
-   - 解析Device Tree Blob (DTB)
-   - 初始化GIC中断控制器和定时器
-   - 架构相关初始化（异常向量表、MMU基本配置）
+### External References
+- [AArch64 Reference Manual](https://developer.arm.com/documentation/ddi0487/latest)
+- [Rust Embedded Book](https://docs.rust-embedded.org/book/)
+- [Microkernel Design Patterns](https://www.cs.cmu.edu/~dga/papers/microkernels-newton-2017.pdf)
 
-2. **Phase 2: Memory** (`init_phase2_memory`)
-   - 初始化物理内存分配器（buddy allocator）
-   - 设置虚拟内存管理（页表操作）
-   - 初始化内核堆分配器
+### Tooling
+- `tools/`: Development utilities
+- `.vscode/`: IDE configuration for VS Code
+- `.github/`: CI/CD workflows
 
-3. **Phase 3: Processes** (`init_phase3_processes`)
-   - 初始化进程控制块（PCB）管理
-   - 初始化IPC服务委托框架（well-known endpoints）
-   - 初始化initrd访问器（加载用户空间程序）
-   - 加载init进程（第一个用户态进程）
+---
 
-4. **Phase 4: Scheduler** (`init_phase4_scheduler`)
-   - 创建idle任务
-   - 启动调度器（永不返回）
-
-### MMU和内存布局（aarch64）
-
-**当前实现**: 恒等映射（Identity Mapping）
-
-- **内核地址空间**: 虚拟地址 = 物理地址
-  - 物理基址: 0x40000000
-  - 内核代码/数据映射: 0x40000000-0x4FFFFFFF (256MB)
-  - 页表位置: 
-    - `L1_TABLE_KERNEL`: 0x40081000 (TTBR1_EL1)
-    - `L2_TABLE_KERNEL`: 0x40084000
-    - `L1_TABLE_USER`: 0x40082000 (TTBR0_EL1 初始值)
-    - `L2_TABLE_USER`: 0x40083000
-
-- **用户地址空间**: 每个进程独立页表（TTBR0_EL1）
-  - 进程代码/数据: 0x00000000-低地址区域
-  - 进程栈: 通常在高用户地址
-  - ASID支持: 进程隔离使用Address Space ID
-
-**关键代码**:
-- MMU启动: `src/kernel/src/arch/aarch64/mmu/mmu_boot.rs`
-- Boot汇编: `src/kernel/src/arch/aarch64/boot.S`
-- 链接脚本: `src/kernel/src/scripts/link.ld.S`
-
-### IPC服务委托框架
-
-HNX使用**well-known endpoint**机制将部分系统调用委托给用户空间服务处理：
-
-**架构**:
-```
-用户进程 → syscall(SYS_OPEN, ...) → 内核 → ipc_delegate(EPID_VFS, OP_OPEN, msg)
-                                            ↓
-                                    VFS服务接收消息并处理
-                                            ↓
-                                    返回结果给用户进程
-```
-
-**Well-known Endpoints**:
-- `EPID_VFS` (1): 文件系统服务
-- `EPID_NETWORK` (2): 网络服务
-- `EPID_LOADER` (3): 程序加载器服务
-
-**关键代码**:
-- 框架实现: `src/kernel/src/ipc_services/delegate.rs`
-- 服务定义: `src/kernel/src/ipc_services/endpoints.rs`
-- 文档: `src/kernel/src/ipc_services/IPC_DELEGATION_FRAMEWORK.md`
-
-## 测试策略
-
-### 内核测试
-```bash
-cd src/kernel && cargo test --lib
-```
-- 单元测试位于各模块的 `#[cfg(test)]` 块中
-- 主要测试内存分配器、页表操作、IPC消息构建等
-
-### 用户空间测试
-```bash
-cd src/space && cargo test --workspace
-```
-- 测试系统库（hnxlib）封装
-- 测试服务逻辑
-
-### QEMU集成测试
-```bash
-make run-simple  # 30秒超时，检查启动和init进程执行
-```
-
-### GDB调试
-```bash
-make debug  # 启动QEMU并等待GDB连接
-# 在另一个终端:
-lldb-mi2 -- build/kernel/debug/hnx-kernel-*.bin
-(lldb) gdb-remote localhost:1234
-(lldb) b rust_main
-(lldb) c
-```
-
-## 版本管理
-
-- **语义化版本** (SemVer): `major.minor.patch[-prerelease]`
-- **版本文件**: 项目根目录的 `VERSION` 文件
-- **同步机制**: `scripts/version.py` 自动同步到：
-  - `include/hnx/abi/version.h` (C头文件)
-  - `src/kernel/Cargo.toml`
-  - `src/space/Cargo.toml`
-  - 所有子项目的 `Cargo.toml`
-
-**工作流**:
-1. 修改代码后运行 `make version-bump-patch`
-2. 运行 `make version-sync` 同步版本号
-3. 运行 `make version-check` 验证一致性
-4. 构建时自动使用新版本号（镜像命名: `hnx-{version}-{arch}-{board}.img`）
-
-## 安全注意事项
-
-- **能力模型**: 所有操作（系统调用、IPC）需要验证能力
-- **IPC安全检查**: 消息传递时验证发送者权限
-- **内存隔离**: 进程间地址空间完全隔离（通过ASID和独立页表）
-- **系统调用验证**: 参数有效性和权限双重检查
-- **UART仅用于调试**: 生产环境应移除或禁用UART输出
-
-## 常见开发任务
-
-### 添加新的系统调用
-1. 在 `include/hnx/abi/syscalls.h` 定义系统调用号
-2. 运行 `make check-abi` 生成Rust绑定
-3. 在 `src/kernel/src/syscall/mod.rs` 实现系统调用处理
-4. 如需委托，在 `src/kernel/src/ipc_services/delegate.rs` 添加委托逻辑
-5. 在 `src/space/hnxlib/src/` 添加用户空间封装
-
-### 添加新的用户空间服务
-1. 在 `src/space/services/` 创建新crate
-2. 在 `src/space/Cargo.toml` 添加为workspace成员
-3. 实现服务逻辑（监听well-known endpoint）
-4. 在 `src/kernel/src/ipc_services/endpoints.rs` 注册endpoint
-5. 更新initrd构建脚本将服务包含到镜像
-
-### 修改MMU页表布局
-1. 修改 `src/kernel/src/arch/aarch64/mmu/mmu_boot.rs`
-2. 同步更新 `src/kernel/src/scripts/link.ld.S`
-3. 确保 `boot.S` 中的汇编代码与新布局兼容
-4. 运行 `make run-simple` 验证启动流程
-5. 使用 `make debug` 调试页表配置
-
-### 调试内核崩溃
-1. 添加调试输出: 使用 `info!()`, `warn!()`, `error!()` 宏
-2. QEMU调试输出: `make run-simple` 查看串口输出
-3. QEMU异常追踪: 在 `scripts/run-qemu.py` 添加 `-d int,in_asm`
-4. GDB调试: `make debug` 启动，设置断点追踪执行流
-5. 检查页表: 在GDB中 `x/gx <page_table_address>` 查看页表项
-
-## 构建系统细节
-
-### Python脚本说明
-- `scripts/configure.py`: 生成板级配置文件（JSON格式）
-- `scripts/create-image.py`: 创建系统镜像（包含内核+initrd）
-  - `--simple-initrd`: 创建简单CPIO格式initrd
-  - `--no-compress`: 不压缩镜像
-- `scripts/run-qemu.py`: 启动QEMU模拟器
-  - `--headless`: 无图形界面
-  - `--gdb`: 启动GDB服务器（端口1234）
-  - `--timeout`: 设置超时（秒）
-- `scripts/version.py`: 版本管理工具
-- `scripts/verify_version.py`: 验证版本一致性
-- `scripts/verify_abi.py`: 验证ABI一致性
-
-### Cargo配置文件
-- 根工作区: `Cargo.toml` (包含内核)
-- 用户空间工作区: `src/space/Cargo.toml` (包含所有服务和库)
-- 内核crate: `src/kernel/Cargo.toml`
-- 构建配置:
-  - `profile.dev`: 调试构建（opt-level=0, debug=true）
-  - `profile.release`: 发布构建（opt-level="s", lto=true）
-  - `profile.kernel`: 内核专用（opt-level="z", 最小体积）
-
-## 架构特定注意事项
-
-### AArch64 (ARM 64-bit)
-- **异常级别**: EL1（内核）、EL0（用户态）
-- **系统寄存器**: TTBR0_EL1（用户页表）、TTBR1_EL1（内核页表）
-- **ASID支持**: 16-bit ASID用于进程隔离
-- **异常向量表**: `src/kernel/src/arch/aarch64/exceptions/vectors.S`
-- **上下文切换**: `src/kernel/src/arch/aarch64/context.rs`
-- **ERET指令**: 从EL1返回到EL0（`arch_do_exec`函数）
-
-### x86_64 和 riscv64
-- 当前主要支持aarch64，其他架构为实验性支持
-- 相关代码在 `src/kernel/src/arch/x86_64/` 和 `src/kernel/src/arch/riscv64/`
-
-## 关键文件参考
-
-**内核入口和启动**:
-- `src/kernel/src/main.rs` - Rust入口点
-- `src/kernel/src/arch/aarch64/boot.S` - 汇编启动代码
-- `src/kernel/src/arch/aarch64/mmu/mmu_boot.rs` - MMU初始化
-
-**内存管理**:
-- `src/kernel/src/memory/physical/mod.rs` - 物理内存分配器
-- `src/kernel/src/memory/virtual_/mod.rs` - 虚拟内存管理
-- `src/kernel/src/scripts/link.ld.S` - 链接脚本
-
-**进程和调度**:
-- `src/kernel/src/core/scheduler/mod.rs` - 调度器
-- `src/kernel/src/process/task/mod.rs` - 任务管理
-- `src/kernel/src/arch/aarch64/context.rs` - 上下文切换
-
-**IPC和系统调用**:
-- `src/kernel/src/core/ipc/mod.rs` - IPC核心
-- `src/kernel/src/syscall/mod.rs` - 系统调用分发
-- `src/kernel/src/ipc_services/delegate.rs` - 服务委托框架
-
-**用户空间**:
-- `src/space/services/init/src/main.rs` - Init进程
-- `src/space/hnxlib/src/lib.rs` - HNX系统库
-- `src/space/libc/src/lib.rs` - C标准库实现
+*Last Updated: $(date)*  
+*Version: $(cat VERSION | grep -E "major|minor|patch" | head -3 | tr '\n' ' ')*

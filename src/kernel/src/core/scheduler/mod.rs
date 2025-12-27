@@ -165,18 +165,14 @@ pub fn current_pid() -> u64 {
 ///
 /// Returns None if no process is currently running
 pub fn current_ttbr0_base() -> Option<usize> {
-    // TEMPORARY: bypass lock due to deadlock issue
-    // TODO: fix lock issue in exception handler
-    crate::info!("scheduler::current_ttbr0_base: temporary bypass");
-    // Return the TTBR0 base we saw in logs: 0x403B8000
-    Some(0x403B8000)
-    // Original code (causes deadlock):
-    // crate::info!("scheduler::current_ttbr0_base: acquiring lock");
-    // let cur = CURRENT.lock();
-    // crate::info!("scheduler::current_ttbr0_base: lock acquired");
-    // let result = cur.as_ref().map(|t| t.ttbr0_base);
-    // crate::info!("scheduler::current_ttbr0_base: returning {:?}", result);
-    // result
+    // Try to acquire lock without spinning to avoid deadlock in exception context
+    if let Some(cur) = CURRENT.try_lock() {
+        cur.as_ref().map(|t| t.ttbr0_base)
+    } else {
+        // Lock unavailable, return None
+        crate::warn!("scheduler::current_ttbr0_base: lock unavailable, returning None");
+        None
+    }
 }
 
 pub fn exit_current() -> ! {
