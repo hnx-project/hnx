@@ -21,6 +21,7 @@ typedef uintptr_t size_t;
 // 进程操作
 #define HNX_SYS_PROCESS_CREATE     0x0101  // 257
 #define HNX_SYS_PROCESS_START      0x0102  // 258
+#define HNX_SYS_SPAWN_SERVICE      0x0103  // 259 - Spawn service from initrd
 
 // 线程操作
 #define HNX_SYS_THREAD_CREATE      0x0201  // 513

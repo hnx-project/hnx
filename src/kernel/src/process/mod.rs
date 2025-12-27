@@ -12,7 +12,7 @@ pub mod syscall;
 pub mod task;
 pub mod spawn;
 
-use core::sync::atomic::{AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicUsize, AtomicU64, Ordering};
 use spin::Mutex;
 
 pub use spawn::{sys_process_create_empty, sys_mmap_process, sys_process_start};
@@ -48,9 +48,11 @@ pub struct ProcessControlBlock {
     pub sid: u32,             // Session ID (for later use)
     pub ttbr0_base: usize,    // User page table base for fork
     pub asid: u16,            // Address Space ID
+    pub wakeup_time: u64,     // Timestamp when process should be woken up (0 = no timeout)
 }
 
 // Global process management state
+static SYSTEM_TICKS: AtomicU64 = AtomicU64::new(0);
 static NEXT_PID: AtomicUsize = AtomicUsize::new(1);
 static PCB_TABLE: Mutex<[Option<ProcessControlBlock>; 32]> = Mutex::new([const { None }; 32]);
 static READY_QUEUE: Mutex<[u32; 32]> = Mutex::new([0; 32]);
@@ -116,6 +118,7 @@ pub fn create_process(priority: u8) -> Option<u32> {
         sid: pid,          // By default, process is its own session leader
         ttbr0_base: 0,
         asid: 0,
+        wakeup_time: 0,
     };
     
     let mut table = PCB_TABLE.lock();
@@ -150,6 +153,7 @@ pub fn create_child_process(parent_pid: u32, priority: u8, ttbr0_base: usize, as
         sid,               // Inherit parent's session
         ttbr0_base,
         asid,
+        wakeup_time: 0,
     };
     
     let mut table = PCB_TABLE.lock();
@@ -174,6 +178,7 @@ pub fn spawn_kernel_task(_entry: fn() -> !) -> u32 {
             sid: pid,
             ttbr0_base: 0,
             asid: 0,
+            wakeup_time: 0,
         };
         
         let mut table = PCB_TABLE.lock();
@@ -204,13 +209,18 @@ pub fn wake_process(pid: usize) -> bool {
     }
 }
 
-/// Block a running process
-pub fn block_process(pid: usize) -> bool {
+/// Block a running process with optional timeout (0 = no timeout)
+pub fn block_process_timeout(pid: usize, timeout_ticks: u64) -> bool {
     let mut table = PCB_TABLE.lock();
     let i = pid % table.len();
     if let Some(ref mut pcb) = table[i] {
         if pcb.state == ProcState::Running {
             pcb.state = ProcState::Blocked;
+            if timeout_ticks > 0 {
+                pcb.wakeup_time = SYSTEM_TICKS.load(Ordering::Relaxed) + timeout_ticks;
+            } else {
+                pcb.wakeup_time = 0;
+            }
             true
         } else {
             false
@@ -218,6 +228,11 @@ pub fn block_process(pid: usize) -> bool {
     } else {
         false
     }
+}
+
+/// Block a running process indefinitely
+pub fn block_process(pid: usize) -> bool {
+    block_process_timeout(pid, 0)
 }
 
 /// Get process state
@@ -341,6 +356,39 @@ pub fn update_process_memory(pid: usize, ttbr0_base: usize, asid: u16) -> bool {
     } else {
         false
     }
+}
+
+// ===== Timeout Management =====
+
+/// Get current system ticks
+pub fn get_current_ticks() -> u64 {
+    SYSTEM_TICKS.load(Ordering::Relaxed)
+}
+
+/// Increment system ticks (called from timer interrupt)
+pub fn increment_ticks() {
+    SYSTEM_TICKS.fetch_add(1, Ordering::Relaxed);
+}
+
+/// Check for timed-out processes and wake them
+pub fn check_timeouts() {
+    let current_ticks = get_current_ticks();
+    let mut table = PCB_TABLE.lock();
+    for slot in table.iter_mut() {
+        if let Some(ref mut pcb) = slot {
+            if pcb.state == ProcState::Blocked && pcb.wakeup_time > 0 && pcb.wakeup_time <= current_ticks {
+                pcb.state = ProcState::Ready;
+                pcb.wakeup_time = 0;
+                ready_queue_push(pcb.pid);
+            }
+        }
+    }
+}
+
+/// Timer tick handler (call from timer interrupt)
+pub fn timer_tick() {
+    increment_ticks();
+    check_timeouts();
 }
 
 // ===== Scheduling Support =====

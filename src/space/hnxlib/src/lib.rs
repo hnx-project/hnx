@@ -48,6 +48,22 @@ pub mod syscall {
             );
         }
     }
+
+    #[inline(always)]
+    pub fn spawn_service(path: &str) -> isize {
+        let ret: isize;
+        unsafe {
+            asm!(
+                "svc #0",
+                in("x8") 0x0103,  // HNX_SYS_SPAWN_SERVICE
+                in("x0") path.as_ptr() as usize,
+                in("x1") path.len(),
+                lateout("x0") ret,
+                options(nostack)
+            );
+        }
+        ret
+    }
 }
 
 #[macro_export]

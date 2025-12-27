@@ -25,7 +25,16 @@ pub fn get_initrd_slice() -> &'static [u8] {
         if INITRD_BASE == 0 || INITRD_SIZE == 0 {
             return &[];
         }
-        core::slice::from_raw_parts(INITRD_BASE as *const u8, INITRD_SIZE)
+        let slice = core::slice::from_raw_parts(INITRD_BASE as *const u8, INITRD_SIZE);
+
+        // Check for gzip magic number (0x1F 0x8B)
+        if slice.len() >= 2 && slice[0] == 0x1F && slice[1] == 0x8B {
+            crate::error!("loader/initrd: initrd is gzip compressed, kernel cannot decompress");
+            crate::error!("loader/initrd: please use uncompressed initrd or implement gzip decompression");
+            return &[];
+        }
+
+        slice
     }
 }
 

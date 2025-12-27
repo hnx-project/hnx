@@ -56,6 +56,7 @@ pub const HNX_SYS_CHANNEL_WRITE: u32 = 2;
 pub const HNX_SYS_CHANNEL_READ: u32 = 3;
 pub const HNX_SYS_PROCESS_CREATE: u32 = 257;
 pub const HNX_SYS_PROCESS_START: u32 = 258;
+pub const HNX_SYS_SPAWN_SERVICE: u32 = 259;
 pub const HNX_SYS_THREAD_CREATE: u32 = 513;
 pub const HNX_SYS_THREAD_START: u32 = 514;
 pub const HNX_SYS_VMO_CREATE: u32 = 769;

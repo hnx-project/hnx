@@ -328,6 +328,12 @@ config: version
 		echo "  Config not found. Run 'make configure' first."; \
 	fi
 
+doc:
+	@echo "========= Building documentation ========="
+	@cd src/kernel && cargo doc --no-deps --no-open --target-dir $(PROJECT_ROOT)/docs/kernel
+	@echo "========= Documentation built ========="
+	@echo ""
+
 # 帮助（更新版）
 help:
 	@echo "HNX Build System v$(VERSION)"

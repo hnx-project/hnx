@@ -234,11 +234,14 @@ pub fn endpoint_destroy(epid: u32) -> Result<(), IpcError> {
 
 /// Add a pending response entry for synchronous IPC
 fn add_pending_response(msg_id: u64, sender_pid: u32) -> Result<(), IpcError> {
+    crate::info!("add_pending_response: msg_id={}, sender_pid={}", msg_id, sender_pid);
     let mut pending = PENDING_RESPONSES.lock();
+    crate::info!("add_pending_response: lock acquired");
 
     // Find empty slot
-    for slot in pending.iter_mut() {
+    for (i, slot) in pending.iter_mut().enumerate() {
         if slot.is_none() {
+            crate::info!("add_pending_response: found empty slot at index {}", i);
             *slot = Some(PendingResponse {
                 msg_id,
                 sender_pid,
@@ -248,6 +251,7 @@ fn add_pending_response(msg_id: u64, sender_pid: u32) -> Result<(), IpcError> {
         }
     }
 
+    crate::warn!("add_pending_response: no empty slots, queue full");
     Err(IpcError::QueueFull)
 }
 
@@ -336,6 +340,14 @@ pub fn endpoint_send_sync(dst_epid: u32, mut msg: IpcMessage) -> Result<IpcRespo
     let mut endpoints = ENDPOINTS.lock();
     crate::info!("endpoint_send_sync: lock acquired, iterating endpoints");
 
+    // Debug: list all endpoints
+    crate::info!("endpoint_send_sync: existing endpoint IDs:");
+    for slot in endpoints.iter() {
+        if let Some(endpoint) = slot {
+            crate::info!("  - id={}, owner_pid={}, caps.write={}", endpoint.id, endpoint.owner_pid, endpoint.capabilities.write);
+        }
+    }
+
     for slot in endpoints.iter_mut() {
         if let Some(ref mut endpoint) = slot {
             crate::info!("endpoint_send_sync: checking endpoint id={}", endpoint.id);
@@ -411,36 +423,28 @@ pub fn endpoint_send_sync(dst_epid: u32, mut msg: IpcMessage) -> Result<IpcRespo
                 // Release endpoint lock before waiting for response
                 drop(endpoints); // Explicitly drop the lock
 
-                // Wait for response with timeout (5000ms)
-                const TIMEOUT_MS: u64 = 5000;
-                let start_time = crate::arch::timer::now_us();
-
-                loop {
-                    // Check if response is ready
-                    if let Some((_sender_pid, response)) = get_and_remove_pending_response(msg_id) {
-                        crate::info!("endpoint_send_sync: received response for msg_id={}, code={}", msg_id, response.code);
-                        return Ok(response);
-                    }
-
-                    // Check timeout
-                    let elapsed_us = crate::arch::timer::now_us().saturating_sub(start_time);
-                    if elapsed_us > TIMEOUT_MS * 1000 {
-                        crate::warn!("endpoint_send_sync: timeout waiting for response, msg_id={}", msg_id);
-                        // Clean up any remaining pending entry
-                        let _ = get_and_remove_pending_response(msg_id);
-                        return Err(IpcError::Timeout);
-                    }
-
-                    // Block the process until woken up by response
-                    crate::info!("endpoint_send_sync: blocking process {} waiting for response msg_id={}", current_pid, msg_id);
-                    let _ = crate::process::block_process(current_pid as usize);
-                    // When woken up, continue loop to check response again
+                // Wait for response with timeout using process blocking
+                const TIMEOUT_TICKS: u64 = 1000; // Adjust based on desired timeout
+                if !crate::process::block_process_timeout(current_pid as usize, TIMEOUT_TICKS) {
+                    // Failed to block, clean up pending response
+                    let _ = get_and_remove_pending_response(msg_id);
+                    return Err(IpcError::SystemError);
+                }
+                // Process will be woken up either by response or timeout
+                // When resumed, check if response is available
+                if let Some((_sender_pid, response)) = get_and_remove_pending_response(msg_id) {
+                    crate::info!("endpoint_send_sync: received response for msg_id={}, code={}", msg_id, response.code);
+                    return Ok(response);
+                } else {
+                    crate::warn!("endpoint_send_sync: timeout waiting for response, msg_id={}", msg_id);
+                    return Err(IpcError::Timeout);
                 }
             }
         }
     }
 
     // Clean up pending response if endpoint not found
+    crate::warn!("endpoint_send_sync: endpoint {} not found, cleaning up pending response msg_id={}", dst_epid, msg_id);
     let _ = get_and_remove_pending_response(msg_id);
     Err(IpcError::InvalidEndpoint)
 }
@@ -746,6 +750,14 @@ pub fn endpoint_recv(id: u32) -> Option<IpcMsg> {
         }
         Err(_) => None,
     }
+}
+
+/// Check if an endpoint with the given ID exists
+pub fn endpoint_exists(epid: u32) -> bool {
+    let endpoints = ENDPOINTS.lock();
+    endpoints.iter().any(|slot| {
+        slot.as_ref().map_or(false, |endpoint| endpoint.id == epid)
+    })
 }
 
 #[cfg(test)]

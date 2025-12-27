@@ -109,28 +109,21 @@ pub fn sys_write(fd: usize, buf_user: usize, len: usize) -> SysResult {
         );
     }
     crate::info!("sys_write: copy completed, first byte=0x{:X}", data[0]);
-    
-    crate::info!("sys_write: delegating to VFS service, fd={}, len={}", fd, write_len);
 
-    // Delegate to VFS service via IPC
-    let ipc_result = ipc_delegate(
-        VFS_EPID,
-        ServiceOp::VfsWrite,
-        |req| req.with_u32(fd as u32).with_str(core::str::from_utf8(&data[..write_len]).unwrap_or("[invalid utf8]"))
-    );
-
-    // If IPC succeeds, return the result
-    if ipc_result >= 0 {
-        return ipc_result;
+    // TEMPORARY: Direct console output for stdout (fd=1) until IPC is working
+    // TODO: Restore IPC delegation once VFS service is running
+    if fd == 1 {
+        crate::info!("sys_write: using direct console output for stdout (fd=1)");
+        use crate::console::write_raw;
+        let s = core::str::from_utf8(&data[..write_len]).unwrap_or("[invalid utf8]");
+        write_raw(s);
+        write_raw("\n");
+        return write_len as isize;
     }
 
-    // IPC failed, fall back to console output
-    crate::warn!("sys_write: IPC delegation failed ({}), falling back to console output", ipc_result);
-    use crate::console::write_raw;
-    let s = core::str::from_utf8(&data[..write_len]).unwrap_or("[invalid utf8]");
-    write_raw(s);
-    write_raw("\n");
-    write_len as isize
+    // For other file descriptors, return error (VFS service not available)
+    crate::warn!("sys_write: VFS service not available for fd={}, returning ENOSYS", fd);
+    -1 // ENOSYS
 }
 
 /// Close file - Delegate to VFS service

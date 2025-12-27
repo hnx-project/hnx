@@ -2,6 +2,7 @@ use crate::debug;
 use crate::info;
 use crate::core::scheduler;
 use core::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use hnx_abi;
 
 static PROGRAM_BREAK: AtomicUsize = AtomicUsize::new(0);
 #[no_mangle]
@@ -125,20 +126,29 @@ pub extern "C" fn rust_svc_handler(esr: u64, elr: u64, far: u64, saved_x8: u64, 
                   saved_x8, a0, a1, a2, a3, a4, a5, sp);
             info!("HNX_SYS_WRITE={}", hnx_abi::HNX_SYS_WRITE);
             // Use saved x8 as system call number
-            // If it doesn't look like a valid syscall number, default to 0 for backward compatibility
-            let syscall_num = if saved_x8 == 0x1001 || saved_x8 == 0x1002 || saved_x8 == 0x1003 || saved_x8 == 0x1004 || saved_x8 == 0x1005 || saved_x8 == 0x1007 {
-                saved_x8 as u32
+            // Check if it's a valid syscall number from abi
+            let saved_x8_u32 = saved_x8 as u32;
+            let syscall_num = if saved_x8_u32 == hnx_abi::HNX_SYS_WRITE
+                || saved_x8_u32 == hnx_abi::HNX_SYS_READ
+                || saved_x8_u32 == hnx_abi::HNX_SYS_OPEN
+                || saved_x8_u32 == hnx_abi::HNX_SYS_CLOSE
+                || saved_x8_u32 == hnx_abi::HNX_SYS_EXIT
+                || saved_x8_u32 == hnx_abi::HNX_SYS_YIELD
+                || saved_x8_u32 == hnx_abi::HNX_SYS_PROCESS_CREATE
+                || saved_x8_u32 == hnx_abi::HNX_SYS_SPAWN_SERVICE
+                || saved_x8_u32 == hnx_abi::HNX_SYS_IPC_WAIT
+                || saved_x8_u32 == hnx_abi::HNX_SYS_IPC_WAKE
+                || saved_x8_u32 == hnx_abi::HNX_SYS_EP_CREATE
+                || saved_x8_u32 == hnx_abi::HNX_SYS_EP_SEND
+                || saved_x8_u32 == hnx_abi::HNX_SYS_EP_RECV {
+                saved_x8_u32
             } else {
                 info!("arch/aarch64 svc#0: saved_x8=0x{:X} not recognized, defaulting to 0", saved_x8);
                 0
             };
             info!("arch/aarch64 svc#0 using syscall_num=0x{:X} (saved_x8=0x{:X})", syscall_num, saved_x8);
-            let mut ret = crate::process::syscall::dispatch(syscall_num, a0, a1, a2, a3, a4, a5) as u64;
+            let ret = crate::process::syscall::dispatch(syscall_num, a0, a1, a2, a3, a4, a5) as u64;
             info!("arch/aarch64 svc#0 ret=0x{:X}", ret);
-            if ret == 0xFFFFFFFFFFFFFFFF {
-                ret = 0;
-                info!("arch/aarch64 svc#0 overriding ret to 0");
-            }
             unsafe {
                 core::arch::asm!("mov x0, {r}", r = in(reg) ret);
             }

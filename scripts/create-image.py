@@ -70,28 +70,35 @@ class ImageBuilder:
             return self._create_full_initrd()
     
     def _create_simple_initrd(self):
-        """创建简单的 init-only initrd（仅包含 init 二进制文件）"""
-        print("Creating simple init-only initrd...")
-        
+        """创建简单的 initrd（包含 init 和核心服务）"""
+        print("Creating simple initrd with core services...")
+
         # 创建 initrd 目录
         initrd_root = self.temp_dir / "initrd"
         initrd_root.mkdir(parents=True, exist_ok=True)
         print(f"  Created initrd root directory, {initrd_root}")
-        
+
+        # 创建 bin 目录用于存放服务
+        bin_dir = initrd_root / "bin"
+        bin_dir.mkdir(exist_ok=True)
+
         # 查找并复制 init 二进制文件
         init_found = self._copy_init_binary(initrd_root)
-        
+
         if not init_found:
             raise FileNotFoundError("No init binary found in space directory for simple initrd")
-        
+
+        # 查找并复制核心服务二进制文件
+        self._copy_core_services(bin_dir)
+
         # 打包为 cpio 归档
         if self.no_compress:
             initrd_path = self.temp_dir / "initrd.cpio"
         else:
             initrd_path = self.temp_dir / "initrd.cpio.gz"
-        
+
         self._pack_cpio(initrd_root, initrd_path, compress=not self.no_compress)
-        
+
         print(f"Simple initrd created: {initrd_path}")
         return initrd_path
     
@@ -168,7 +175,46 @@ class ImageBuilder:
         except Exception as e:
             print(f"  Warning: Failed to copy init binary: {e}")
             return False
-    
+
+    def _copy_core_services(self, bin_dir):
+        """复制核心服务二进制文件到 initrd 的 bin 目录"""
+        print("Looking for core service binaries...")
+
+        # 核心服务列表
+        core_services = ["loader-service", "vfs-service"]
+
+        for service_name in core_services:
+            service_binary = None
+
+            # 在 release/debug 目录中查找
+            for build_type in ["release", "debug"]:
+                service_path = self.space_dir / build_type / service_name
+                if service_path.exists() and service_path.is_file():
+                    service_binary = service_path
+                    print(f"  Found {service_name}: {service_path} ({build_type})")
+                    break
+
+            # 如果没有找到，尝试直接在 space_dir 查找
+            if not service_binary:
+                service_path = self.space_dir / service_name
+                if service_path.exists() and service_path.is_file():
+                    service_binary = service_path
+                    print(f"  Found {service_name}: {service_path}")
+
+            if not service_binary:
+                print(f"  Warning: No {service_name} binary found in space directory")
+                continue
+
+            # 复制到 bin 目录
+            dest_path = bin_dir / service_name
+            try:
+                shutil.copy2(service_binary, dest_path)
+                dest_path.chmod(0o755)
+                size = dest_path.stat().st_size
+                print(f"  Copied {service_name}: {size:,} bytes")
+            except Exception as e:
+                print(f"  Warning: Failed to copy {service_name}: {e}")
+
     def _copy_space_programs(self, initrd_root):
         """复制用户空间程序到 initrd"""
         print("Copying user space programs...")

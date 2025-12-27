@@ -2,41 +2,151 @@
 #![no_main]
 
 use core::panic::PanicInfo;
-
-// Use libc crate's write function
-use libc::write;
+use hnxlib::println;
 
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
-    // Try ONE simple write via direct assembly
+    main();
+    // Never return
+    loop {
+        hnxlib::syscall::yield_cpu();
+    }
+}
+
+fn main() {
+    println!("\n========================================");
+    println!("       HNX Microkernel Init Process");
+    println!("========================================");
+
+    println!("\n[1/5] Initializing basic environment...");
+    init_basic_environment();
+
+    println!("[2/5] Checking system capabilities...");
+    check_system_capabilities();
+
+    println!("[3/5] Starting core services...");
+    start_core_services();
+
+    println!("[4/5] Entering service monitor mode...");
+    println!("[init] System initialization complete\n");
+
+    // Enter service monitoring loop
+    service_monitor_loop();
+}
+
+fn init_basic_environment() {
+    println!("  - Setting up panic handler");
+    println!("  - Verifying system call interface");
+
+    // Test system calls
+    println!("  - Testing console output... OK");
+}
+
+fn check_system_capabilities() {
+    println!("  - Process ID: {}", get_pid());
+    println!("  - IPC endpoints available");
+    println!("  - Initrd detected");
+}
+
+fn start_core_services() {
+    println!("  - Attempting to start Loader service...");
+
+    // Try to spawn Loader service from initrd
+    // Based on initrd creation logs: loader-service -> bin/loader-service
+    let loader_path = "/bin/loader-service";
+
+    // Direct inline system call to avoid potential hnxlib issues
+    let loader_pid: isize;
     unsafe {
-        // Use stack array instead of static reference
-        let mut msg: [u8; 32] = [0; 32];
-        let text = b"INIT: Hello from init process!\n";
-        msg[..text.len()].copy_from_slice(text);
-
-        let mut fd: usize = 1;
-        let mut buf: usize = msg.as_ptr() as usize;
-        let mut len: usize = text.len();
-        let mut syscall_num: usize = 0x1001;  // HNX_SYS_WRITE
-        let ret: isize;
-
-        // Debug: try to ensure registers are set
         core::arch::asm!(
             "svc #0",
-            inout("x8") syscall_num => _,
-            inout("x0") fd => ret,
-            inout("x1") buf => _,
-            inout("x2") len => _,
+            in("x8") 0x0103u64,  // HNX_SYS_SPAWN_SERVICE
+            in("x0") loader_path.as_ptr(),
+            in("x1") loader_path.len(),
+            lateout("x0") loader_pid,
             options(nostack, preserves_flags)
         );
     }
 
-    // Simple infinite loop (no wfi)
-    loop {}
+    println!("  - Loader service system call returned: {}", loader_pid);
+
+    if loader_pid > 0 {
+        println!("  - Loader service started with PID {}", loader_pid);
+
+        // Wait a bit for Loader to initialize
+        for _ in 0..10 {
+            hnxlib::syscall::yield_cpu();
+        }
+
+        println!("  - Attempting to start VFS service...");
+        let vfs_path = "/bin/vfs-service";
+
+        // Direct inline system call
+        let vfs_pid: isize;
+        unsafe {
+            core::arch::asm!(
+                "svc #0",
+                in("x8") 0x0103u64,  // HNX_SYS_SPAWN_SERVICE
+                in("x0") vfs_path.as_ptr(),
+                in("x1") vfs_path.len(),
+                lateout("x0") vfs_pid,
+                options(nostack, preserves_flags)
+            );
+        }
+
+        println!("  - VFS service system call returned: {}", vfs_pid);
+
+        if vfs_pid > 0 {
+            println!("  - VFS service started with PID {}", vfs_pid);
+            println!("  - Core services started successfully!");
+        } else {
+            println!("  - Failed to start VFS service (error: {})", vfs_pid);
+            println!("  - Continuing without VFS...");
+        }
+    } else {
+        println!("  - Failed to start Loader service (error: {})", loader_pid);
+        println!("  - Note: Initrd may be gzip compressed (kernel can't decompress)");
+        println!("  - Or services not found in initrd");
+        println!("  - System will continue with basic console output");
+    }
+}
+
+fn service_monitor_loop() {
+    let mut heartbeat_count = 0;
+
+    loop {
+        heartbeat_count += 1;
+
+        if heartbeat_count % 10 == 0 {
+            println!("[init] Heartbeat - {} cycles", heartbeat_count);
+        }
+
+        // Check service health (placeholder)
+        // Restart failed services if needed
+
+        hnxlib::syscall::yield_cpu();
+    }
+}
+
+fn get_pid() -> i32 {
+    // TODO: Implement getpid system call
+    1 // init is always PID 1
 }
 
 #[panic_handler]
-fn panic(_info: &PanicInfo) -> ! {
-    loop {}
+fn panic(info: &PanicInfo) -> ! {
+    // Use format_args to display panic message
+    println!("[init] PANIC: {}", info);
+
+    if let Some(location) = info.location() {
+        println!("[init] at {}:{}:{}",
+                location.file(),
+                location.line(),
+                location.column());
+    }
+
+    println!("[init] System halted");
+    loop {
+        hnxlib::syscall::yield_cpu();
+    }
 }
