@@ -246,17 +246,22 @@ fn pop_message_from_queue(queue: &mut [Option<IpcMessage>; 32], head: &mut usize
 
 /// Send a message synchronously
 pub fn endpoint_send_sync(dst_epid: u32, mut msg: IpcMessage) -> Result<IpcResponse, IpcError> {
+    crate::info!("endpoint_send_sync: sending to endpoint {}, op={}", dst_epid, msg.op);
     let current_pid = super::scheduler::current_pid() as u32;
     msg.src_pid = current_pid;
     msg.dst_epid = dst_epid;
     msg.timestamp = crate::arch::timer::now_us();
     
     // Get destination endpoint
+    crate::info!("endpoint_send_sync: acquiring ENDPOINTS lock");
     let mut endpoints = ENDPOINTS.lock();
-    
+    crate::info!("endpoint_send_sync: lock acquired, iterating endpoints");
+
     for slot in endpoints.iter_mut() {
         if let Some(ref mut endpoint) = slot {
+            crate::info!("endpoint_send_sync: checking endpoint id={}", endpoint.id);
             if endpoint.id == dst_epid {
+                crate::info!("endpoint_send_sync: found endpoint {}, owner_pid={}", dst_epid, endpoint.owner_pid);
                 // Check write permission
                 if !endpoint.capabilities.write && endpoint.owner_pid != current_pid {
                     return Err(IpcError::PermissionDenied);

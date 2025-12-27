@@ -58,23 +58,24 @@ impl From<IpcError> for DelegateError {
 /// ```
 pub fn ipc_call_service(request: ServiceRequest) -> Result<ServiceResponse, DelegateError> {
     let msg = request.build();
-    
-    crate::debug!(
+
+    crate::info!(
         "ipc_delegate: sending request to endpoint {} op={}",
         msg.dst_epid,
         msg.op
     );
-    
+
     // Send IPC message and wait for response
     match endpoint_send_sync(msg.dst_epid, msg) {
         Ok(ipc_resp) => {
             let resp = ServiceResponse::from_ipc(ipc_resp);
-            
-            crate::debug!(
+            crate::info!("ipc_delegate: created ServiceResponse");
+
+            crate::info!(
                 "ipc_delegate: received response code={}",
                 resp.code()
             );
-            
+
             Ok(resp)
         }
         Err(ipc_err) => {
@@ -96,16 +97,23 @@ pub fn ipc_delegate(
     op: ServiceOp,
     build_request: impl FnOnce(ServiceRequest) -> ServiceRequest,
 ) -> isize {
+    crate::info!("ipc_delegate: starting delegation to endpoint {}", epid);
     let request = build_request(ServiceRequest::new(epid, op));
-    
+    crate::info!("ipc_delegate: request built");
+
     match ipc_call_service(request) {
         Ok(resp) => {
+            crate::info!("ipc_delegate: ipc_call_service returned Ok");
             if resp.is_ok() {
                 // Try to read u32 response as file descriptor / handle
-                resp.read_u32().unwrap_or(0) as isize
+                let result = resp.read_u32().unwrap_or(0) as isize;
+                crate::info!("ipc_delegate: returning success result {}", result);
+                result
             } else {
                 // Service returned error code
-                resp.code() as isize
+                let result = resp.code() as isize;
+                crate::info!("ipc_delegate: returning error result {}", result);
+                result
             }
         }
         Err(DelegateError::ServiceUnavailable) => {
@@ -117,7 +125,9 @@ pub fn ipc_delegate(
             -2 // EIO or similar
         }
         Err(DelegateError::ServiceError(code)) => {
-            code as isize
+            let result = code as isize;
+            crate::info!("ipc_delegate: service error code {}", result);
+            result
         }
         Err(DelegateError::InvalidResponse) => {
             crate::warn!("ipc_delegate: invalid response");

@@ -112,13 +112,21 @@ pub fn sys_write(fd: usize, buf_user: usize, len: usize) -> SysResult {
     
     crate::info!("sys_write: delegating to VFS service, fd={}, len={}", fd, write_len);
 
-    let result = ipc_delegate(
-        VFS_EPID,
-        ServiceOp::VfsWrite,
-        |req| req.with_u32(fd as u32).with_bytes(&data[..write_len])
-    );
+    // TEMPORARY: Direct console output for testing
+    // TODO: Restore IPC delegation once IPC is fixed
+    crate::info!("sys_write: TEMPORARY - writing directly to console");
 
-    crate::info!("sys_write: ipc_delegate returned {}", result);
+    // Write to console
+    use crate::console::write_raw;
+
+    // Convert data to string slice
+    let s = core::str::from_utf8(&data[..write_len]).unwrap_or("[invalid utf8]");
+    write_raw(s);
+    // Ensure newline
+    write_raw("\n");
+
+    let result = write_len as isize;
+    crate::info!("sys_write: wrote {} bytes to console, returning {}", write_len, result);
     result
 }
 
