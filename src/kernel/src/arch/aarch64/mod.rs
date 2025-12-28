@@ -42,7 +42,7 @@ pub fn exec_preflight(elr: usize) {
         core::arch::asm!("mrs {t0}, ttbr0_el1", t0 = out(reg) tt0);
         core::arch::asm!("mrs {t1}, ttbr1_el1", t1 = out(reg) tt1);
         core::arch::asm!("mrs {sp}, sp_el0", sp = out(reg) sp_el0);
-        crate::info!(
+        crate::debug!(
             "arch/aarch64 exec preflight: ELR=0x{:016X} SPSR=0x{:016X} VBAR=0x{:016X} CurrentEL=0x{:016X} SP_EL0=0x{:016X} TTBR0=0x{:016X} TTBR1=0x{:016X}",
             elr as u64, spsr, vbar, cel, sp_el0, tt0, tt1
         );

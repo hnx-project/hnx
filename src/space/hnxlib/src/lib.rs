@@ -96,7 +96,7 @@ macro_rules! println {
     ($($arg:tt)*) => {{
         use core::fmt::Write;
         let mut writer = $crate::DebugWriter;
-        write!(&mut writer, $($arg)*).unwrap();
+        let _ = core::fmt::write(&mut writer, format_args!($($arg)*));
         writer.flush();
     }};
 }
@@ -106,7 +106,7 @@ macro_rules! print {
     ($($arg:tt)*) => {{
         use core::fmt::Write;
         let mut writer = $crate::DebugWriter;
-        write!(&mut writer, $($arg)*).unwrap();
+        let _ = core::fmt::write(&mut writer, format_args!($($arg)*));
     }};
 }
 

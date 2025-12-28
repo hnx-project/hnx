@@ -65,7 +65,7 @@ fn init_phase1_hardware() {
     crate::drivers::init_from_dtb(&boot_info);
     crate::console::driver_ready();
     
-    println_raw!("======= HNX Microkernel Booting =======");
+    crate::info!("======= HNX Microkernel Booting =======");
     crate::info!("Kernel: {} {} ({})", KERNEL_NAME, VERSION, ARCH);
     
     // Initialize architecture-specific components (interrupts, timer, MMU)
