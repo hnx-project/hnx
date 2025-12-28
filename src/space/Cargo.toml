@@ -7,6 +7,10 @@ members = [
     "services/vfs-service",
     "services/init",
     "services/loader-service",
+    # 核心服务
+    "services/procmgr-service",
+    "services/ipcrouter-service",
+    "services/echo-service",
     #"services/filesystem-server",
     #"services/network-server",
     #"services/device-driver-server",

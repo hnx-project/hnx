@@ -6,6 +6,9 @@ pub mod safe_syscall;
 // 内存屏障模块
 pub mod barrier;
 
+// IPC高级抽象模块
+pub mod ipc;
+
 // 传统系统调用模块（向后兼容）
 pub mod syscall {
     use core::arch::asm;
@@ -17,6 +20,11 @@ pub mod syscall {
         debug_print,
         yield_cpu,
         spawn_service,
+        ipc_wait,
+        ipc_wake,
+        ep_create,
+        ep_send,
+        ep_recv,
     };
 
     // 旧的实现保留作为备份

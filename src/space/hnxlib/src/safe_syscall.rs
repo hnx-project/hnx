@@ -209,7 +209,7 @@ pub fn debug_print(s: &str) {
     if s.is_empty() {
         return;
     }
-    
+
     unsafe {
         let _ = syscall_3(
             HNX_SYS_WRITE,
@@ -217,6 +217,57 @@ pub fn debug_print(s: &str) {
             s.as_ptr() as usize,
             s.len(),
         );
+    }
+}
+
+/// 安全的 ipc_wait 系统调用
+#[inline(never)]
+pub fn ipc_wait() -> isize {
+    unsafe {
+        syscall_0(HNX_SYS_IPC_WAIT)
+    }
+}
+
+/// 安全的 ipc_wake 系统调用
+#[inline(never)]
+pub fn ipc_wake(pid: usize) -> isize {
+    unsafe {
+        syscall_1(HNX_SYS_IPC_WAKE, pid)
+    }
+}
+
+/// 安全的 ep_create 系统调用 - 创建新的IPC端点
+#[inline(never)]
+pub fn ep_create() -> isize {
+    unsafe {
+        syscall_0(HNX_SYS_EP_CREATE)
+    }
+}
+
+/// 安全的 ep_send 系统调用 - 通过端点句柄发送消息
+#[inline(never)]
+pub fn ep_send(handle: usize, op: u16, buf: &[u8]) -> isize {
+    unsafe {
+        syscall_4(
+            HNX_SYS_EP_SEND,
+            handle,
+            op as usize,
+            buf.as_ptr() as usize,
+            buf.len(),
+        )
+    }
+}
+
+/// 安全的 ep_recv 系统调用 - 通过端点句柄接收消息
+#[inline(never)]
+pub fn ep_recv(handle: usize, buf: &mut [u8]) -> isize {
+    unsafe {
+        syscall_3(
+            HNX_SYS_EP_RECV,
+            handle,
+            buf.as_mut_ptr() as usize,
+            buf.len(),
+        )
     }
 }
 

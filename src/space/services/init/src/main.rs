@@ -50,44 +50,50 @@ fn check_system_capabilities() {
 }
 
 fn start_core_services() {
-    println!("  - Attempting to start Loader service...");
+    println!("  - Starting core services...");
 
-    // Try to spawn Loader service from initrd
-    // Based on initrd creation logs: loader-service -> bin/loader-service
-    let loader_path = "/bin/loader-service";
+    // 服务启动顺序
+    let services = [
+        ("loader-service", "/bin/loader-service"),
+        ("vfs-service", "/bin/vfs-service"),
+        ("ipcrouter-service", "/bin/ipcrouter-service"),
+        ("procmgr-service", "/bin/procmgr-service"),
+        ("echo-service", "/bin/echo-service"),
+    ];
 
-    // Use hnxlib wrapper
-    let loader_pid: isize = hnxlib::syscall::spawn_service(loader_path);
-    println!("  - Loader service system call returned: {}", loader_pid);
+    let mut started_count = 0;
 
-    if loader_pid > 0 {
-        println!("  - Loader service started with PID {}", loader_pid);
+    for (name, path) in services.iter() {
+        println!("  - Attempting to start {}...", name);
 
-        // Wait a bit for Loader to initialize
-        for _ in 0..10 {
-            hnxlib::syscall::yield_cpu();
-        }
+        let pid: isize = hnxlib::syscall::spawn_service(path);
+        println!("    - System call returned: {}", pid);
 
-        println!("  - Attempting to start VFS service...");
-        let vfs_path = "/bin/vfs-service";
+        if pid > 0 {
+            println!("    - {} started with PID {}", name, pid);
+            started_count += 1;
 
-        // Direct inline system call
-        let vfs_pid: isize = hnxlib::syscall::spawn_service(vfs_path);
-
-        println!("  - VFS service system call returned: {}", vfs_pid);
-
-        if vfs_pid > 0 {
-            println!("  - VFS service started with PID {}", vfs_pid);
-            println!("  - Core services started successfully!");
+            // 等待服务初始化
+            for _ in 0..5 {
+                hnxlib::syscall::yield_cpu();
+            }
         } else {
-            println!("  - Failed to start VFS service (error: {})", vfs_pid);
-            println!("  - Continuing without VFS...");
+            println!("    - Failed to start {} (error: {})", name, pid);
+
+            // 如果是关键服务，记录警告但继续
+            if *name == "loader-service" || *name == "vfs-service" {
+                println!("    - Warning: {} is a critical service", name);
+            }
         }
+    }
+
+    println!("  - Started {}/{} core services", started_count, services.len());
+
+    if started_count >= 3 {
+        println!("  - Core services started successfully!");
     } else {
-        println!("  - Failed to start Loader service (error: {})", loader_pid);
-        println!("  - Note: Initrd may be gzip compressed (kernel can't decompress)");
-        println!("  - Or services not found in initrd");
-        println!("  - System will continue with basic console output");
+        println!("  - Warning: Some core services failed to start");
+        println!("  - System will continue with available services");
     }
 }
 
