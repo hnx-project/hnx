@@ -154,7 +154,7 @@ make distclean
 
 ### 代码风格
 - **Rust:** 遵循 Rust 标准格式化 (`cargo fmt`)
-- **C:** 内核头文件遵循 Linux 内核约定
+- **C:** 内核头文件遵循 Unix 内核约定
 - **Python:** 遵循 PEP 8 配置脚本规范
 
 ### 跨架构开发约定
