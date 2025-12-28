@@ -1,10 +1,28 @@
 #![no_std]
+
+// 安全系统调用模块
+pub mod safe_syscall;
+
+// 内存屏障模块
+pub mod barrier;
+
+// 传统系统调用模块（向后兼容）
 pub mod syscall {
     use core::arch::asm;
     use hnx_abi::{HNX_SYS_WRITE, HNX_SYS_YIELD, HNX_SYS_SPAWN_SERVICE};
 
+    // 重新导出安全系统调用作为主要实现
+    pub use crate::safe_syscall::{
+        write,
+        debug_print,
+        yield_cpu,
+        spawn_service,
+    };
+
+    // 旧的实现保留作为备份
+    #[doc(hidden)]
     #[inline(always)]
-    pub fn write(fd: i32, buf: &[u8]) -> isize {
+    pub fn write_old(fd: i32, buf: &[u8]) -> isize {
         let ret: isize;
         unsafe {
             asm!(
@@ -21,8 +39,9 @@ pub mod syscall {
         ret
     }
 
+    #[doc(hidden)]
     #[inline(always)]
-    pub fn debug_print(s: &str) {
+    pub fn debug_print_old(s: &str) {
         let _ret: isize;
         unsafe {
             asm!(
@@ -38,8 +57,9 @@ pub mod syscall {
         }
     }
 
+    #[doc(hidden)]
     #[inline(always)]
-    pub fn yield_cpu() {
+    pub fn yield_cpu_old() {
         let _ret: isize;
         unsafe {
             asm!(
@@ -52,8 +72,9 @@ pub mod syscall {
         }
     }
 
+    #[doc(hidden)]
     #[inline(never)]
-    pub fn spawn_service(path: &str) -> isize {
+    pub fn spawn_service_old(path: &str) -> isize {
         let ret: isize;
         unsafe {
             asm!(
