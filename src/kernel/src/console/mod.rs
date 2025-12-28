@@ -145,7 +145,7 @@ pub mod loglvl {
         Warn = 3,
         Error = 4,
     }
-    static LOG_LEVEL: AtomicU8 = AtomicU8::new(LogLevel::Info as u8);
+    static LOG_LEVEL: AtomicU8 = AtomicU8::new(LogLevel::Warn as u8);
     pub fn set_log_level(level: LogLevel) {
         LOG_LEVEL.store(level as u8, Ordering::Relaxed)
     }
