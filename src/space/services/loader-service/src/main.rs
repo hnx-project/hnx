@@ -2,24 +2,11 @@
 #![no_main]
 
 use core::panic::PanicInfo;
-use hnx_abi::*;
-
-mod elf;
 
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
-    // Simple debug output using system call
-    let msg = "[loader-service] Started!\n";
-    unsafe {
-        core::arch::asm!(
-            "svc #0",
-            in("x8") HNX_SYS_WRITE,
-            in("x0") 1usize,   // stdout
-            in("x1") msg.as_ptr() as usize,
-            in("x2") msg.len(),
-            options(nostack)
-        );
-    }
+    // 最简单版本：不做任何事，只是循环
+    // 测试进程是否能正常启动
 
     loop {
         unsafe { core::arch::asm!("wfi"); }

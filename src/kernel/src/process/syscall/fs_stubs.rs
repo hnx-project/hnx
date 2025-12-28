@@ -117,7 +117,8 @@ pub fn sys_write(fd: usize, buf_user: usize, len: usize) -> SysResult {
         use crate::console::write_raw;
         let s = core::str::from_utf8(&data[..write_len]).unwrap_or("[invalid utf8]");
         write_raw(s);
-        write_raw("\n");
+        // Note: Do NOT add newline here - caller should handle newlines
+        // write_raw("\n");
         return write_len as isize;
     }
 

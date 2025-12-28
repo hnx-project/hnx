@@ -3,6 +3,7 @@
 
 use core::panic::PanicInfo;
 use hnxlib::println;
+use hnx_abi::*;
 
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
@@ -14,28 +15,6 @@ pub extern "C" fn _start() -> ! {
 }
 
 fn main() {
-    // Test println formatting
-    println!("Test println: Number {}", 42);
-    println!("Test println: String {}", "test");
-
-    // Test function return value formatting
-    let pid = get_pid();
-    println!("PID from function: {}", pid);
-
-    // More integer formatting tests
-    let x: i32 = 123;
-    println!("Local variable i32: {}", x);
-
-    let y: isize = 456;
-    println!("Local variable isize: {}", y);
-
-    // Test arithmetic
-    println!("Arithmetic: {}", 1 + 2);
-
-    // Test function that returns i32
-    fn test_func() -> i32 { 789 }
-    println!("Function returning i32: {}", test_func());
-
     println!("\n========================================");
     println!("       HNX Microkernel Init Process");
     println!("========================================");
@@ -77,8 +56,9 @@ fn start_core_services() {
     // Based on initrd creation logs: loader-service -> bin/loader-service
     let loader_path = "/bin/loader-service";
 
-    // Direct inline system call to avoid potential hnxlib issues
+    // Use hnxlib wrapper
     let loader_pid: isize = hnxlib::syscall::spawn_service(loader_path);
+    println!("  - Loader service system call returned: {}", loader_pid);
 
     if loader_pid > 0 {
         println!("  - Loader service started with PID {}", loader_pid);

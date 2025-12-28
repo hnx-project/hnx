@@ -149,8 +149,14 @@ pub extern "C" fn rust_svc_handler(esr: u64, elr: u64, far: u64, saved_x8: u64, 
             info!("arch/aarch64 svc#0 using syscall_num=0x{:X} (saved_x8=0x{:X})", syscall_num, saved_x8);
             let ret = crate::process::syscall::dispatch(syscall_num, a0, a1, a2, a3, a4, a5) as u64;
             info!("arch/aarch64 svc#0 ret=0x{:X}", ret);
+            // Update saved x0 on stack so it gets restored on exception return
             unsafe {
-                core::arch::asm!("mov x0, {r}", r = in(reg) ret);
+                let saved_x0_ptr = (sp + 144) as *mut usize;
+                let old_value = saved_x0_ptr.read();
+                info!("DEBUG: Before update - saved_x0_ptr=0x{:X}, old_value=0x{:X}, ret=0x{:X}", saved_x0_ptr as usize, old_value, ret);
+                saved_x0_ptr.write(ret as usize);
+                let new_value = saved_x0_ptr.read();
+                info!("DEBUG: After update - new_value=0x{:X}", new_value);
             }
         } else {
             match imm {
@@ -172,8 +178,10 @@ pub extern "C" fn rust_svc_handler(esr: u64, elr: u64, far: u64, saved_x8: u64, 
                         0,
                         0,
                     ) as u64;
+                    // Update saved x0 on stack (same offset as above)
                     unsafe {
-                        core::arch::asm!("mov x0, {r}", r = in(reg) ret);
+                        let saved_x0_ptr = (saved_sp as usize + 144) as *mut usize;
+                        saved_x0_ptr.write(ret as usize);
                     }
                 }
                 2 => {

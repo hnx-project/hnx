@@ -97,6 +97,7 @@ macro_rules! println {
         use core::fmt::Write;
         let mut writer = $crate::DebugWriter;
         let _ = core::fmt::write(&mut writer, format_args!($($arg)*));
+        let _ = writer.write_str("\n");
         writer.flush();
     }};
 }
