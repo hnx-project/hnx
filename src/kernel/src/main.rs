@@ -88,7 +88,7 @@ fn init_phase2_memory() {
     memory::init(boot_info);
     
     // Initialize kernel heap allocator
-    crate::info!("Initializing buddy allocator...");
+    crate::debug!("Initializing buddy allocator...");
     let heap_start = 0x40000000; // TODO: Get from device tree
     let heap_size = 0x10000000;  // TODO: Get from device tree
     unsafe {
@@ -108,13 +108,13 @@ fn init_phase3_processes() {
     crate::info!("Initializing process subsystem...");
     process::init();
     
-    crate::info!("Initializing IPC service delegation...");
+    crate::debug!("Initializing IPC service delegation...");
     if let Err(_) = ipc_services::delegate::init() {
         crate::warn!("Failed to initialize IPC service endpoints (services won't be available)");
     }
     
     let boot_info = crate::arch::boot::get_boot_info();
-    crate::info!("Initializing initrd accessor (dtb_ptr=0x{:X})...", boot_info.dtb_ptr);
+    crate::debug!("Initializing initrd accessor (dtb_ptr=0x{:X})...", boot_info.dtb_ptr);
     loader::initrd::init(boot_info.dtb_ptr as usize);
     
     crate::info!("Process and IPC subsystems ready");
@@ -133,9 +133,9 @@ fn init_phase4_scheduler() -> ! {
     match loader::bootstrap_init_process() {
         Ok((entry, sp, pt_base)) => {
             crate::info!("Init process loaded successfully!");
-            crate::info!("  Entry: 0x{:X}", entry);
-            crate::info!("  Stack: 0x{:X}", sp);
-            crate::info!("  PT:    0x{:X}", pt_base);
+            crate::debug!("  Entry: 0x{:X}", entry);
+            crate::debug!("  Stack: 0x{:X}", sp);
+            crate::debug!("  PT:    0x{:X}", pt_base);
             
             let pid = process::create_process(128).expect("Failed to create init process");
             process::update_process_memory(pid as usize, pt_base, 0);
@@ -208,14 +208,14 @@ fn print_cpu_state() {
     unsafe {
         ::core::arch::asm!("mrs {v}, vbar_el1", v = out(reg) vbar);
     }
-    crate::info!("VBAR_EL1 = 0x{:016X}", vbar);
+    crate::debug!("VBAR_EL1 = 0x{:016X}", vbar);
     
     // CurrentEL
     let mut cur_el: u64;
     unsafe {
         ::core::arch::asm!("mrs {c}, CurrentEL", c = out(reg) cur_el);
     }
-    crate::info!("CurrentEL = 0x{:016X}", cur_el);
+    crate::debug!("CurrentEL = 0x{:016X}", cur_el);
 }
 
 #[no_mangle]

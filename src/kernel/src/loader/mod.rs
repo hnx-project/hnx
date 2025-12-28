@@ -44,12 +44,12 @@ pub fn bootstrap_init_process() -> Result<(usize, usize, usize), ()> {
         return Err(());
     }
 
-    crate::info!("loader: initrd at 0x{:X}, size {} bytes",
+    crate::debug!("loader: initrd at 0x{:X}, size {} bytes",
                  initrd::get_initrd_base(), initrd::get_initrd_size());
 
     let init_elf = find_file_in_cpio(initrd, "init")?;
 
-    crate::info!("loader: found init ELF, size {} bytes", init_elf.len());
+    crate::debug!("loader: found init ELF, size {} bytes", init_elf.len());
 
     let loader = bootstrap_elf::BootstrapElfLoader::new(init_elf)
         .map_err(|e| {
@@ -81,7 +81,7 @@ pub fn spawn_service_from_initrd(path: &str) -> Result<(usize, usize, usize), ()
     }
 
     let elf_data = find_file_in_cpio(initrd, path)?;
-    crate::info!("loader: found service ELF '{}', size {} bytes", path, elf_data.len());
+    crate::debug!("loader: found service ELF '{}', size {} bytes", path, elf_data.len());
 
     let loader = bootstrap_elf::BootstrapElfLoader::new(elf_data)
         .map_err(|e| {
@@ -144,7 +144,7 @@ fn find_file_in_cpio<'a>(cpio_data: &'a [u8], target_name: &str) -> Result<&'a [
         };
 
         if normalized_name == normalized_target {
-            crate::info!("loader: found '{}' in initrd", name);
+            crate::debug!("loader: found '{}' in initrd", name);
             if data_end <= cpio_data.len() {
                 return Ok(&cpio_data[aligned_offset..data_end]);
             }

@@ -48,7 +48,7 @@ fn discover_initrd(_dtb_ptr: usize) -> (usize, usize) {
     // 方案：使用 QEMU -device loader 将 initrd 加载到固定地址
     const INITRD_FIXED_ADDR: usize = 0x4200_0000;
     
-    crate::info!("loader/initrd: checking fixed address 0x{:X} (QEMU -device loader)", INITRD_FIXED_ADDR);
+    crate::debug!("loader/initrd: checking fixed address 0x{:X} (QEMU -device loader)", INITRD_FIXED_ADDR);
     
     // 检查固定地址是否有 CPIO 魔数
     let probe = unsafe {
@@ -57,12 +57,12 @@ fn discover_initrd(_dtb_ptr: usize) -> (usize, usize) {
     
     if probe.len() >= 6 && (&probe[0..6] == b"070701" || &probe[0..6] == b"070702") {
         let size = detect_cpio_size(INITRD_FIXED_ADDR);
-        crate::info!("loader/initrd: ✓ found CPIO at fixed address 0x{:X}, size {} bytes", INITRD_FIXED_ADDR, size);
+        crate::debug!("loader/initrd: ✓ found CPIO at fixed address 0x{:X}, size {} bytes", INITRD_FIXED_ADDR, size);
         return (INITRD_FIXED_ADDR, size);
     }
     
     crate::warn!("loader/initrd: no CPIO at fixed address 0x{:X}", INITRD_FIXED_ADDR);
-    crate::info!("loader/initrd: expected magic bytes b\"070701\" or b\"070702\", got: {:02X?}", &probe[0..6.min(probe.len())]);
+    crate::debug!("loader/initrd: expected magic bytes b\"070701\" or b\"070702\", got: {:02X?}", &probe[0..6.min(probe.len())]);
     
     // 后备：暴力扫描（以防 QEMU 用了不同的地址）
     try_extensive_memory_scan()
@@ -133,7 +133,7 @@ fn read_hex(data: &[u8], offset: usize, len: usize) -> Result<u32, ()> {
 
 fn try_extensive_memory_scan() -> (usize, usize) {
     // 暴力扫描整个 512MB RAM，每 64KB 一次
-    crate::info!("loader/initrd: brute-force scanning 512MB RAM for CPIO magic...");
+    crate::debug!("loader/initrd: brute-force scanning 512MB RAM for CPIO magic...");
     
     let ram_start = 0x4000_0000usize;
     let ram_end = 0x6000_0000usize;
@@ -151,13 +151,13 @@ fn try_extensive_memory_scan() -> (usize, usize) {
         
         // 检查 CPIO newc ASCII 魔数
         if probe.len() >= 6 && (&probe[0..6] == b"070701" || &probe[0..6] == b"070702") {
-            crate::info!("loader/initrd: ✓ CPIO found at 0x{:X} (scanned {}/{})", addr, scanned, total_locs);
+            crate::debug!("loader/initrd: ✓ CPIO found at 0x{:X} (scanned {}/{})", addr, scanned, total_locs);
             return (addr, 131072);
         }
         
         // 每扫描 1024 个位置报告一次进度
         if scanned % 1024 == 0 {
-            crate::info!("loader/initrd: ...scanned {}/{} locations (current: 0x{:X})", scanned, total_locs, addr);
+            crate::debug!("loader/initrd: ...scanned {}/{} locations (current: 0x{:X})", scanned, total_locs, addr);
         }
     }
     
