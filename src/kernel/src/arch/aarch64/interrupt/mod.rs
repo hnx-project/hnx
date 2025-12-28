@@ -124,7 +124,7 @@ pub extern "C" fn rust_svc_handler(esr: u64, elr: u64, far: u64, saved_x8: u64, 
 
             info!("arch/aarch64 svc#0: saved registers - x8=0x{:X}, x0=0x{:X}, x1=0x{:X}, x2=0x{:X}, x3=0x{:X}, x4=0x{:X}, x5=0x{:X}, saved_sp=0x{:X}",
                   saved_x8, a0, a1, a2, a3, a4, a5, sp);
-            info!("HNX_SYS_WRITE={}", hnx_abi::HNX_SYS_WRITE);
+            info!("HNX_SYS_WRITE={}, HNX_SYS_YIELD={}", hnx_abi::HNX_SYS_WRITE, hnx_abi::HNX_SYS_YIELD);
             // Use saved x8 as system call number
             // Check if it's a valid syscall number from abi
             let saved_x8_u32 = saved_x8 as u32;

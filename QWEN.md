@@ -103,7 +103,7 @@ make quick
 # 在 QEMU 中运行完整 initrd
 make run
 
-# 使用简单 initrd 运行，30秒超时
+# 使用简单 initrd 运行，自带30秒超时请不要使用 timeout 命令
 make run-simple
 
 # 使用 GDB 调试器运行
