@@ -98,6 +98,9 @@ dependencies = [
 [[package]]
 name = "hnxlib"
 version = "0.0.1"
+dependencies = [
+ "hnx-abi",
+]
 
 [[package]]
 name = "home"

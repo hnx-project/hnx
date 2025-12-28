@@ -1,7 +1,7 @@
 #![no_std]
-
 pub mod syscall {
     use core::arch::asm;
+    use hnx_abi::{HNX_SYS_WRITE, HNX_SYS_YIELD, HNX_SYS_SPAWN_SERVICE};
 
     #[inline(always)]
     pub fn write(fd: i32, buf: &[u8]) -> isize {
@@ -9,7 +9,7 @@ pub mod syscall {
         unsafe {
             asm!(
                 "svc #0",
-                in("x8") 0x1001,  // HNX_SYS_WRITE
+                in("x8") HNX_SYS_WRITE,  // HNX_SYS_WRITE
                 in("x0") fd as usize,
                 in("x1") buf.as_ptr() as usize,
                 in("x2") buf.len(),
@@ -26,7 +26,7 @@ pub mod syscall {
         unsafe {
             asm!(
                 "svc #0",
-                in("x8") 0x1001,  // HNX_SYS_WRITE
+                in("x8") HNX_SYS_WRITE,  // HNX_SYS_WRITE
                 in("x0") 1usize,   // fd=1 (stdout)
                 in("x1") s.as_ptr() as usize,
                 in("x2") s.len(),
@@ -42,7 +42,7 @@ pub mod syscall {
         unsafe {
             asm!(
                 "svc #0",
-                in("x8") 0x1007,  // HNX_SYS_YIELD
+                in("x8") HNX_SYS_YIELD,  // HNX_SYS_YIELD
                 lateout("x0") _ret,
                 options(nostack)
             );
@@ -55,11 +55,11 @@ pub mod syscall {
         unsafe {
             asm!(
                 "svc #0",
-                in("x8") 0x0103,  // HNX_SYS_SPAWN_SERVICE
+                in("x8") HNX_SYS_SPAWN_SERVICE,  // HNX_SYS_SPAWN_SERVICE
                 in("x0") path.as_ptr() as usize,
                 in("x1") path.len(),
                 lateout("x0") ret,
-                options(nostack)
+                options(nostack, preserves_flags)
             );
         }
         ret

@@ -56,17 +56,7 @@ fn start_core_services() {
     let loader_path = "/bin/loader-service";
 
     // Direct inline system call to avoid potential hnxlib issues
-    let loader_pid: isize;
-    unsafe {
-        core::arch::asm!(
-            "svc #0",
-            in("x8") 0x0103u64,  // HNX_SYS_SPAWN_SERVICE
-            in("x0") loader_path.as_ptr(),
-            in("x1") loader_path.len(),
-            lateout("x0") loader_pid,
-            options(nostack, preserves_flags)
-        );
-    }
+    let loader_pid: isize = hnxlib::syscall::spawn_service(loader_path);
 
     println!("  - Loader service system call returned: {}", loader_pid);
 
@@ -82,17 +72,7 @@ fn start_core_services() {
         let vfs_path = "/bin/vfs-service";
 
         // Direct inline system call
-        let vfs_pid: isize;
-        unsafe {
-            core::arch::asm!(
-                "svc #0",
-                in("x8") 0x0103u64,  // HNX_SYS_SPAWN_SERVICE
-                in("x0") vfs_path.as_ptr(),
-                in("x1") vfs_path.len(),
-                lateout("x0") vfs_pid,
-                options(nostack, preserves_flags)
-            );
-        }
+        let vfs_pid: isize = hnxlib::syscall::spawn_service(vfs_path);
 
         println!("  - VFS service system call returned: {}", vfs_pid);
 
