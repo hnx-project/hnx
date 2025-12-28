@@ -106,7 +106,7 @@ fn init_phase2_memory() {
 /// - Capability system (security)
 /// - Well-known service endpoints for user space services
 fn init_phase3_processes() {
-    println!("Initializing process subsystem...");
+    crate::info!("Initializing process subsystem...");
     process::init();
     
     println!("Initializing IPC service delegation...");

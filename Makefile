@@ -26,6 +26,7 @@ export ARCH BOARD PROFILE
 export KERNEL_TARGET = $(ARCH)-unknown-none
 export SPACE_TARGET = $(ARCH)-unknown-none
 
+
 # 版本信息（从脚本获取）
 VERSION := $(shell $(VERSION_SCRIPT) read 2>/dev/null || echo "0.0.0")
 FULL_VERSION := $(shell $(VERSION_SCRIPT) read --full 2>/dev/null || echo "0.0.0+unknown")
@@ -209,7 +210,7 @@ simple-image: kernel space version-check
 	@echo ""
 
 # 创建简单的 initrd.cpio
-initrd-simple: version-sync kernel space
+initrd-image: version-sync kernel space
 	@echo "========= Creating simple initrd ========="
 	@mkdir -p $(BUILD_ROOT)
 	@$(PYTHON) scripts/create-image.py \
@@ -217,9 +218,8 @@ initrd-simple: version-sync kernel space
 		--space-dir $(BUILD_ROOT)/space/$(PROFILE) \
 		--arch $(ARCH) \
 		--board $(BOARD) \
-		--simple-initrd \
 		--no-compress \
-		--output $(BUILD_ROOT)/dummy.img
+		--output $(BUILD_ROOT)/images/hnx-$(VERSION)-$(ARCH)-$(BOARD).img
 	@echo "========= Simple initrd created at $(BUILD_ROOT)/initrd.cpio ========="
 	@echo ""
 
@@ -246,7 +246,7 @@ run: image
 	@echo ""
 
 # 运行带超时的 QEMU
-run-simple: initrd-simple
+run-simple: initrd-image
 	@echo "========= Running QEMU test v$(VERSION) (30s timeout) ========="
 	@$(PYTHON) scripts/run-qemu.py \
 		--arch $(ARCH) \
@@ -289,23 +289,9 @@ quick: configure
 clean:
 	@echo "========= Cleaning build artifacts ========="
 	@cargo clean
-	@rm -rf $(BUILD_ROOT)/kernel
-	@rm -rf $(BUILD_ROOT)/space
-	@rm -rf $(BUILD_ROOT)/config
-	@rm -f $(BUILD_ROOT)/images/hnx-*.img 2>/dev/null || true
-	@rm -f $(BUILD_ROOT)/images/hnx-simple-*.img 2>/dev/null || true
+	@rm -rf $(BUILD_ROOT)
 	@find . -type d -name "target" -exec rm -rf {} +
 	@echo "========= Build artifacts cleaned ========="
-	@echo ""
-
-distclean: clean version-clean
-	@echo "========= Cleaning everything ========="
-	@cd $(TOOLCHAIN_DIR) && make clean
-	@rm -rf targets/*.json
-	@rm -rf .mypy_cache
-	@rm -rf __pycache__
-	@rm -f VERSION
-	@echo "========= Everything cleaned ========="
 	@echo ""
 
 # 显示配置（包含版本信息）

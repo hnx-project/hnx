@@ -113,13 +113,13 @@ pub extern "C" fn rust_svc_handler(esr: u64, elr: u64, far: u64, saved_x8: u64, 
             let a5 = unsafe { saved_x5_ptr.read() };
 
             // Debug: dump stack memory to verify offsets
-            info!("DEBUG: Stack dump around saved_sp (0x{:X}):", sp);
+            crate::debug!("DEBUG: Stack dump around saved_sp (0x{:X}):", sp);
             for i in (0..160).step_by(16) {
                 let addr0 = sp + i;
                 let addr1 = sp + i + 8;
                 let val0 = unsafe { (addr0 as *const usize).read() };
                 let val1 = unsafe { (addr1 as *const usize).read() };
-                info!("  sp+{:3}: 0x{:016X} 0x{:016X}", i, val0, val1);
+                crate::debug!("  sp+{:3}: 0x{:016X} 0x{:016X}", i, val0, val1);
             }
 
             info!("arch/aarch64 svc#0: saved registers - x8=0x{:X}, x0=0x{:X}, x1=0x{:X}, x2=0x{:X}, x3=0x{:X}, x4=0x{:X}, x5=0x{:X}, saved_sp=0x{:X}",
@@ -153,10 +153,17 @@ pub extern "C" fn rust_svc_handler(esr: u64, elr: u64, far: u64, saved_x8: u64, 
             unsafe {
                 let saved_x0_ptr = (sp + 144) as *mut usize;
                 let old_value = saved_x0_ptr.read();
-                info!("DEBUG: Before update - saved_x0_ptr=0x{:X}, old_value=0x{:X}, ret=0x{:X}", saved_x0_ptr as usize, old_value, ret);
-                saved_x0_ptr.write(ret as usize);
-                let new_value = saved_x0_ptr.read();
-                info!("DEBUG: After update - new_value=0x{:X}", new_value);
+                crate::debug!("DEBUG: Before update - saved_x0_ptr=0x{:X}, old_value=0x{:X}, ret=0x{:X}", saved_x0_ptr as usize, old_value, ret);
+                
+                // Write the return value to the saved x0 location
+                core::ptr::write_volatile(saved_x0_ptr, ret as usize);
+                
+                // Ensure the write is visible to the CPU and memory subsystem
+                core::arch::asm!("dsb sy");  // Data Synchronization Barrier
+                core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+                
+                let new_value = core::ptr::read_volatile(saved_x0_ptr);
+                crate::debug!("DEBUG: After update - new_value=0x{:X}", new_value);
             }
         } else {
             match imm {
@@ -369,7 +376,7 @@ pub extern "C" fn rust_irq_handler() {
             
             // Check nesting depth for safety
             if stats.current_nesting >= MAX_IRQ_NESTING_DEPTH {
-                crate::warn!(
+                crate::debug!(
                     "IRQ nesting depth limit reached ({}), not allowing further nesting",
                     MAX_IRQ_NESTING_DEPTH
                 );

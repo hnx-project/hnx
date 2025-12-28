@@ -95,38 +95,93 @@ pub fn spawn_service_from_initrd(path: &str) -> Result<(usize, usize, usize), ()
 
 fn find_file_in_cpio<'a>(cpio_data: &'a [u8], target_name: &str) -> Result<&'a [u8], ()> {
     let mut offset = 0;
+    let cpio_len = cpio_data.len();
 
-    while offset < cpio_data.len() {
-        if offset + 110 > cpio_data.len() {
+    while offset < cpio_len {
+        // 确保有足够的空间容纳CPIO头部
+        if offset + 110 > cpio_len {
+            crate::debug!("loader: insufficient space for CPIO header at offset {}", offset);
             break;
         }
 
+        // 检查CPIO魔数
         let magic = &cpio_data[offset..offset + 6];
         if magic != b"070701" && magic != b"070702" {
+            crate::debug!("loader: invalid CPIO magic at offset {}: {:?}", offset, magic);
             break;
         }
 
-        let namesize = read_hex(&cpio_data, offset + 94, 8)? as usize;
-        let filesize = read_hex(&cpio_data, offset + 54, 8)? as usize;
+        // 读取namesize和filesize
+        let namesize = match read_hex(&cpio_data, offset + 94, 8) {
+            Ok(n) => n as usize,
+            Err(_) => {
+                crate::debug!("loader: failed to read namesize at offset {}", offset);
+                break;
+            }
+        };
+
+        let filesize = match read_hex(&cpio_data, offset + 54, 8) {
+            Ok(f) => f as usize,
+            Err(_) => {
+                crate::debug!("loader: failed to read filesize at offset {}", offset);
+                break;
+            }
+        };
+
+        // 检查合理性
+        if namesize == 0 || namesize > 4096 {
+            crate::debug!("loader: invalid namesize {} at offset {}", namesize, offset);
+            break;
+        }
+
+        // filesize合理性检查（最大10MB）
+        if filesize > 10 * 1024 * 1024 {
+            crate::debug!("loader: suspicious filesize {} at offset {}", filesize, offset);
+            // 继续尝试，可能是设备节点或特殊文件
+        }
 
         let name_offset = offset + 110;
-        if name_offset + namesize > cpio_data.len() {
+        if name_offset + namesize > cpio_len {
+            crate::debug!("loader: name extends beyond initrd at offset {}", offset);
             break;
         }
 
-        let name_bytes = &cpio_data[name_offset..name_offset + namesize - 1];
-        let name = core::str::from_utf8(name_bytes).map_err(|_| ())?;
+        // 读取文件名（跳过最后的null终止符）
+        let name_end = name_offset + namesize - 1;
+        if name_end >= cpio_len {
+            crate::debug!("loader: name extends beyond initrd (adjusted) at offset {}", offset);
+            break;
+        }
+
+        let name_bytes = &cpio_data[name_offset..name_end];
+        let name = match core::str::from_utf8(name_bytes) {
+            Ok(n) => n,
+            Err(_) => {
+                crate::debug!("loader: invalid UTF-8 in name at offset {}", offset);
+                break;
+            }
+        };
+
+        // 调试日志：记录每个CPIO条目
+        crate::debug!("loader: CPIO entry at offset {}: name='{}', namesize={}, filesize={}", offset, name, namesize, filesize);
 
         if name == "TRAILER!!!" {
             break;
         }
 
+        // 计算对齐的偏移量
         let header_and_name = 110 + namesize;
         let aligned_offset = (offset + header_and_name + 3) & !3;
         let data_end = aligned_offset + filesize;
 
-        // Check if this is the file we're looking for
-        // CPIO paths can be "./init", "init", "/services/vfs-service", etc.
+        // 检查边界
+        if aligned_offset > cpio_len {
+            crate::debug!("loader: aligned_offset {} > cpio_len {} at offset {}",
+                         aligned_offset, cpio_len, offset);
+            break;
+        }
+
+        // 检查是否为目标文件
         let normalized_target = if target_name.starts_with("./") {
             &target_name[2..]
         } else if target_name.starts_with('/') {
@@ -143,14 +198,43 @@ fn find_file_in_cpio<'a>(cpio_data: &'a [u8], target_name: &str) -> Result<&'a [
             name
         };
 
+        crate::debug!("loader: comparing: normalized_name='{}', normalized_target='{}'", normalized_name, normalized_target);
         if normalized_name == normalized_target {
-            crate::debug!("loader: found '{}' in initrd", name);
-            if data_end <= cpio_data.len() {
+            crate::info!("loader: found '{}' in initrd, data_end={}, cpio_len={}, filesize={}",
+                         name, data_end, cpio_len, filesize);
+
+            if data_end <= cpio_len {
                 return Ok(&cpio_data[aligned_offset..data_end]);
+            } else {
+                // 找到文件但data_end无效，这表示CPIO条目损坏
+                crate::error!("loader: '{}' found but data_end {} exceeds initrd size {}",
+                            name, data_end, cpio_len);
+                // 尝试从aligned_offset读取到cpio_len的剩余部分
+                // 这可能是最后的文件，filesize可能包含填充
+                if aligned_offset < cpio_len {
+                    crate::warn!("loader: using truncated data for '{}'", name);
+                    return Ok(&cpio_data[aligned_offset..cpio_len]);
+                }
+                return Err(());
             }
         }
 
-        offset = (data_end + 3) & !3;
+        // 更新偏移到下一个条目
+        let next_offset = if data_end <= cpio_len {
+            (data_end + 3) & !3
+        } else {
+            // data_end无效，尝试基于名称和基本对齐前进
+            crate::debug!("loader: invalid data_end at offset {}, advancing cautiously", offset);
+            let min_advance = (header_and_name + 3) & !3;
+            offset + min_advance
+        };
+
+        if next_offset <= offset {
+            crate::debug!("loader: offset not advancing ({} -> {}), breaking", offset, next_offset);
+            break;
+        }
+
+        offset = next_offset;
     }
 
     crate::error!("loader: '{}' not found in initrd CPIO archive", target_name);
@@ -165,7 +249,49 @@ fn read_hex(data: &[u8], offset: usize, len: usize) -> Result<u32, ()> {
     if data.len() < offset + len {
         return Err(());
     }
-    
-    let hex_str = core::str::from_utf8(&data[offset..offset + len]).map_err(|_| ())?;
-    u32::from_str_radix(hex_str, 16).map_err(|_| ())
+
+    let slice = &data[offset..offset + len];
+
+    // 尝试直接解析
+    if let Ok(hex_str) = core::str::from_utf8(slice) {
+        if let Ok(value) = u32::from_str_radix(hex_str, 16) {
+            return Ok(value);
+        }
+
+        // 如果失败，尝试修剪空白字符
+        let trimmed = hex_str.trim_matches(|c: char| c.is_whitespace() || c == '\0');
+        if let Ok(value) = u32::from_str_radix(trimmed, 16) {
+            return Ok(value);
+        }
+
+        // 如果仍然失败，尝试只提取十六进制字符
+        // 使用固定大小的数组，因为CPIO头部字段长度固定（最多8个字符）
+        let mut hex_chars = [0u8; 8];
+        let mut hex_len = 0;
+
+        for &b in slice {
+            let c = b as char;
+            if c.is_ascii_hexdigit() && hex_len < hex_chars.len() {
+                hex_chars[hex_len] = b;
+                hex_len += 1;
+            } else if c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\0' {
+                // 跳过空白和空字符
+                continue;
+            } else if hex_len > 0 {
+                // 非十六进制字符，停止提取
+                break;
+            }
+        }
+
+        if hex_len > 0 {
+            if let Ok(hex_str) = core::str::from_utf8(&hex_chars[..hex_len]) {
+                if let Ok(value) = u32::from_str_radix(hex_str, 16) {
+                    return Ok(value);
+                }
+            }
+        }
+    }
+
+    // 所有尝试都失败
+    Err(())
 }

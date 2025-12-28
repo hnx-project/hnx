@@ -144,6 +144,7 @@ fn sys_spawn_service(path_ptr: usize, path_len: usize) -> SysResult {
     match crate::process::sys_process_start(pid, entry_point, stack_pointer) {
         Ok(_) => {
             crate::info!("sys_spawn_service: service '{}' started as PID {}", path, pid);
+            crate::info!("sys_spawn_service: returning PID {} for service '{}'", pid, path);
             pid as isize
         }
         Err(_) => {
