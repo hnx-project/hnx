@@ -6,7 +6,7 @@ HNX 是一个用 Rust 编写的现代微内核操作系统，采用内核空间�
 
 **核心架构:**
 - **微内核设计:** 最小化内核，仅提供基本服务（IPC、内存管理、调度）
-- **用户空间服务:** 核心功能作为独立服务实现（Loader、VFS 等）
+- **用户空间服务:** 核心功能作为独立服务实现（Loader、VFS、IPC Router 等）
 - **基于能力的安全性:** 使用能力进行细粒度访问控制
 - **跨平台支持:** 当前主要支持 AArch64 架构，使用 QEMU 仿真
 
@@ -237,6 +237,14 @@ HNX 设计为跨架构微内核操作系统，为支持多种处理器架构（A
    - 配置文件、脚本使用有意义的英文名称
    - 仅在注释和文档中使用中文进行解释说明
 
+### 服务开发规范
+服务开发遵循统一架构，详细指南见 `src/space/services/SERVICE_DEVELOPMENT.md`：
+
+1. **服务命名:** 使用 `-service` 后缀（如 `ipcrouter-service`）
+2. **服务框架:** 使用 `hnxlib::ipc::ServiceFramework` 进行自动注册和消息处理
+3. **IPC 通信:** 使用类型安全的 `Endpoint` 进行进程间通信
+4. **错误处理:** 返回统一的 `IpcError` 错误类型
+
 ### 系统调用架构
 HNX 实现了三层系统调用架构：
 
@@ -357,7 +365,7 @@ make run-simple
 - **IPC 路由服务:** `src/space/services/ipcrouter-service/src/main.rs`
 - **进程管理服务:** `src/space/services/procmgr-service/src/main.rs`
 - **回显测试服务:** `src/space/services/echo-service/src/main.rs`
-- **服务开发指南:** `SERVICE_DEVELOPMENT.md`
+- **服务开发指南:** `src/space/services/SERVICE_DEVELOPMENT.md`
 - **镜像创建脚本:** `scripts/create-image.py`
 - **构建配置:** `Makefile` + `configs/` 目录
 
