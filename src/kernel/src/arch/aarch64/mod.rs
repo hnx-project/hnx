@@ -44,7 +44,7 @@ pub fn cpu_id() -> u32 {
 }
 
 pub fn disable() {
-    interrupt::disable();
+    cpu::disable_interrupts();
 }
 
 pub fn exec_preflight(elr: usize) {
@@ -54,18 +54,13 @@ pub fn exec_preflight(elr: usize) {
     let cur_el = context::get_current_el();
     let sp = context::get_sp();
     let ttbr0 = memory::get_current_page_table_base();
-    // 注意：我们还需要获取 TTBR1，但 Context trait 没有提供这个方法
-    // 暂时保留原有实现的部分
-    unsafe {
-        let mut tt1: u64 = 0;
-        let mut spsr: u64 = 0;
-        core::arch::asm!("mrs {t1}, ttbr1_el1", t1 = out(reg) tt1);
-        core::arch::asm!("mrs {s}, spsr_el1", s = out(reg) spsr);
-        crate::debug!(
-            "arch/aarch64 exec preflight: ELR=0x{:016X} SPSR=0x{:016X} VBAR=0x{:016X} CurrentEL={} SP_EL0=0x{:016X} TTBR0=0x{:016X} TTBR1=0x{:016X}",
-            elr as u64, spsr, vbar, cur_el, sp, ttbr0, tt1
-        );
-    }
+    // 使用 Context trait 获取 TTBR1 和 SPSR
+    let tt1 = context::get_ttbr1() as u64;
+    let spsr = context::get_spsr() as u64;
+    crate::debug!(
+        "arch/aarch64 exec preflight: ELR=0x{:016X} SPSR=0x{:016X} VBAR=0x{:016X} CurrentEL={} SP_EL0=0x{:016X} TTBR0=0x{:016X} TTBR1=0x{:016X}",
+        elr as u64, spsr, vbar, cur_el, sp, ttbr0, tt1
+    );
 }
 
 pub fn dump_panic_state() {

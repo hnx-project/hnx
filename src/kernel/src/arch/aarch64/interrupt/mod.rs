@@ -1,6 +1,7 @@
 use crate::debug;
 use crate::info;
 use crate::core::scheduler;
+use crate::arch::common::traits::InterruptController;
 use core::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use hnx_abi;
 
@@ -25,27 +26,23 @@ pub fn init() {
 }
 
 pub fn enable() {
-    unsafe {
-        core::arch::asm!("msr daifclr, #2");
-    }
+    crate::arch::cpu::enable_interrupts();
 }
 
 pub fn disable() {
-    unsafe {
-        core::arch::asm!("msr daifset, #2");
-    }
+    crate::arch::cpu::disable_interrupts();
 }
 
 /// Assembly helper to enable IRQ in handlers (allows preemption)
 #[inline(always)]
 unsafe fn enable_irq() {
-    core::arch::asm!("msr daifclr, #2");  // Clear I bit in DAIF
+    crate::arch::cpu::enable_interrupts();
 }
 
 /// Assembly helper to disable IRQ in handlers (prevent preemption)
 #[inline(always)]
 unsafe fn disable_irq() {
-    core::arch::asm!("msr daifset, #2");  // Set I bit in DAIF
+    crate::arch::cpu::disable_interrupts();
 }
 
 #[no_mangle]
@@ -56,11 +53,8 @@ pub extern "C" fn rust_svc_handler(esr: u64, elr: u64, far: u64, saved_x8: u64, 
     
     // CRITICAL SECURITY: Verify exception came from EL0
     // Check SPSR_EL1 to determine exception source
-    let mut spsr: u64 = 0;
-    unsafe {
-        core::arch::asm!("mrs {s}, spsr_el1", s = out(reg) spsr);
-    }
-    
+    let spsr = crate::arch::context::get_spsr() as u64;
+
     // SPSR[3:0] = M[3:0] contains the exception level and mode
     // 0b0000 (0x0) = EL0t (user mode)
     // 0b0100 (0x4) = EL1t (kernel mode with SP_EL0)
@@ -76,20 +70,14 @@ pub extern "C" fn rust_svc_handler(esr: u64, elr: u64, far: u64, saved_x8: u64, 
     }
     
     if ec == 0x15 {
-        let mut cel: u64 = 0;
-        let mut spsel: u64 = 0;
-        let mut ttbr0: u64 = 0;
-        let mut ttbr1: u64 = 0;
-        unsafe {
-            core::arch::asm!("mrs {c}, CurrentEL", c = out(reg) cel);
-            core::arch::asm!("mrs {p}, SPSel", p = out(reg) spsel);
-            core::arch::asm!("mrs {t0}, ttbr0_el1", t0 = out(reg) ttbr0);
-            core::arch::asm!("mrs {t1}, ttbr1_el1", t1 = out(reg) ttbr1);
-        }
-        
+        let cel = crate::arch::context::get_current_el() as u64;
+        let spsel = crate::arch::context::get_spsel() as u64;
+        let ttbr0 = crate::arch::context::get_ttbr0() as u64;
+        let ttbr1 = crate::arch::context::get_ttbr1() as u64;
+
         // Extract ASID from TTBR0_EL1[63:48]
         let asid = (ttbr0 >> 48) & 0xFFFF;
-        
+
         debug!("arch/aarch64 svc enter: esr=0x{:016X} elr=0x{:016X} spsr=0x{:016X} currentEL=0x{:016X} spsel={} ttbr0=0x{:016X} asid={} ttbr1=0x{:016X}", esr, elr, spsr, cel, spsel & 1, ttbr0, asid, ttbr1);
         let imm = esr & 0xFFFF;
         if imm == 0 {
@@ -159,7 +147,7 @@ pub extern "C" fn rust_svc_handler(esr: u64, elr: u64, far: u64, saved_x8: u64, 
                 core::ptr::write_volatile(saved_x0_ptr, ret as usize);
                 
                 // Ensure the write is visible to the CPU and memory subsystem
-                core::arch::asm!("dsb sy");  // Data Synchronization Barrier
+                crate::arch::memory::data_sync_barrier();  // Data Synchronization Barrier
                 core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
                 
                 let new_value = core::ptr::read_volatile(saved_x0_ptr);
@@ -254,12 +242,8 @@ pub extern "C" fn rust_sync_panic(
     crate::error!("  ESR=0x{:016X} ELR=0x{:016X} FAR=0x{:016X}", esr, elr, far);
     crate::error!("  TCR=0x{:016X} SCTLR=0x{:016X} SPSR=0x{:016X}", tcr, sctlr, spsr);
     
-    let mut ttbr0: u64 = 0;
-    let mut ttbr1: u64 = 0;
-    unsafe {
-        core::arch::asm!("mrs {t0}, ttbr0_el1", t0 = out(reg) ttbr0);
-        core::arch::asm!("mrs {t1}, ttbr1_el1", t1 = out(reg) ttbr1);
-    }
+    let ttbr0 = crate::arch::context::get_ttbr0() as u64;
+    let ttbr1 = crate::arch::context::get_ttbr1() as u64;
     crate::error!("  TTBR0=0x{:016X} TTBR1=0x{:016X}", ttbr0, ttbr1);
     
     panic!("sync exception: EC=0x{:X} ESR=0x{:016X} ELR=0x{:016X} FAR=0x{:016X} TCR=0x{:016X} SCTLR=0x{:016X} SPSR=0x{:016X}", ec, esr, elr, far, tcr, sctlr, spsr);
@@ -327,10 +311,7 @@ pub extern "C" fn rust_sync_try_handle(
     if ec == 0x20 || ec == 0x24 {
         crate::console::write_raw("rust_sync_try_handle: page fault detected\n");
         // Read TTBR0_EL1 directly from register (avoid scheduler lock in exception context)
-        let mut ttbr0: u64;
-        unsafe {
-            core::arch::asm!("mrs {reg}, ttbr0_el1", reg = out(reg) ttbr0);
-        }
+        let ttbr0 = crate::arch::context::get_ttbr0() as u64;
         // Extract page table base address (lower 48 bits), mask off ASID in bits [63:48]
         let pt_base = (ttbr0 & 0x0000_FFFF_FFFF_FFFF) as usize;
         crate::console::write_raw("rust_sync_try_handle: read ttbr0 from register\n");
@@ -468,20 +449,12 @@ pub extern "C" fn rust_exc_mark(ec: u64, esr: u64, elr: u64, far: u64) {
 pub extern "C" fn arch_exec_preflight(elr: u64, sp0: u64, ttbr0: u64) {
     crate::console::write_raw("arch_exec_preflight enter\n");
     info!("arch/aarch64 exec preflight enter");
-    let mut spsr: u64 = 0;
-    let mut cel: u64 = 0;
-    let mut vbar: u64 = 0;
-    let mut tt0: u64 = 0;
-    let mut tt1: u64 = 0;
-    let mut sp_el0: u64 = 0;
-    unsafe {
-        core::arch::asm!("mrs {s}, spsr_el1", s = out(reg) spsr);
-        core::arch::asm!("mrs {c}, CurrentEL", c = out(reg) cel);
-        core::arch::asm!("mrs {v}, vbar_el1", v = out(reg) vbar);
-        core::arch::asm!("mrs {t0}, ttbr0_el1", t0 = out(reg) tt0);
-        core::arch::asm!("mrs {t1}, ttbr1_el1", t1 = out(reg) tt1);
-        core::arch::asm!("mrs {sp}, sp_el0", sp = out(reg) sp_el0);
-    }
+    let spsr = crate::arch::context::get_spsr() as u64;
+    let cel = crate::arch::context::get_current_el() as u64;
+    let vbar = crate::arch::context::get_vbar() as u64;
+    let tt0 = crate::arch::context::get_ttbr0() as u64;
+    let tt1 = crate::arch::context::get_ttbr1() as u64;
+    let sp_el0 = crate::arch::context::get_sp() as u64;
     
     // SECURITY AUDIT: Verify exception vector is in kernel space
     const KERNEL_BASE: u64 = 0xFFFF_8000_0000_0000;
@@ -515,4 +488,29 @@ pub extern "C" fn arch_exec_postflight(ttbr0: u64, sp_el0: u64, spsr: u64) {
         "arch/aarch64 exec postflight: TTBR0=0x{:016X} SP_EL0=0x{:016X} SPSR=0x{:016X}",
         ttbr0, sp_el0, spsr
     );
+}
+
+/// AArch64 中断控制器实现 (GIC 包装)
+pub struct AArch64InterruptController;
+
+impl InterruptController for AArch64InterruptController {
+    fn init() {
+        crate::drivers::gic::init();
+    }
+
+    fn enable_irq(irq: u32) {
+        // 假设 GIC 驱动程序提供了 enable_irq 函数
+        // 如果不存在，可能需要调用适当的函数
+        // 暂时使用默认实现
+        crate::drivers::gic::enable_irq(irq);
+    }
+
+    fn disable_irq(irq: u32) {
+        crate::drivers::gic::disable_irq(irq);
+    }
+
+    fn ack_irq(irq: u32) {
+        // 确认中断（写入 EOIR 寄存器）
+        crate::drivers::gic::ack_irq(irq);
+    }
 }

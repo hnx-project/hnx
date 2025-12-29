@@ -78,6 +78,38 @@ impl Context for AArch64Context {
             ((cur_el >> 2) & 0x3) as u32  // CurrentEL[3:2] 包含异常级别
         }
     }
+
+    fn get_spsr() -> usize {
+        unsafe {
+            let mut spsr: u64;
+            core::arch::asm!("mrs {}, spsr_el1", out(reg) spsr);
+            spsr as usize
+        }
+    }
+
+    fn get_ttbr0() -> usize {
+        unsafe {
+            let mut ttbr0: u64;
+            core::arch::asm!("mrs {}, ttbr0_el1", out(reg) ttbr0);
+            ttbr0 as usize
+        }
+    }
+
+    fn get_ttbr1() -> usize {
+        unsafe {
+            let mut ttbr1: u64;
+            core::arch::asm!("mrs {}, ttbr1_el1", out(reg) ttbr1);
+            ttbr1 as usize
+        }
+    }
+
+    fn get_spsel() -> u32 {
+        unsafe {
+            let mut spsel: u64;
+            core::arch::asm!("mrs {}, SPSel", out(reg) spsel);
+            (spsel & 1) as u32  // SPSel[0] 表示当前使用的栈指针
+        }
+    }
 }
 
 // 模块级函数包装
@@ -105,4 +137,20 @@ pub fn get_vbar() -> usize {
 
 pub fn get_current_el() -> u32 {
     AArch64Context::get_current_el()
+}
+
+pub fn get_spsr() -> usize {
+    AArch64Context::get_spsr()
+}
+
+pub fn get_ttbr0() -> usize {
+    AArch64Context::get_ttbr0()
+}
+
+pub fn get_ttbr1() -> usize {
+    AArch64Context::get_ttbr1()
+}
+
+pub fn get_spsel() -> u32 {
+    AArch64Context::get_spsel()
 }

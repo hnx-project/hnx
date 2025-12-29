@@ -43,6 +43,27 @@ impl Cpu for AArch64Cpu {
             core::arch::asm!("wfi");
         }
     }
+
+    fn enable_interrupts() {
+        unsafe {
+            core::arch::asm!("msr daifclr, #2");  // Clear I bit in DAIF
+        }
+    }
+
+    fn disable_interrupts() {
+        unsafe {
+            core::arch::asm!("msr daifset, #2");  // Set I bit in DAIF
+        }
+    }
+
+    fn interrupts_enabled() -> bool {
+        unsafe {
+            let mut daif: u64;
+            core::arch::asm!("mrs {}, daif", out(reg) daif);
+            // I bit is bit 7 (1 << 7) = 0x80
+            (daif & 0x80) == 0
+        }
+    }
 }
 
 // 模块级函数包装
@@ -68,4 +89,16 @@ pub fn yield_cpu() {
 
 pub fn wait_for_interrupt() {
     AArch64Cpu::wait_for_interrupt();
+}
+
+pub fn enable_interrupts() {
+    AArch64Cpu::enable_interrupts();
+}
+
+pub fn disable_interrupts() {
+    AArch64Cpu::disable_interrupts();
+}
+
+pub fn interrupts_enabled() -> bool {
+    AArch64Cpu::interrupts_enabled()
 }

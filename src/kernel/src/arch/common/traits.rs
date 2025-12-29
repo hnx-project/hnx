@@ -93,6 +93,24 @@ pub trait Cpu {
     /// 此函数会暂停 CPU 执行直到中断发生
     /// 只能在中断使能的情况下调用
     fn wait_for_interrupt();
+
+    /// 全局使能中断
+    ///
+    /// # 安全
+    /// 此函数允许 CPU 响应外部中断
+    fn enable_interrupts();
+
+    /// 全局禁用中断
+    ///
+    /// # 安全
+    /// 此函数阻止 CPU 响应外部中断
+    fn disable_interrupts();
+
+    /// 检查中断是否启用
+    ///
+    /// # 返回值
+    /// 如果中断启用返回 `true`，否则返回 `false`
+    fn interrupts_enabled() -> bool;
 }
 
 // 中断控制器 trait
@@ -142,4 +160,16 @@ pub trait Context {
 
     /// 获取当前异常级别 (CurrentEL)
     fn get_current_el() -> u32;
+
+    /// 获取当前保存的程序状态寄存器 (SPSR)
+    fn get_spsr() -> usize;
+
+    /// 获取当前转换表基址寄存器 0 (TTBR0)
+    fn get_ttbr0() -> usize;
+
+    /// 获取当前转换表基址寄存器 1 (TTBR1)
+    fn get_ttbr1() -> usize;
+
+    /// 获取当前栈指针选择器 (SPSel)
+    fn get_spsel() -> u32;
 }
