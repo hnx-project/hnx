@@ -70,27 +70,37 @@ class ImageBuilder:
             return self._create_full_initrd()
     
     def _create_simple_initrd(self):
-        """创建简单的 init-only initrd（仅包含 init 二进制文件）"""
-        print("Creating simple init-only initrd...")
-        
+        """创建简单的 initrd（包含 init 和核心服务）"""
+        print("Creating simple initrd with core services...")
+
         # 创建 initrd 目录
         initrd_root = self.temp_dir / "initrd"
         initrd_root.mkdir(parents=True, exist_ok=True)
         print(f"  Created initrd root directory, {initrd_root}")
-        
+
+        # 创建 bin 目录用于存放服务
+        bin_dir = initrd_root / "bin"
+        bin_dir.mkdir(exist_ok=True)
+
         # 查找并复制 init 二进制文件
         init_found = self._copy_init_binary(initrd_root)
-        
+
         if not init_found:
             raise FileNotFoundError("No init binary found in space directory for simple initrd")
-        
+
+        # 查找并复制核心服务二进制文件
+        self._copy_core_services(bin_dir)
+
         # 打包为 cpio 归档
         if self.no_compress:
             initrd_path = self.temp_dir / "initrd.cpio"
         else:
             initrd_path = self.temp_dir / "initrd.cpio.gz"
-        
+
         self._pack_cpio(initrd_root, initrd_path, compress=not self.no_compress)
+        # build_dir = Path("build")
+        # build_dir.mkdir(parents=True, exist_ok=True)
+        # shutil.copytree(self.temp_dir, build_dir / self.temp_dir.name, dirs_exist_ok=True)
         
         print(f"Simple initrd created: {initrd_path}")
         return initrd_path
@@ -102,18 +112,22 @@ class ImageBuilder:
         # 创建 initrd 目录结构
         initrd_root = self.temp_dir / "initrd"
         initrd_root.mkdir(parents=True, exist_ok=True)
-        
+        print(f"  Created initrd root directory, {initrd_root}")
+
         # 创建标准目录结构
         dirs = ["bin", "sbin", "lib", "dev", "proc", "sys", "tmp", "root", "etc"]
         for dir_name in dirs:
             (initrd_root / dir_name).mkdir(exist_ok=True)
+            print(f"  Created initrd directory, {initrd_root / dir_name}")
+        
+        # 查找并复制 init 二进制文件
+        init_found = self._copy_init_binary(initrd_root)
+
+        if not init_found:
+            raise FileNotFoundError("No init binary found in space directory for simple initrd")
         
         # 查找用户空间程序
         self._copy_space_programs(initrd_root)
-        
-        # 创建 init 程序（如果不存在则创建简单版本）
-        self._create_init_program(initrd_root)
-        
         # 创建设备节点
         self._create_device_nodes(initrd_root)
         
@@ -129,6 +143,12 @@ class ImageBuilder:
         self._pack_cpio(initrd_root, initrd_path, compress=not self.no_compress)
         
         print(f"Full initrd created: {initrd_path}")
+
+        # 复制 self.temp_dir 到 build/ 目录
+        # build_dir = Path("build")
+        # build_dir.mkdir(parents=True, exist_ok=True)
+        # shutil.copytree(self.temp_dir, build_dir / self.temp_dir.name, dirs_exist_ok=True)
+        
         return initrd_path
     
     def _copy_init_binary(self, initrd_root):
@@ -163,12 +183,51 @@ class ImageBuilder:
             shutil.copy2(init_binary, dest_path)
             dest_path.chmod(0o755)
             size = dest_path.stat().st_size
-            print(f"  Copied init binary: {size:,} bytes")
+            print(f"  Copied init binary: {size:,} bytes to {dest_path}")
             return True
         except Exception as e:
             print(f"  Warning: Failed to copy init binary: {e}")
             return False
-    
+
+    def _copy_core_services(self, bin_dir):
+        """复制核心服务二进制文件到 initrd 的 bin 目录"""
+        print("Looking for core service binaries...")
+
+        # 核心服务列表
+        core_services = ["loader-service", "vfs-service"]
+
+        for service_name in core_services:
+            service_binary = None
+
+            # 在 release/debug 目录中查找
+            for build_type in ["release", "debug"]:
+                service_path = self.space_dir / build_type / service_name
+                if service_path.exists() and service_path.is_file():
+                    service_binary = service_path
+                    print(f"  Found {service_name}: {service_path} ({build_type})")
+                    break
+
+            # 如果没有找到，尝试直接在 space_dir 查找
+            if not service_binary:
+                service_path = self.space_dir / service_name
+                if service_path.exists() and service_path.is_file():
+                    service_binary = service_path
+                    print(f"  Found {service_name}: {service_path}")
+
+            if not service_binary:
+                print(f"  Warning: No {service_name} binary found in space directory")
+                continue
+
+            # 复制到 bin 目录
+            dest_path = bin_dir / service_name
+            try:
+                shutil.copy2(service_binary, dest_path)
+                dest_path.chmod(0o755)
+                size = dest_path.stat().st_size
+                print(f"  Copied {service_name}: {size:,} bytes")
+            except Exception as e:
+                print(f"  Warning: Failed to copy {service_name}: {e}")
+
     def _copy_space_programs(self, initrd_root):
         """复制用户空间程序到 initrd"""
         print("Copying user space programs...")
@@ -199,68 +258,6 @@ class ImageBuilder:
                 print(f"  Copied: {exe.name} -> {dest_path.relative_to(initrd_root)}")
             except Exception as e:
                 print(f"  Warning: Failed to copy {exe.name}: {e}")
-    
-    def _create_init_program(self, initrd_root):
-        """创建 init 程序"""
-        init_path = initrd_root / "init"
-        
-        # 如果已经存在 init 程序，跳过
-        if init_path.exists():
-            return
-        
-        print("Creating simple init program...")
-        
-        # 创建简单的 shell 脚本作为 init
-        init_script = """#!/bin/sh
-# HNX Simple Init Script
-echo "========================================"
-echo "    HNX Microkernel System"
-echo "========================================"
-echo "Kernel: $(uname -s) $(uname -r)"
-echo "Init: Starting userspace..."
-
-# 挂载虚拟文件系统
-mount -t proc proc /proc 2>/dev/null
-mount -t sysfs sysfs /sys 2>/dev/null
-mount -t devtmpfs devtmpfs /dev 2>/dev/null
-
-# 设置环境变量
-export PATH=/bin:/sbin
-export TERM=linux
-export HOME=/root
-
-# 创建设备节点（备用）
-if [ ! -c /dev/console ]; then
-    mknod /dev/console c 5 1 2>/dev/null
-fi
-if [ ! -c /dev/null ]; then
-    mknod /dev/null c 1 3 2>/dev/null
-fi
-
-echo "System ready!"
-
-# 如果存在 /bin/sh，启动 shell
-if [ -x /bin/sh ]; then
-    echo "Starting shell..."
-    exec /bin/sh
-else
-    echo "No shell found. Running test programs..."
-    
-    # 运行测试程序
-    for test in /bin/*; do
-        if [ -x "$test" ] && [ "$test" != "/bin/sh" ]; then
-            echo "Running: $test"
-            $test 2>&1 || true
-        fi
-    done
-    
-    echo "All programs executed. System will halt."
-    poweroff -f
-fi
-"""
-        
-        init_path.write_text(init_script)
-        init_path.chmod(0o755)
     
     def _create_device_nodes(self, initrd_root):
         """创建设备节点"""
@@ -429,15 +426,15 @@ devtmpfs        /dev            devtmpfs defaults       0       0
             initrd_path = self.create_initrd()
             
             # 复制 initrd.cpio 到 build/ 目录（供 run-qemu.py 使用）
-            build_initrd = Path("build") / "initrd.cpio"
             if initrd_path.suffix == ".cpio":
+                build_initrd = Path("build") / "initrd.cpio"
                 print(f"Copying initrd to {build_initrd} for QEMU...")
                 shutil.copy2(initrd_path, build_initrd)
             
             # 创建原始镜像
             self.create_raw_image(initrd_path)
             
-            # 可选：创建 QCOW2 格式
+            # 可选：创建 QCOW2 格式镜像
             if create_qcow2:
                 self.create_qcow2_image(self.output_path)
             

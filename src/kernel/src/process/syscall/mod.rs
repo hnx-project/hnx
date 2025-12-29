@@ -2,6 +2,8 @@ use core::ptr;
 use spin::Mutex;
 use crate::security::{self, validate_capability, rights};
 use crate::console;
+use crate::loader;
+use crate::loader::spawn_service_from_initrd;
 
 // Syscall stubs that delegate to user space services
 mod fs_stubs;
@@ -82,6 +84,74 @@ fn copy_to_user(dst: usize, src: &[u8]) -> usize {
         ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut u8, src.len());
     }
     src.len()
+}
+
+fn sys_spawn_service(path_ptr: usize, path_len: usize) -> SysResult {
+    crate::info!("sys_spawn_service: path_ptr=0x{:X}, path_len={}", path_ptr, path_len);
+
+    // Validate path length
+    if path_len == 0 || path_len > 256 {
+        crate::error!("sys_spawn_service: invalid path length");
+        return -1; // EINVAL
+    }
+
+    // Copy path from userspace
+    let mut path_buf = [0u8; 256];
+    let n = copy_from_user(path_ptr, path_len, &mut path_buf);
+    if n != path_len {
+        crate::error!("sys_spawn_service: failed to copy path from user");
+        return -1; // EFAULT
+    }
+
+    // Convert to string
+    let path = match core::str::from_utf8(&path_buf[..path_len]) {
+        Ok(s) => s,
+        Err(_) => {
+            crate::error!("sys_spawn_service: invalid UTF-8 path");
+            return -1; // EINVAL
+        }
+    };
+
+    crate::info!("sys_spawn_service: loading service '{}'", path);
+
+    // Load service from initrd - bootstrap_elf loader gives us entry, stack, and page table
+    let (entry_point, stack_pointer, page_table_base) = match spawn_service_from_initrd(path) {
+        Ok(tuple) => tuple,
+        Err(_) => {
+            crate::error!("sys_spawn_service: failed to load service from initrd");
+            return -1; // ENOENT or other error
+        }
+    };
+
+    // Create an empty process with default priority (128 = medium)
+    let (pid, _created_pt_base) = match crate::process::sys_process_create_empty(128) {
+        Ok(result) => result,
+        Err(_) => {
+            crate::error!("sys_spawn_service: failed to create empty process");
+            return -1; // ENOMEM
+        }
+    };
+
+    // Update process memory with the page table from loader
+    // Note: The loader already created a page table with the ELF loaded into it
+    if !crate::process::update_process_memory(pid as usize, page_table_base, 0) {
+        crate::error!("sys_spawn_service: failed to update process memory");
+        return -1;
+    }
+
+    // Start the process with entry point and stack pointer
+    // This sets the process state to Ready
+    match crate::process::sys_process_start(pid, entry_point, stack_pointer) {
+        Ok(_) => {
+            crate::info!("sys_spawn_service: service '{}' started as PID {}", path, pid);
+            crate::info!("sys_spawn_service: returning PID {} for service '{}'", pid, path);
+            pid as isize
+        }
+        Err(_) => {
+            crate::error!("sys_spawn_service: failed to start process");
+            -1
+        }
+    }
 }
 
 fn user_range_ok(addr: usize, len: usize, write: bool) -> bool {
@@ -426,25 +496,16 @@ pub fn dispatch(
             network::sys_recv(x0 as u32, x1, x2, _x3 as u32)
         }
         HNX_SYS_DLOPEN => {
-            crate::debug!("syscall enter dlopen");
-            match loader::sys_dlopen(x0, x1 as u32) {
-                Ok(result) => result,
-                Err(error) => error,
-            }
+            crate::debug!("syscall enter dlopen (not implemented)");
+            -1 // ENOSYS
         }
         HNX_SYS_DLCLOSE => {
-            crate::debug!("syscall enter dlclose");
-            match loader::sys_dlclose(x0) {
-                Ok(result) => result,
-                Err(error) => error,
-            }
+            crate::debug!("syscall enter dlclose (not implemented)");
+            -1 // ENOSYS
         }
         HNX_SYS_DLSYM => {
-            crate::debug!("syscall enter dlsym");
-            match loader::sys_dlsym(x0, x1) {
-                Ok(result) => result,
-                Err(error) => error,
-            }
+            crate::debug!("syscall enter dlsym (not implemented)");
+            -1 // ENOSYS
         }
         HNX_SYS_MMAP => {
             crate::debug!("syscall enter mmap");
@@ -461,6 +522,10 @@ pub fn dispatch(
         HNX_SYS_PROCESS_CREATE => {
             crate::debug!("syscall enter process_create");
             crate::user::sys_process_create(x0, x1)
+        }
+        0x0103 => {  // HNX_SYS_SPAWN_SERVICE (temporary until bindings regenerated)
+            crate::debug!("syscall enter spawn_service");
+            sys_spawn_service(x0, x1)
         }
         _ => -1,
     }
@@ -1198,4 +1263,3 @@ pub mod process;
 pub mod signal;
 pub mod driver;
 pub mod network;
-pub mod loader;

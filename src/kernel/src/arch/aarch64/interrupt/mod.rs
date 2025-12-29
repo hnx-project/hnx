@@ -2,6 +2,7 @@ use crate::debug;
 use crate::info;
 use crate::core::scheduler;
 use core::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use hnx_abi;
 
 static PROGRAM_BREAK: AtomicUsize = AtomicUsize::new(0);
 #[no_mangle]
@@ -112,35 +113,57 @@ pub extern "C" fn rust_svc_handler(esr: u64, elr: u64, far: u64, saved_x8: u64, 
             let a5 = unsafe { saved_x5_ptr.read() };
 
             // Debug: dump stack memory to verify offsets
-            info!("DEBUG: Stack dump around saved_sp (0x{:X}):", sp);
+            crate::debug!("DEBUG: Stack dump around saved_sp (0x{:X}):", sp);
             for i in (0..160).step_by(16) {
                 let addr0 = sp + i;
                 let addr1 = sp + i + 8;
                 let val0 = unsafe { (addr0 as *const usize).read() };
                 let val1 = unsafe { (addr1 as *const usize).read() };
-                info!("  sp+{:3}: 0x{:016X} 0x{:016X}", i, val0, val1);
+                crate::debug!("  sp+{:3}: 0x{:016X} 0x{:016X}", i, val0, val1);
             }
 
             info!("arch/aarch64 svc#0: saved registers - x8=0x{:X}, x0=0x{:X}, x1=0x{:X}, x2=0x{:X}, x3=0x{:X}, x4=0x{:X}, x5=0x{:X}, saved_sp=0x{:X}",
                   saved_x8, a0, a1, a2, a3, a4, a5, sp);
-            info!("HNX_SYS_WRITE={}", hnx_abi::HNX_SYS_WRITE);
+            info!("HNX_SYS_WRITE={}, HNX_SYS_YIELD={}", hnx_abi::HNX_SYS_WRITE, hnx_abi::HNX_SYS_YIELD);
             // Use saved x8 as system call number
-            // If it doesn't look like a valid syscall number, default to 0 for backward compatibility
-            let syscall_num = if saved_x8 == 0x1001 || saved_x8 == 0x1002 || saved_x8 == 0x1003 || saved_x8 == 0x1004 || saved_x8 == 0x1005 || saved_x8 == 0x1007 {
-                saved_x8 as u32
+            // Check if it's a valid syscall number from abi
+            let saved_x8_u32 = saved_x8 as u32;
+            let syscall_num = if saved_x8_u32 == hnx_abi::HNX_SYS_WRITE
+                || saved_x8_u32 == hnx_abi::HNX_SYS_READ
+                || saved_x8_u32 == hnx_abi::HNX_SYS_OPEN
+                || saved_x8_u32 == hnx_abi::HNX_SYS_CLOSE
+                || saved_x8_u32 == hnx_abi::HNX_SYS_EXIT
+                || saved_x8_u32 == hnx_abi::HNX_SYS_YIELD
+                || saved_x8_u32 == hnx_abi::HNX_SYS_PROCESS_CREATE
+                || saved_x8_u32 == hnx_abi::HNX_SYS_SPAWN_SERVICE
+                || saved_x8_u32 == hnx_abi::HNX_SYS_IPC_WAIT
+                || saved_x8_u32 == hnx_abi::HNX_SYS_IPC_WAKE
+                || saved_x8_u32 == hnx_abi::HNX_SYS_EP_CREATE
+                || saved_x8_u32 == hnx_abi::HNX_SYS_EP_SEND
+                || saved_x8_u32 == hnx_abi::HNX_SYS_EP_RECV {
+                saved_x8_u32
             } else {
                 info!("arch/aarch64 svc#0: saved_x8=0x{:X} not recognized, defaulting to 0", saved_x8);
                 0
             };
             info!("arch/aarch64 svc#0 using syscall_num=0x{:X} (saved_x8=0x{:X})", syscall_num, saved_x8);
-            let mut ret = crate::process::syscall::dispatch(syscall_num, a0, a1, a2, a3, a4, a5) as u64;
+            let ret = crate::process::syscall::dispatch(syscall_num, a0, a1, a2, a3, a4, a5) as u64;
             info!("arch/aarch64 svc#0 ret=0x{:X}", ret);
-            if ret == 0xFFFFFFFFFFFFFFFF {
-                ret = 0;
-                info!("arch/aarch64 svc#0 overriding ret to 0");
-            }
+            // Update saved x0 on stack so it gets restored on exception return
             unsafe {
-                core::arch::asm!("mov x0, {r}", r = in(reg) ret);
+                let saved_x0_ptr = (sp + 144) as *mut usize;
+                let old_value = saved_x0_ptr.read();
+                crate::debug!("DEBUG: Before update - saved_x0_ptr=0x{:X}, old_value=0x{:X}, ret=0x{:X}", saved_x0_ptr as usize, old_value, ret);
+                
+                // Write the return value to the saved x0 location
+                core::ptr::write_volatile(saved_x0_ptr, ret as usize);
+                
+                // Ensure the write is visible to the CPU and memory subsystem
+                core::arch::asm!("dsb sy");  // Data Synchronization Barrier
+                core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+                
+                let new_value = core::ptr::read_volatile(saved_x0_ptr);
+                crate::debug!("DEBUG: After update - new_value=0x{:X}", new_value);
             }
         } else {
             match imm {
@@ -162,8 +185,10 @@ pub extern "C" fn rust_svc_handler(esr: u64, elr: u64, far: u64, saved_x8: u64, 
                         0,
                         0,
                     ) as u64;
+                    // Update saved x0 on stack (same offset as above)
                     unsafe {
-                        core::arch::asm!("mov x0, {r}", r = in(reg) ret);
+                        let saved_x0_ptr = (saved_sp as usize + 144) as *mut usize;
+                        saved_x0_ptr.write(ret as usize);
                     }
                 }
                 2 => {
@@ -351,7 +376,7 @@ pub extern "C" fn rust_irq_handler() {
             
             // Check nesting depth for safety
             if stats.current_nesting >= MAX_IRQ_NESTING_DEPTH {
-                crate::warn!(
+                crate::debug!(
                     "IRQ nesting depth limit reached ({}), not allowing further nesting",
                     MAX_IRQ_NESTING_DEPTH
                 );

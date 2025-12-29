@@ -75,6 +75,9 @@ class QEMURunner:
         print(f"  Headless: {headless}")
         print(f"  GDB: {gdb}")
         print(f"  Monitor: {monitor}")
+        print(f"  Temp dir: {self.temp_dir}")
+        print(f"  qemu_stdout file: {self.stdout_file}")
+        print(f"  qemu_stderr file: {self.stderr_file}")
         
         # 注册退出清理函数
         atexit.register(self.cleanup)

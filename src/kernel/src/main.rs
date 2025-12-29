@@ -65,13 +65,14 @@ fn init_phase1_hardware() {
     crate::drivers::init_from_dtb(&boot_info);
     crate::console::driver_ready();
     
-    println_raw!("======= HNX Microkernel Booting =======");
-    crate::info!("Kernel: {} {} ({})", KERNEL_NAME, VERSION, ARCH);
+    // Print kernel boot banner
+    println!("======= HNX Microkernel Booting =======");
+    println!("Kernel: {} {} ({})", KERNEL_NAME, VERSION, ARCH);
     
     // Initialize architecture-specific components (interrupts, timer, MMU)
-    crate::info!("Initializing architecture...");
-    crate::arch::init();
-    crate::info!("Architecture initialized");
+    println!("Initializing architecture...");
+    arch::init();
+    println!("Architecture initialized");
 }
 
 /// Phase 2: Memory Management Initialization
@@ -84,17 +85,17 @@ fn init_phase1_hardware() {
 fn init_phase2_memory() {
     let boot_info = crate::arch::boot::get_boot_info();
     
-    crate::info!("Initializing memory subsystem...");
+    println!("Initializing memory subsystem...");
     memory::init(boot_info);
     
     // Initialize kernel heap allocator
-    crate::info!("Initializing buddy allocator...");
+    println!("Initializing buddy allocator...");
     let heap_start = 0x40000000; // TODO: Get from device tree
     let heap_size = 0x10000000;  // TODO: Get from device tree
     unsafe {
         crate::memory::BUDDY_ALLOCATOR.init(heap_start, heap_size);
     }
-    crate::info!("Memory subsystem ready");
+    println!("Memory subsystem ready");
 }
 
 /// Phase 3: Process Management and IPC Initialization
@@ -108,16 +109,16 @@ fn init_phase3_processes() {
     crate::info!("Initializing process subsystem...");
     process::init();
     
-    crate::info!("Initializing IPC service delegation...");
+    println!("Initializing IPC service delegation...");
     if let Err(_) = ipc_services::delegate::init() {
         crate::warn!("Failed to initialize IPC service endpoints (services won't be available)");
     }
     
     let boot_info = crate::arch::boot::get_boot_info();
-    crate::info!("Initializing initrd accessor (dtb_ptr=0x{:X})...", boot_info.dtb_ptr);
+    println!("Initializing initrd accessor (dtb_ptr=0x{:X})...", boot_info.dtb_ptr);
     loader::initrd::init(boot_info.dtb_ptr as usize);
     
-    crate::info!("Process and IPC subsystems ready");
+    println!("Process and IPC subsystems ready");
 }
 
 /// Phase 4: Start Scheduler
@@ -127,15 +128,15 @@ fn init_phase3_processes() {
 /// - TODO: Launch the first user space process (init/procmgr)
 /// - Begins round-robin scheduling
 fn init_phase4_scheduler() -> ! {
-    crate::info!("Kernel core ready");
+    println!("Kernel core ready");
     
-    crate::info!("Attempting to bootstrap init process...");
+    println!("Attempting to bootstrap init process...");
     match loader::bootstrap_init_process() {
         Ok((entry, sp, pt_base)) => {
-            crate::info!("Init process loaded successfully!");
-            crate::info!("  Entry: 0x{:X}", entry);
-            crate::info!("  Stack: 0x{:X}", sp);
-            crate::info!("  PT:    0x{:X}", pt_base);
+            println!("Init process loaded successfully!");
+            println!("  Entry: 0x{:X}", entry);
+            println!("  Stack: 0x{:X}", sp);
+            println!("  PT:    0x{:X}", pt_base);
             
             let pid = process::create_process(128).expect("Failed to create init process");
             process::update_process_memory(pid as usize, pt_base, 0);
@@ -153,8 +154,8 @@ fn init_phase4_scheduler() -> ! {
             
             process::set_process_state(pid as usize, process::ProcState::Ready);
             
-            crate::info!("Init process created with PID {}", pid);
-            crate::info!("Starting scheduler - init will run at EL0...");
+            println!("Init process created with PID {}", pid);
+            println!("Starting scheduler - init will run at EL0...");
             
             crate::core::scheduler::run_task(task);
         }
@@ -208,14 +209,14 @@ fn print_cpu_state() {
     unsafe {
         ::core::arch::asm!("mrs {v}, vbar_el1", v = out(reg) vbar);
     }
-    crate::info!("VBAR_EL1 = 0x{:016X}", vbar);
+    crate::debug!("VBAR_EL1 = 0x{:016X}", vbar);
     
     // CurrentEL
     let mut cur_el: u64;
     unsafe {
         ::core::arch::asm!("mrs {c}, CurrentEL", c = out(reg) cur_el);
     }
-    crate::info!("CurrentEL = 0x{:016X}", cur_el);
+    crate::debug!("CurrentEL = 0x{:016X}", cur_el);
 }
 
 #[no_mangle]

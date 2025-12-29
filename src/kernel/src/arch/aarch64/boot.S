@@ -166,9 +166,8 @@ exception_handler_sync:
     /* 传递当前sp (寄存器保存区域的开始) 到 x4 */
     mov x4, sp
     bl rust_svc_handler
-    /* 保存系统调用返回值到栈上x0的位置 (sp+144) */
-    add x9, sp, #144
-    str x0, [x9]
+    /* 系统调用返回值已经被rust_svc_handler更新到栈上x0的位置 (sp+144) */
+    /* 不再需要手动存储，因为rust代码已经更新了内存 */
     /* 跳过触发异常的指令：ELR += 4 */
     add x22, x22, #4
     msr elr_el1, x22
