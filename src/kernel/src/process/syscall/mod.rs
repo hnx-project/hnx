@@ -2,6 +2,7 @@ use core::ptr;
 use spin::Mutex;
 use crate::security::{self, validate_capability, rights};
 use crate::console;
+use crate::arch::memory;
 use crate::loader;
 use crate::loader::spawn_service_from_initrd;
 
@@ -185,11 +186,7 @@ fn user_range_ok(addr: usize, len: usize, write: bool) -> bool {
     
     crate::info!("4. Validate memory access");
     // 4. Get current page table base from TTBR0_EL1
-    let base = unsafe {
-        let ttbr0: u64;
-        core::arch::asm!("mrs {}, ttbr0_el1", out(reg) ttbr0);
-        ttbr0 as usize
-    };
+    let base = memory::get_current_page_table_base();
     crate::info!("user_range_ok: TTBR0_EL1 = 0x{:X}", base);
     
     // 5. Validate using memory protection module

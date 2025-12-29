@@ -58,6 +58,16 @@ pub trait Memory {
 
     /// 让出 CPU 执行权 (用于自旋等待)
     fn yield_cpu();
+
+    /// 获取当前页表基址 (TTBR0)
+    fn get_current_page_table_base() -> usize;
+
+    /// 设置当前页表基址 (TTBR0)
+    ///
+    /// # 参数
+    /// - `base`: 页表物理基址
+    /// - `asid`: 可选的地址空间标识符 (ASID)
+    fn set_current_page_table_base(base: usize, asid: Option<u16>);
 }
 
 // CPU 操作 trait

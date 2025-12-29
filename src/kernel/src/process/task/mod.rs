@@ -1,5 +1,6 @@
 use core::ops::Range;
 use core::sync::atomic::{AtomicU16, Ordering};
+use crate::arch::memory;
 
 pub type TaskId = u64;
 
@@ -71,9 +72,7 @@ pub fn allocate_asid() -> Asid {
         NEXT_ASID.store(1, Ordering::Relaxed);
         crate::info!("task: ASID wraparound detected, TLB flush required");
         // TODO: Implement global TLB invalidation here
-        unsafe {
-            core::arch::asm!("tlbi vmalle1; dsb ish; isb");
-        }
+        memory::tlb_flush_all();
         return 1;
     }
     

@@ -79,6 +79,50 @@ impl Memory for AArch64Memory {
             core::arch::asm!("yield");
         }
     }
+
+    fn get_current_page_table_base() -> usize {
+        unsafe {
+            let ttbr0: u64;
+            core::arch::asm!("mrs {}, ttbr0_el1", out(reg) ttbr0);
+            // 提取物理基址部分 (bits [47:12])，ASID 在 bits [63:48]
+            // 物理地址为 48 位，页表基址对齐到 4KB，所以低 12 位为 0
+            (ttbr0 & ((1 << 48) - 1)) as usize
+        }
+    }
+
+    fn set_current_page_table_base(base: usize, asid: Option<u16>) {
+        unsafe {
+            let mut new_ttbr0 = base as u64;
+            // 确保基址对齐到 4KB
+            if new_ttbr0 & 0xFFF != 0 {
+                crate::warn!("set_current_page_table_base: base 0x{:X} not aligned to 4KB", base);
+                new_ttbr0 &= !0xFFFu64;
+            }
+
+            // 设置 ASID
+            if let Some(asid_val) = asid {
+                new_ttbr0 |= (asid_val as u64) << 48;
+            } else {
+                // 保留当前 ASID
+                let current_ttbr0: u64;
+                core::arch::asm!("mrs {}, ttbr0_el1", out(reg) current_ttbr0);
+                new_ttbr0 |= current_ttbr0 & (0xFFFFu64 << 48);
+            }
+
+            // 写入 TTBR0_EL1
+            core::arch::asm!("msr ttbr0_el1, {}", in(reg) new_ttbr0);
+            // 内存屏障确保立即生效
+            Self::data_sync_barrier();
+            Self::instruction_barrier();
+            // 刷新 TLB 局部条目（针对当前 ASID）
+            if let Some(asid_val) = asid {
+                let value = (asid_val as u64) << 48;
+                core::arch::asm!("tlbi aside1is, {}", in(reg) value);
+            }
+            Self::data_sync_barrier();
+            Self::instruction_barrier();
+        }
+    }
 }
 
 // 为方便使用，提供模块级函数包装
@@ -116,4 +160,12 @@ pub fn flush_icache_all() {
 
 pub fn yield_cpu() {
     AArch64Memory::yield_cpu();
+}
+
+pub fn get_current_page_table_base() -> usize {
+    AArch64Memory::get_current_page_table_base()
+}
+
+pub fn set_current_page_table_base(base: usize, asid: Option<u16>) {
+    AArch64Memory::set_current_page_table_base(base, asid)
 }
