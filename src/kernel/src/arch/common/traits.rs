@@ -172,4 +172,14 @@ pub trait Context {
 
     /// 获取当前栈指针选择器 (SPSel)
     fn get_spsel() -> u32;
+
+    /// 从异常栈中读取保存的通用寄存器
+    ///
+    /// # 参数
+    /// - `saved_sp`: 异常栈指针（寄存器保存区域的起始地址）
+    /// - `reg`: 寄存器索引（0-30对应x0-x30）
+    ///
+    /// # 返回值
+    /// 寄存器保存的值
+    fn get_saved_gpr(saved_sp: usize, reg: usize) -> usize;
 }

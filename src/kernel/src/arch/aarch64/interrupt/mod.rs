@@ -2,6 +2,7 @@ use crate::debug;
 use crate::info;
 use crate::core::scheduler;
 use crate::arch::common::traits::InterruptController;
+use crate::arch::context;
 use core::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use hnx_abi;
 
@@ -156,14 +157,11 @@ pub extern "C" fn rust_svc_handler(esr: u64, elr: u64, far: u64, saved_x8: u64, 
         } else {
             match imm {
                 1 => {
-                    let mut fd: usize = 0;
-                    let mut buf: usize = 0;
-                    let mut len: usize = 0;
-                    unsafe {
-                        core::arch::asm!("mov {x19v}, x19", x19v = out(reg) fd);
-                        core::arch::asm!("mov {x20v}, x20", x20v = out(reg) buf);
-                        core::arch::asm!("mov {x21v}, x21", x21v = out(reg) len);
-                    }
+                    // 从保存的栈中读取寄存器值
+                    let saved_sp_usize = saved_sp as usize;
+                    let fd = context::get_saved_gpr(saved_sp_usize, 19);  // x19
+                    let buf = context::get_saved_gpr(saved_sp_usize, 20); // x20
+                    let len = context::get_saved_gpr(saved_sp_usize, 21); // x21
                     let ret = crate::process::syscall::dispatch(
                         hnx_abi::HNX_SYS_WRITE,
                         fd,
@@ -181,10 +179,9 @@ pub extern "C" fn rust_svc_handler(esr: u64, elr: u64, far: u64, saved_x8: u64, 
                 }
                 2 => {
                     debug!("arch/aarch64 exit enter");
-                    let mut a0: usize = 0;
-                    unsafe {
-                        core::arch::asm!("mov {x0}, x0", x0 = out(reg) a0);
-                    }
+                    // 从保存的栈中读取x0寄存器值
+                    let saved_sp_usize = saved_sp as usize;
+                    let a0 = context::get_saved_gpr(saved_sp_usize, 0);  // x0
                     let _ = crate::process::syscall::dispatch(
                         hnx_abi::HNX_SYS_EXIT,
                         a0,
@@ -196,10 +193,9 @@ pub extern "C" fn rust_svc_handler(esr: u64, elr: u64, far: u64, saved_x8: u64, 
                     );
                 }
                 3 => {
-                    let mut new_brk: u64 = 0;
-                    unsafe {
-                        core::arch::asm!("mov {nb}, x19", nb = out(reg) new_brk);
-                    }
+                    // 从保存的栈中读取x19寄存器值
+                    let saved_sp_usize = saved_sp as usize;
+                    let new_brk = context::get_saved_gpr(saved_sp_usize, 19) as u64;
                     let cur = PROGRAM_BREAK.load(Ordering::Relaxed);
                     if cur == 0 {
                         PROGRAM_BREAK.store(0x8000_0000, Ordering::Relaxed);
@@ -208,8 +204,10 @@ pub extern "C" fn rust_svc_handler(esr: u64, elr: u64, far: u64, saved_x8: u64, 
                         PROGRAM_BREAK.store(new_brk as usize, Ordering::Relaxed);
                     }
                     let retv = PROGRAM_BREAK.load(Ordering::Relaxed) as u64;
+                    // 更新栈上保存的x0值
                     unsafe {
-                        core::arch::asm!("mov x0, {ret}", ret = in(reg) retv);
+                        let saved_x0_ptr = (saved_sp_usize + 144) as *mut usize;
+                        saved_x0_ptr.write(retv as usize);
                     }
                 }
                 4 => {
