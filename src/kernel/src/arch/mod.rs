@@ -17,4 +17,4 @@ pub use x86_64::*;
 pub mod common;
 
 // 重新导出架构 trait 以便于使用
-pub use common::traits::{Arch, Memory, Cpu, Mmu, InterruptController, Timer};
+pub use common::traits::{Arch, Memory, Cpu, Mmu, InterruptController, Timer, Context};

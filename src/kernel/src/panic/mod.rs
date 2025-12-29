@@ -18,8 +18,6 @@ fn panic(info: &PanicInfo) -> ! {
     
     // Halt the system
     loop {
-        unsafe {
-            core::arch::asm!("wfi");
-        }
+        crate::arch::cpu::wait_for_interrupt();
     }
 }

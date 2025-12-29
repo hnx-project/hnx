@@ -165,7 +165,7 @@ fn init_phase4_scheduler() -> ! {
             crate::error!("Ensure initrd contains a valid 'init' ELF binary.");
             
             loop {
-                unsafe { ::core::arch::asm!("wfi"); }
+                crate::arch::cpu::wait_for_interrupt();
             }
         }
     }

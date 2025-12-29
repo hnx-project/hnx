@@ -4,17 +4,6 @@ use crate::info;
 use crate::memory::virtual_::map_in_pt;
 use crate::process::task::{Task, TaskState};
 use spin::Mutex;
-unsafe extern "C" {
-    unsafe fn arch_do_exec(
-        elr: usize,
-        sp0: usize,
-        ttbr0: usize,
-        a0: usize,
-        a1: usize,
-        a2: usize,
-        a8: usize,
-    ) -> !;
-}
 
 static CURRENT: Mutex<Option<Task>> = Mutex::new(None);
 
@@ -41,32 +30,24 @@ pub fn run_task(task: Task) -> ! {
             
             info!("=> About to call arch_do_exec - THIS NEVER RETURNS");
             
-            // Direct call to arch_do_exec (kernel uses identity mapping now)
-            unsafe {
-                core::arch::asm!(
-                    "mov x0, {elr}",
-                    "mov x1, {sp0}",
-                    "mov x2, {ttbr0}",
-                    "mov x3, xzr",
-                    "mov x4, xzr",
-                    "mov x5, xzr",
-                    "b {func}",
-                    elr = in(reg) elr,
-                    sp0 = in(reg) sp0,
-                    ttbr0 = in(reg) ttbr0_with_asid,
-                    func = sym arch_do_exec,
-                    options(noreturn)
-                );
-            }
+            // Use architecture-abstracted context switching
+            use crate::arch::Context;
+
+            crate::info!("=> Using architecture-abstracted context switching");
+            crate::arch::context::exec_user(
+                elr,
+                sp0,
+                base,  // page_table_base (without ASID)
+                asid,
+                (0, 0, 0, 0),  // args (a0, a1, a2, a8)
+            );
         } else {
             let entry: fn() -> ! = unsafe { core::mem::transmute(t.entry_point) };
             entry()
         }
     }
     loop {
-        unsafe {
-            core::arch::asm!("wfi");
-        }
+        crate::arch::cpu::wait_for_interrupt();
     }
 }
 
@@ -91,18 +72,22 @@ pub fn run_task_with_args(task: Task, a0: usize, a1: usize, a2: usize, a8: usize
                 ttbr0_with_asid, asid, sp0, elr
             );
             crate::arch::exec_preflight(elr);
-            unsafe {
-                arch_do_exec(elr, sp0, ttbr0_with_asid, a0, a1, a2, a8);
-            }
+            // Use architecture-abstracted context switching
+            use crate::arch::Context;
+            crate::arch::context::exec_user(
+                elr,
+                sp0,
+                base,  // page_table_base (without ASID)
+                asid,
+                (a0, a1, a2, a8),  // args
+            );
         } else {
             let entry: fn() -> ! = unsafe { core::mem::transmute(t.entry_point) };
             entry()
         }
     }
     loop {
-        unsafe {
-            core::arch::asm!("wfi");
-        }
+        crate::arch::cpu::wait_for_interrupt();
     }
 }
 
@@ -113,9 +98,7 @@ pub fn run() -> ! {
     loop {
         // For now, we just wait for interrupts
         // In a more complete implementation, this would implement proper scheduling
-        unsafe {
-            core::arch::asm!("wfi");
-        }
+        crate::arch::cpu::wait_for_interrupt();
     }
 }
 

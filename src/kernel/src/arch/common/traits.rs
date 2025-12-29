@@ -86,6 +86,13 @@ pub trait Cpu {
 
     /// 写内存屏障 (Store-Store)
     fn write_barrier();
+
+    /// 等待中断 (Wait For Interrupt)
+    ///
+    /// # 安全
+    /// 此函数会暂停 CPU 执行直到中断发生
+    /// 只能在中断使能的情况下调用
+    fn wait_for_interrupt();
 }
 
 // 中断控制器 trait
@@ -101,4 +108,38 @@ pub trait Timer {
     fn init(frequency: u64);
     fn set_timeout(ms: u64, callback: fn());
     fn get_ticks() -> u64;
+}
+
+// 上下文切换 trait
+pub trait Context {
+    /// 执行用户空间上下文切换
+    ///
+    /// # 参数
+    /// - `entry_point`: 用户空间程序入口点
+    /// - `stack_pointer`: 用户空间栈指针
+    /// - `page_table_base`: 页表物理基址
+    /// - `asid`: 地址空间标识符
+    /// - `args`: 系统调用参数 (a0, a1, a2, a8)
+    ///
+    /// # 安全
+    /// 此函数从不返回，会直接切换到用户空间执行
+    fn exec_user(
+        entry_point: usize,
+        stack_pointer: usize,
+        page_table_base: usize,
+        asid: u16,
+        args: (usize, usize, usize, usize),
+    ) -> !;
+
+    /// 获取当前异常链接寄存器 (ELR)
+    fn get_elr() -> usize;
+
+    /// 获取当前栈指针 (SP)
+    fn get_sp() -> usize;
+
+    /// 获取向量基址寄存器 (VBAR)
+    fn get_vbar() -> usize;
+
+    /// 获取当前异常级别 (CurrentEL)
+    fn get_current_el() -> u32;
 }

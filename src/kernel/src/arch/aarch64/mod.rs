@@ -21,9 +21,7 @@ impl Arch for AArch64 {
 
     fn halt() -> ! {
         loop {
-            unsafe {
-                core::arch::asm!("wfi");
-            }
+            cpu::wait_for_interrupt();
         }
     }
 }
@@ -35,6 +33,7 @@ pub mod memory;
 pub mod mmu;
 pub mod timer;
 pub mod cpu;
+pub mod context;
 
 pub fn init() {
     AArch64::init();
@@ -49,22 +48,22 @@ pub fn disable() {
 }
 
 pub fn exec_preflight(elr: usize) {
+    use crate::arch::Context;
+
+    let vbar = context::get_vbar();
+    let cur_el = context::get_current_el();
+    let sp = context::get_sp();
+    let ttbr0 = memory::get_current_page_table_base();
+    // 注意：我们还需要获取 TTBR1，但 Context trait 没有提供这个方法
+    // 暂时保留原有实现的部分
     unsafe {
-        let mut spsr: u64 = 0;
-        let mut cel: u64 = 0;
-        let mut vbar: u64 = 0;
-        let mut tt0: u64 = 0;
         let mut tt1: u64 = 0;
-        let mut sp_el0: u64 = 0;
-        core::arch::asm!("mrs {s}, spsr_el1", s = out(reg) spsr);
-        core::arch::asm!("mrs {c}, CurrentEL", c = out(reg) cel);
-        core::arch::asm!("mrs {v}, vbar_el1", v = out(reg) vbar);
-        core::arch::asm!("mrs {t0}, ttbr0_el1", t0 = out(reg) tt0);
+        let mut spsr: u64 = 0;
         core::arch::asm!("mrs {t1}, ttbr1_el1", t1 = out(reg) tt1);
-        core::arch::asm!("mrs {sp}, sp_el0", sp = out(reg) sp_el0);
+        core::arch::asm!("mrs {s}, spsr_el1", s = out(reg) spsr);
         crate::debug!(
-            "arch/aarch64 exec preflight: ELR=0x{:016X} SPSR=0x{:016X} VBAR=0x{:016X} CurrentEL=0x{:016X} SP_EL0=0x{:016X} TTBR0=0x{:016X} TTBR1=0x{:016X}",
-            elr as u64, spsr, vbar, cel, sp_el0, tt0, tt1
+            "arch/aarch64 exec preflight: ELR=0x{:016X} SPSR=0x{:016X} VBAR=0x{:016X} CurrentEL={} SP_EL0=0x{:016X} TTBR0=0x{:016X} TTBR1=0x{:016X}",
+            elr as u64, spsr, vbar, cur_el, sp, ttbr0, tt1
         );
     }
 }
