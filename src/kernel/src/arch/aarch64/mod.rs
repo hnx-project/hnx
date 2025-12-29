@@ -1,27 +1,47 @@
 //! ARMv8 (aarch64) 架构实现
 
-pub struct Arch;
+use crate::arch::common::traits::Arch;
+
+pub struct AArch64;
 pub const ARCH_NAME: &str = "aarch64";
+
+impl Arch for AArch64 {
+    const NAME: &'static str = ARCH_NAME;
+
+    fn init() {
+        interrupt::init();
+        mmu::init();
+        timer::init();
+        crate::security::init();
+    }
+
+    fn cpu_id() -> u32 {
+        cpu::id()
+    }
+
+    fn halt() -> ! {
+        loop {
+            unsafe {
+                core::arch::asm!("wfi");
+            }
+        }
+    }
+}
 
 pub mod boot;
 pub mod console;
 pub mod interrupt;
+pub mod memory;
 pub mod mmu;
 pub mod timer;
+pub mod cpu;
 
 pub fn init() {
-    interrupt::init();
-    mmu::init();
-    timer::init();
-    crate::security::init();
+    AArch64::init();
 }
 
 pub fn cpu_id() -> u32 {
-    let mut cpu_id: u64;
-    unsafe {
-        core::arch::asm!("mrs {}, mpidr_el1", out(reg) cpu_id);
-    }
-    (cpu_id & 0xFF) as u32
+    cpu::id()
 }
 
 pub fn disable() {

@@ -15,3 +15,6 @@ pub use x86_64::*;
 
 // 导出通用接口
 pub mod common;
+
+// 重新导出架构 trait 以便于使用
+pub use common::traits::{Arch, Memory, Cpu, Mmu, InterruptController, Timer};

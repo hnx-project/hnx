@@ -30,6 +30,54 @@ pub trait Mmu {
     fn virt_to_phys(vaddr: usize) -> Option<usize>;
 }
 
+// 内存操作 trait (屏障、TLB、缓存)
+pub trait Memory {
+    /// 数据同步屏障 (Data Synchronization Barrier)
+    fn data_sync_barrier();
+
+    /// 指令同步屏障 (Instruction Synchronization Barrier)
+    fn instruction_barrier();
+
+    /// 数据内存屏障 (Data Memory Barrier)
+    fn data_memory_barrier();
+
+    /// 刷新整个 TLB (所有条目)
+    fn tlb_flush_all();
+
+    /// 按虚拟地址使 TLB 条目无效 (可选的 ASID)
+    fn tlb_invalidate(vaddr: usize, asid: Option<u16>);
+
+    /// 获取当前 ASID (地址空间标识符)
+    fn get_current_asid() -> u16;
+
+    /// 清理数据缓存范围
+    fn clean_dcache_range(addr: usize, size: usize);
+
+    /// 刷新指令缓存全部
+    fn flush_icache_all();
+
+    /// 让出 CPU 执行权 (用于自旋等待)
+    fn yield_cpu();
+}
+
+// CPU 操作 trait
+pub trait Cpu {
+    /// 获取当前 CPU 核心 ID
+    fn id() -> u32;
+
+    /// 让出 CPU 执行权 (用于自旋等待)
+    fn yield_cpu();
+
+    /// 内存屏障 (全功能屏障)
+    fn barrier();
+
+    /// 读内存屏障 (Load-Load 和 Load-Store)
+    fn read_barrier();
+
+    /// 写内存屏障 (Store-Store)
+    fn write_barrier();
+}
+
 // 中断控制器 trait
 pub trait InterruptController {
     fn init();
