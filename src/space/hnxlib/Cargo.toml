@@ -3,5 +3,11 @@ name = "hnxlib"
 version = "0.0.1"
 edition = "2021"
 
+[features]
+default = ["aarch64"]
+aarch64 = []
+x86_64 = []
+riscv64 = []
+
 [dependencies]
 hnx-abi = { path = "../../abi-bindings" }

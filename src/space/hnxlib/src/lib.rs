@@ -1,5 +1,8 @@
 #![no_std]
 
+// 用户空间架构抽象模块
+pub mod arch;
+
 // 安全系统调用模块
 pub mod safe_syscall;
 

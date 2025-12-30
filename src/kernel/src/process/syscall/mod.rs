@@ -18,7 +18,7 @@ use hnx_abi::{
     HNX_SYS_GETPPID, HNX_SYS_WAIT4, HNX_SYS_DRIVER_REGISTER, HNX_SYS_DRIVER_REQUEST_IRQ,
     HNX_SYS_DRIVER_MAP_MMIO, HNX_SYS_DRIVER_DMA_ALLOC, HNX_SYS_SOCKET, HNX_SYS_BIND, HNX_SYS_CONNECT,
     HNX_SYS_LISTEN, HNX_SYS_ACCEPT, HNX_SYS_SEND, HNX_SYS_RECV,
-    HNX_SYS_PROCESS_CREATE, SysResult
+    HNX_SYS_PROCESS_CREATE, HNX_SYS_SPAWN_SERVICE, SysResult
 };
 
 #[derive(Copy, Clone)]
@@ -520,7 +520,7 @@ pub fn dispatch(
             crate::debug!("syscall enter process_create");
             crate::user::sys_process_create(x0, x1)
         }
-        0x0103 => {  // HNX_SYS_SPAWN_SERVICE (temporary until bindings regenerated)
+        HNX_SYS_SPAWN_SERVICE => {
             crate::debug!("syscall enter spawn_service");
             sys_spawn_service(x0, x1)
         }

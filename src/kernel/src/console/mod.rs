@@ -127,11 +127,11 @@ macro_rules! println_raw {
 }
 
 pub fn log(level: &str, module: &str, args: fmt::Arguments) {
-    if level == "ERROR" || level == "WARN" {
-        write(format_args!("[{}] <{}> => {}\n", level, module, args));
-        return;
-    }
-    write(format_args!("[{}] => {}\n", level, args));
+    // if level == "ERROR" || level == "WARN" {
+    write(format_args!("[{}] <{}> => {}\n", level, module, args));
+        // return;
+    // }
+    // write(format_args!("[{}] => {}\n", level, args));
 }
 
 pub mod loglvl {
