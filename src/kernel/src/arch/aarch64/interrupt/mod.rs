@@ -49,6 +49,76 @@ unsafe fn disable_irq() {
 #[no_mangle]
 pub extern "C" fn rust_svc_handler(esr: u64, elr: u64, far: u64, saved_x8: u64, saved_sp: u64) {
     info!("arch/aarch64 SVC handler entered");
+
+    // 打印ec和imm用于调试
+    let ec = (esr >> 26) & 0x3F;
+    let imm = esr & 0xFFFF;
+    crate::console::write_raw("RUST_SVC_HANDLER: ec=0x");
+    let mut n = ec;
+    let mut buf = [b'0'; 2];
+    let mut i = 1;
+    let hex_digits = b"0123456789ABCDEF";
+    if n == 0 {
+        crate::console::write_raw("0");
+    } else {
+        while n > 0 {
+            buf[i] = hex_digits[(n & 0xF) as usize];
+            n >>= 4;
+            i -= 1;
+        }
+        crate::console::write_raw(core::str::from_utf8(&buf[i+1..]).unwrap_or("?"));
+    }
+    crate::console::write_raw(" imm=0x");
+    let mut n = imm;
+    let mut buf = [b'0'; 4];
+    let mut i = 3;
+    if n == 0 {
+        crate::console::write_raw("0");
+    } else {
+        while n > 0 {
+            buf[i] = hex_digits[(n & 0xF) as usize];
+            n >>= 4;
+            i -= 1;
+        }
+        crate::console::write_raw(core::str::from_utf8(&buf[i+1..]).unwrap_or("?"));
+    }
+    crate::console::write_raw(" saved_x8=0x");
+    let mut n = saved_x8;
+    let mut buf = [b'0'; 16];
+    let mut i = 15;
+    if n == 0 {
+        crate::console::write_raw("0");
+    } else {
+        while n > 0 {
+            buf[i] = hex_digits[(n & 0xF) as usize];
+            n >>= 4;
+            i -= 1;
+        }
+        crate::console::write_raw(core::str::from_utf8(&buf[i+1..]).unwrap_or("?"));
+    }
+    crate::console::write_raw("\n");
+
+    // 特殊调试：检查系统调用号
+    if saved_x8 != 0x1001 && saved_x8 != 0x18 {
+        crate::console::write_raw("SPECIAL_DEBUG: Non-standard syscall num=0x");
+        // 打印十六进制
+        let mut n = saved_x8;
+        let mut buf = [b'0'; 16];
+        let mut i = 15;
+        let hex_digits = b"0123456789ABCDEF";
+        if n == 0 {
+            crate::console::write_raw("0");
+        } else {
+            while n > 0 {
+                buf[i] = hex_digits[(n & 0xF) as usize];
+                n >>= 4;
+                i -= 1;
+            }
+            crate::console::write_raw(core::str::from_utf8(&buf[i+1..]).unwrap_or("?"));
+        }
+        crate::console::write_raw("\n");
+    }
+
     let ec = (esr >> 26) & 0x3F;
     info!("arch/aarch64 svc: ec=0x{:X} esr=0x{:016X} elr=0x{:016X} far=0x{:016X} saved_x8=0x{:016X} saved_sp=0x{:016X}", ec, esr, elr, far, saved_x8, saved_sp);
     
@@ -70,6 +140,7 @@ pub extern "C" fn rust_svc_handler(esr: u64, elr: u64, far: u64, saved_x8: u64, 
         );
     }
     
+    crate::console::write_raw(&format!("DEBUG: ec=0x{:X} checking if == 0x15\n", ec));
     if ec == 0x15 {
         let cel = crate::arch::context::get_current_el() as u64;
         let spsel = crate::arch::context::get_spsel() as u64;
@@ -82,6 +153,39 @@ pub extern "C" fn rust_svc_handler(esr: u64, elr: u64, far: u64, saved_x8: u64, 
         debug!("arch/aarch64 svc enter: esr=0x{:016X} elr=0x{:016X} spsr=0x{:016X} currentEL=0x{:016X} spsel={} ttbr0=0x{:016X} asid={} ttbr1=0x{:016X}", esr, elr, spsr, cel, spsel & 1, ttbr0, asid, ttbr1);
         let imm = esr & 0xFFFF;
         if imm == 0 {
+            // 调试：打印saved_x8和hnx_abi常量的值
+            crate::console::write_raw("IMM0_DEBUG: saved_x8=0x");
+            let mut n = saved_x8;
+            let mut buf = [b'0'; 16];
+            let mut i = 15;
+            let hex_digits = b"0123456789ABCDEF";
+            if n == 0 {
+                crate::console::write_raw("0");
+            } else {
+                while n > 0 {
+                    buf[i] = hex_digits[(n & 0xF) as usize];
+                    n >>= 4;
+                    i -= 1;
+                }
+                crate::console::write_raw(core::str::from_utf8(&buf[i+1..]).unwrap_or("?"));
+            }
+            crate::console::write_raw(" HNX_SYS_SPAWN_SERVICE=");
+            // 打印十进制值
+            let mut n = hnx_abi::HNX_SYS_SPAWN_SERVICE as u64;
+            let mut buf = [b'0'; 20];
+            let mut i = 19;
+            if n == 0 {
+                crate::console::write_raw("0");
+            } else {
+                while n > 0 {
+                    buf[i] = b'0' + ((n % 10) as u8);
+                    n /= 10;
+                    i -= 1;
+                }
+                crate::console::write_raw(core::str::from_utf8(&buf[i+1..]).unwrap_or("?"));
+            }
+            crate::console::write_raw("\n");
+
             // Use saved_sp passed from assembly (start of register save area)
             let sp = saved_sp as usize;
             // Read saved user registers from stack
@@ -116,6 +220,10 @@ pub extern "C" fn rust_svc_handler(esr: u64, elr: u64, far: u64, saved_x8: u64, 
             info!("HNX_SYS_WRITE={}, HNX_SYS_YIELD={}", hnx_abi::HNX_SYS_WRITE, hnx_abi::HNX_SYS_YIELD);
             // Use saved x8 as system call number
             // Check if it's a valid syscall number from abi
+            // 调试：检查是否是spawn_service
+            if saved_x8 == 0x103 || saved_x8 == 259 {
+                crate::console::write_raw("SPAWN_SERVICE_IN_IMM0_BRANCH\n");
+            }
             let saved_x8_u32 = saved_x8 as u32;
             let syscall_num = if saved_x8_u32 == hnx_abi::HNX_SYS_WRITE
                 || saved_x8_u32 == hnx_abi::HNX_SYS_READ
