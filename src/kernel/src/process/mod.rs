@@ -247,7 +247,14 @@ pub fn set_process_state(pid: usize, state: ProcState) -> bool {
     let mut table = PCB_TABLE.lock();
     let i = pid % table.len();
     if let Some(ref mut pcb) = table[i] {
+        let old_state = pcb.state;
         pcb.state = state;
+
+        // If transitioning to Ready state, add to ready queue
+        if old_state != ProcState::Ready && state == ProcState::Ready {
+            drop(table); // Release lock before calling ready_queue_push
+            ready_queue_push(pid as u32);
+        }
         true
     } else {
         false

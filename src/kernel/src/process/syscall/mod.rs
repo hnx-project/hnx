@@ -425,7 +425,8 @@ pub fn dispatch(
             fs_stubs::sys_rmdir(x0)
         }
         HNX_SYS_YIELD => {
-            crate::core::scheduler::on_tick();
+            crate::debug!("syscall enter yield");
+            crate::core::scheduler::schedule_priority();
             0
         }
         HNX_SYS_IPC_WAIT => {

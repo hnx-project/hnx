@@ -70,8 +70,15 @@ pub unsafe fn syscall_6_with_barriers(
 
         // 内联汇编：显式声明所有寄存器使用
         asm!(
-            // 系统调用指令
+            // 内存屏障确保系统调用前所有写入完成
+            "dsb sy",
+            "isb",
+            
             "svc #0",
+            
+            // 系统调用后的屏障
+            "dsb sy",
+            "isb",
 
             // 输入寄存器
             in("x8") syscall_num,  // 系统调用号 - 明确标记为输入
