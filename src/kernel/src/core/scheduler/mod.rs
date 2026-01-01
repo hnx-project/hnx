@@ -14,36 +14,37 @@ pub fn run_task(task: Task) -> ! {
         *cur = Some(task);
     }
     info!("process running task");
-    if let Some(t) = CURRENT.lock().as_ref() {
-        if t.ttbr0_base != 0 {
-            let base = t.ttbr0_base;
-            let asid = t.asid;
-            let sp0 = t.context.sp;
-            let elr = t.entry_point;
-            
+    // Extract task fields while holding lock briefly
+    let task_fields = {
+        let cur = CURRENT.lock();
+        cur.as_ref().map(|t| (t.ttbr0_base != 0, t.entry_point, t.context.sp, t.ttbr0_base, t.asid))
+    };
+
+    if let Some((has_user_space, entry_point, stack_pointer, ttbr0_base, asid)) = task_fields {
+        if has_user_space {
             // Encode ASID in TTBR0_EL1[63:48] as per ARMv8 spec
-            let ttbr0_with_asid = (base & 0x0000_FFFF_FFFF_FFFF) | ((asid as usize) << 48);
-            
+            let ttbr0_with_asid = (ttbr0_base & 0x0000_FFFF_FFFF_FFFF) | ((asid as usize) << 48);
+
             info!(
                 "process set EL0 ttbr0=0x{:016X} asid={} sp=0x{:016X} elr=0x{:016X}",
-                ttbr0_with_asid, asid, sp0, elr
+                ttbr0_with_asid, asid, stack_pointer, entry_point
             );
-            
+
             info!("=> About to call arch_do_exec - THIS NEVER RETURNS");
-            
+
             // Use architecture-abstracted context switching
             use crate::arch::Context;
 
             crate::info!("=> Using architecture-abstracted context switching");
             crate::arch::context::exec_user(
-                elr,
-                sp0,
-                base,  // page_table_base (without ASID)
+                entry_point,
+                stack_pointer,
+                ttbr0_base,  // page_table_base (without ASID)
                 asid,
                 (0, 0, 0, 0),  // args (a0, a1, a2, a8)
             );
         } else {
-            let entry: fn() -> ! = unsafe { core::mem::transmute(t.entry_point) };
+            let entry: fn() -> ! = unsafe { core::mem::transmute(entry_point) };
             entry()
         }
     }
@@ -183,8 +184,21 @@ pub fn switch_to_next_process() -> ! {
     crate::console::write_raw("[SCHED] got current_pid\n");
     crate::info!("switch_to_next_process: current_pid={}", current_pid);
 
-    // If we have a current process, put it back in ready queue
+    // Save current process context before switching away
     let effective_pid = if current_pid != 0 {
+        // Get current PC and SP from saved exception context
+        let current_pc = crate::arch::context::get_elr();
+        let current_sp = crate::arch::context::get_sp();
+        crate::info!("switch_to_next_process: saving context for PID {}: PC=0x{:X}, SP=0x{:X}",
+                     current_pid, current_pc, current_sp);
+
+        // Update PCB with current context using public API
+        if crate::process::update_process_context(current_pid as u32, current_pc, current_sp) {
+            crate::info!("switch_to_next_process: updated PCB for PID {}", current_pid);
+        } else {
+            crate::error!("switch_to_next_process: failed to update PCB for PID {}", current_pid);
+        }
+
         current_pid
     } else {
         // Lock was unavailable, but we know init is PID 1
@@ -236,6 +250,7 @@ pub fn switch_to_next_process() -> ! {
             }
 
             // Perform architecture-specific context switch
+            crate::info!("[SCHED] About to call exec_user for PID {}", next_pid);
             use crate::arch::Context;
             crate::arch::context::exec_user(
                 entry_point,

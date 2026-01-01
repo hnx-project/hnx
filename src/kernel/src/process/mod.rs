@@ -463,3 +463,19 @@ pub fn get_process_for_scheduling(pid: u32) -> Option<(usize, usize, usize, u16)
         )
     })
 }
+
+/// Update process context (PC and SP)
+///
+/// This should be called during context switching to save the current
+/// execution point before switching away.
+pub fn update_process_context(pid: u32, pc: usize, sp: usize) -> bool {
+    let mut table = PCB_TABLE.lock();
+    let idx = (pid as usize) % table.len();
+    if let Some(ref mut pcb) = table[idx] {
+        pcb.entry_point = pc;
+        pcb.stack_pointer = sp;
+        true
+    } else {
+        false
+    }
+}
