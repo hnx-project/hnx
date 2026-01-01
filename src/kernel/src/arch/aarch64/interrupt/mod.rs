@@ -1,5 +1,6 @@
 use crate::debug;
 use crate::info;
+use crate::error;
 use crate::core::scheduler;
 use crate::arch::common::traits::InterruptController;
 use crate::arch::context;
@@ -50,73 +51,17 @@ unsafe fn disable_irq() {
 pub extern "C" fn rust_svc_handler(esr: u64, elr: u64, far: u64, saved_x8: u64, saved_sp: u64) {
     info!("arch/aarch64 SVC handler entered");
 
-    // 打印ec和imm用于调试
+    // 简化的调试输出
     let ec = (esr >> 26) & 0x3F;
     let imm = esr & 0xFFFF;
-    crate::console::write_raw("RUST_SVC_HANDLER: ec=0x");
-    let mut n = ec;
-    let mut buf = [b'0'; 2];
-    let mut i = 1;
-    let hex_digits = b"0123456789ABCDEF";
-    if n == 0 {
-        crate::console::write_raw("0");
-    } else {
-        while n > 0 {
-            buf[i] = hex_digits[(n & 0xF) as usize];
-            n >>= 4;
-            i -= 1;
-        }
-        crate::console::write_raw(core::str::from_utf8(&buf[i+1..]).unwrap_or("?"));
-    }
-    crate::console::write_raw(" imm=0x");
-    let mut n = imm;
-    let mut buf = [b'0'; 4];
-    let mut i = 3;
-    if n == 0 {
-        crate::console::write_raw("0");
-    } else {
-        while n > 0 {
-            buf[i] = hex_digits[(n & 0xF) as usize];
-            n >>= 4;
-            i -= 1;
-        }
-        crate::console::write_raw(core::str::from_utf8(&buf[i+1..]).unwrap_or("?"));
-    }
-    crate::console::write_raw(" saved_x8=0x");
-    let mut n = saved_x8;
-    let mut buf = [b'0'; 16];
-    let mut i = 15;
-    if n == 0 {
-        crate::console::write_raw("0");
-    } else {
-        while n > 0 {
-            buf[i] = hex_digits[(n & 0xF) as usize];
-            n >>= 4;
-            i -= 1;
-        }
-        crate::console::write_raw(core::str::from_utf8(&buf[i+1..]).unwrap_or("?"));
-    }
-    crate::console::write_raw("\n");
+    info!("RUST_SVC_HANDLER: ec=0x{:X}, imm=0x{:X}, saved_x8=0x{:X}, elr=0x{:X}", ec, imm, saved_x8, elr);
 
     // 特殊调试：检查系统调用号
     if saved_x8 != 0x1001 && saved_x8 != 0x18 {
-        crate::console::write_raw("SPECIAL_DEBUG: Non-standard syscall num=0x");
-        // 打印十六进制
-        let mut n = saved_x8;
-        let mut buf = [b'0'; 16];
-        let mut i = 15;
-        let hex_digits = b"0123456789ABCDEF";
-        if n == 0 {
-            crate::console::write_raw("0");
-        } else {
-            while n > 0 {
-                buf[i] = hex_digits[(n & 0xF) as usize];
-                n >>= 4;
-                i -= 1;
-            }
-            crate::console::write_raw(core::str::from_utf8(&buf[i+1..]).unwrap_or("?"));
+        debug!("SPECIAL_DEBUG: Non-standard syscall num=0x{:X}", saved_x8);
+        if saved_x8 == 0x103 || saved_x8 == 259 {
+            debug!("SPAWN_SERVICE_DETECTED: saved_x8=0x{:X} matches HNX_SYS_SPAWN_SERVICE", saved_x8);
         }
-        crate::console::write_raw("\n");
     }
 
     let ec = (esr >> 26) & 0x3F;
@@ -139,9 +84,14 @@ pub extern "C" fn rust_svc_handler(esr: u64, elr: u64, far: u64, saved_x8: u64, 
             spsr, elr
         );
     }
-    
-    crate::console::write_raw(&format!("DEBUG: ec=0x{:X} checking if == 0x15\n", ec));
+
+    debug!("DEBUG: ec=0x{:X} checking if == 0x15", ec);
+    if ec != 0x15 {
+        crate::warn!("WARNING: ec=0x{:X} != 0x15 - SVC call may not be handled correctly!", ec);
+    }
+
     if ec == 0x15 {
+        info!("EC=0x15 branch entered - standard SVC call");
         let cel = crate::arch::context::get_current_el() as u64;
         let spsel = crate::arch::context::get_spsel() as u64;
         let ttbr0 = crate::arch::context::get_ttbr0() as u64;
@@ -154,37 +104,7 @@ pub extern "C" fn rust_svc_handler(esr: u64, elr: u64, far: u64, saved_x8: u64, 
         let imm = esr & 0xFFFF;
         if imm == 0 {
             // 调试：打印saved_x8和hnx_abi常量的值
-            crate::console::write_raw("IMM0_DEBUG: saved_x8=0x");
-            let mut n = saved_x8;
-            let mut buf = [b'0'; 16];
-            let mut i = 15;
-            let hex_digits = b"0123456789ABCDEF";
-            if n == 0 {
-                crate::console::write_raw("0");
-            } else {
-                while n > 0 {
-                    buf[i] = hex_digits[(n & 0xF) as usize];
-                    n >>= 4;
-                    i -= 1;
-                }
-                crate::console::write_raw(core::str::from_utf8(&buf[i+1..]).unwrap_or("?"));
-            }
-            crate::console::write_raw(" HNX_SYS_SPAWN_SERVICE=");
-            // 打印十进制值
-            let mut n = hnx_abi::HNX_SYS_SPAWN_SERVICE as u64;
-            let mut buf = [b'0'; 20];
-            let mut i = 19;
-            if n == 0 {
-                crate::console::write_raw("0");
-            } else {
-                while n > 0 {
-                    buf[i] = b'0' + ((n % 10) as u8);
-                    n /= 10;
-                    i -= 1;
-                }
-                crate::console::write_raw(core::str::from_utf8(&buf[i+1..]).unwrap_or("?"));
-            }
-            crate::console::write_raw("\n");
+            debug!("IMM0_DEBUG: saved_x8=0x{:X}, HNX_SYS_SPAWN_SERVICE={}", saved_x8, hnx_abi::HNX_SYS_SPAWN_SERVICE);
 
             // Use saved_sp passed from assembly (start of register save area)
             let sp = saved_sp as usize;
@@ -221,44 +141,46 @@ pub extern "C" fn rust_svc_handler(esr: u64, elr: u64, far: u64, saved_x8: u64, 
             // Use saved x8 as system call number
             // Check if it's a valid syscall number from abi
             // 调试：检查是否是spawn_service
+            debug!("IMM0_BRANCH: saved_x8=0x{:X}", saved_x8);
+
             if saved_x8 == 0x103 || saved_x8 == 259 {
-                crate::console::write_raw("SPAWN_SERVICE_IN_IMM0_BRANCH\n");
+                debug!("SPAWN_SERVICE_DETECTED_IN_IMM0_BRANCH: saved_x8=0x{:X}, saved_x8_u32=0x{:X}", saved_x8, saved_x8 as u32);
             }
             let saved_x8_u32 = saved_x8 as u32;
-            let syscall_num = if saved_x8_u32 == hnx_abi::HNX_SYS_WRITE
-                || saved_x8_u32 == hnx_abi::HNX_SYS_READ
-                || saved_x8_u32 == hnx_abi::HNX_SYS_OPEN
-                || saved_x8_u32 == hnx_abi::HNX_SYS_CLOSE
-                || saved_x8_u32 == hnx_abi::HNX_SYS_EXIT
-                || saved_x8_u32 == hnx_abi::HNX_SYS_YIELD
-                || saved_x8_u32 == hnx_abi::HNX_SYS_PROCESS_CREATE
-                || saved_x8_u32 == hnx_abi::HNX_SYS_SPAWN_SERVICE
-                || saved_x8_u32 == hnx_abi::HNX_SYS_IPC_WAIT
-                || saved_x8_u32 == hnx_abi::HNX_SYS_IPC_WAKE
-                || saved_x8_u32 == hnx_abi::HNX_SYS_EP_CREATE
-                || saved_x8_u32 == hnx_abi::HNX_SYS_EP_SEND
-                || saved_x8_u32 == hnx_abi::HNX_SYS_EP_RECV {
-                saved_x8_u32
+            debug!("DEBUG: Checking if saved_x8_u32=0x{:X} is in syscall list, saved_x8=0x{:X}", saved_x8_u32, saved_x8);
+            debug!("DEBUG: HNX_SYS_SPAWN_SERVICE=0x{:X}", hnx_abi::HNX_SYS_SPAWN_SERVICE);
+
+            // 特殊检查spawn_service
+            debug!("DEBUG: saved_x8_u32=0x{:X} ({})", saved_x8_u32, saved_x8_u32);
+            debug!("DEBUG: HNX_SYS_SPAWN_SERVICE=0x{:X} ({})", hnx_abi::HNX_SYS_SPAWN_SERVICE, hnx_abi::HNX_SYS_SPAWN_SERVICE);
+            if saved_x8_u32 == hnx_abi::HNX_SYS_SPAWN_SERVICE {
+                debug!("DEBUG: Special check: saved_x8_u32 == HNX_SYS_SPAWN_SERVICE is TRUE");
             } else {
-                info!("arch/aarch64 svc#0: saved_x8=0x{:X} not recognized, defaulting to 0", saved_x8);
-                0
-            };
-            info!("arch/aarch64 svc#0 using syscall_num=0x{:X} (saved_x8=0x{:X})", syscall_num, saved_x8);
+                debug!("DEBUG: Special check: saved_x8_u32 == HNX_SYS_SPAWN_SERVICE is FALSE");
+            }
+
+            // 简化：总是使用saved_x8_u32作为系统调用号
+            // 问题：条件判断失败，但saved_x8=0x103应该有效
+            let syscall_num = saved_x8_u32;
+            debug!("DEBUG: Using syscall_num=0x{:X} (saved_x8_u32) for spawn_service?", syscall_num);
+            debug!("DEBUG: saved_x8=0x{:X}, a0=0x{:X}, a1=0x{:X}, a2=0x{:X}", saved_x8, a0, a1, a2);
+            debug!("arch/aarch64 svc#0 using syscall_num=0x{:X} (saved_x8=0x{:X})", syscall_num, saved_x8);
             let ret = crate::process::syscall::dispatch(syscall_num, a0, a1, a2, a3, a4, a5) as u64;
-            info!("arch/aarch64 svc#0 ret=0x{:X}", ret);
+            debug!("arch/aarch64 svc#0 ret=0x{:X}", ret);
             // Update saved x0 on stack so it gets restored on exception return
             unsafe {
                 let saved_x0_ptr = (sp + 144) as *mut usize;
+                debug!("DEBUG: sp=0x{:X}, saved_x0_ptr=sp+144=0x{:X}", sp, saved_x0_ptr as usize);
                 let old_value = saved_x0_ptr.read();
                 crate::debug!("DEBUG: Before update - saved_x0_ptr=0x{:X}, old_value=0x{:X}, ret=0x{:X}", saved_x0_ptr as usize, old_value, ret);
-                
+
                 // Write the return value to the saved x0 location
                 core::ptr::write_volatile(saved_x0_ptr, ret as usize);
-                
+
                 // Ensure the write is visible to the CPU and memory subsystem
                 crate::arch::memory::data_sync_barrier();  // Data Synchronization Barrier
                 core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
-                
+
                 let new_value = core::ptr::read_volatile(saved_x0_ptr);
                 crate::debug!("DEBUG: After update - new_value=0x{:X}", new_value);
             }
@@ -411,8 +333,12 @@ pub extern "C" fn rust_sync_try_handle(
     _spsr: u64,
 ) -> u64 {
     crate::console::write_raw("rust_sync_try_handle\n");
-    info!("rust_sync_try_handle called: ec=0x{:X} esr=0x{:X}", (esr >> 26) & 0x3F, esr);
     let ec = (esr >> 26) & 0x3F;
+    let imm = esr & 0xFFFF;
+    info!("rust_sync_try_handle called: ec=0x{:X} imm=0x{:X} esr=0x{:X} elr=0x{:X} far=0x{:X}", ec, imm, esr, elr, far);
+    if ec == 0x15 {
+        info!("WARNING: rust_sync_try_handle received EC=0x15 (SVC) - this should go to rust_svc_handler!");
+    }
     crate::console::write_raw("rust_sync_try_handle: checking ec\n");
     if ec == 0x20 || ec == 0x24 {
         crate::console::write_raw("rust_sync_try_handle: page fault detected\n");

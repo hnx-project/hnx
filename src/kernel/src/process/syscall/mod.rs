@@ -5,6 +5,7 @@ use crate::console;
 use crate::arch::memory;
 use crate::loader;
 use crate::loader::spawn_service_from_initrd;
+use crate::error;
 
 // Syscall stubs that delegate to user space services
 mod fs_stubs;
@@ -88,7 +89,7 @@ fn copy_to_user(dst: usize, src: &[u8]) -> usize {
 }
 
 fn sys_spawn_service(path_ptr: usize, path_len: usize) -> SysResult {
-    crate::info!("sys_spawn_service: path_ptr=0x{:X}, path_len={}", path_ptr, path_len);
+    crate::debug!("sys_spawn_service ENTER: path_ptr=0x{:X}, path_len={}", path_ptr, path_len);
 
     // Validate path length
     if path_len == 0 || path_len > 256 {
@@ -336,11 +337,12 @@ pub fn dispatch(
     _x4: usize,
     _x5: usize,
 ) -> SysResult {
-    crate::info!("syscall dispatch: num={} (0x{:X}), x0=0x{:X}, x1=0x{:X}, x2=0x{:X}", num, num, x0, x1, x2);
+    crate::debug!("syscall dispatch: num={} (0x{:X}), x0=0x{:X}, x1=0x{:X}, x2=0x{:X}", num, num, x0, x1, x2);
     match num {
         0 => {
             // Special case: init process uses syscall 0 for write
             crate::debug!("syscall 0: treating as write, fd={}, buf=0x{:X}, len={}", x1, x0, x2);
+            crate::debug!("Legacy syscall 0 received from init process for console output");
             // Assume fd=1 (stdout) if x1 is 0, otherwise use x1
             let fd = if x1 == 0 { 1 } else { x1 };
             // Try to actually write the character to console
@@ -521,7 +523,8 @@ pub fn dispatch(
             crate::user::sys_process_create(x0, x1)
         }
         HNX_SYS_SPAWN_SERVICE => {
-            crate::debug!("syscall enter spawn_service");
+            crate::debug!("syscall enter spawn_service: num=0x{:X} (HNX_SYS_SPAWN_SERVICE)", num);
+            crate::debug!("sys_spawn_service parameters: path_ptr=0x{:X}, path_len={}", x0, x1);
             sys_spawn_service(x0, x1)
         }
         _ => -1,
