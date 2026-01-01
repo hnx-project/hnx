@@ -180,6 +180,10 @@ pub fn switch_to_next_process() -> ! {
     // Immediate debug output to confirm function is called
     crate::console::write_raw("[SCHED] switch_to_next_process called\n");
 
+    // Debug: print ready queue state before any operations
+    crate::console::write_raw("[SCHED DEBUG] Ready queue state at start\n");
+    crate::process::debug_print_ready_queue();
+
     let current_pid = current_pid();
     crate::console::write_raw("[SCHED] got current_pid\n");
     crate::info!("switch_to_next_process: current_pid={}", current_pid);
@@ -207,12 +211,21 @@ pub fn switch_to_next_process() -> ! {
     };
 
     crate::console::write_raw("[SCHED] pushing PID back to ready queue\n");
+    crate::info!("switch_to_next_process: pushing PID {} to ready queue", effective_pid);
     crate::process::ready_queue_push(effective_pid as u32);
+    crate::info!("switch_to_next_process: after push, PID {} should be in ready queue", effective_pid);
+    crate::console::write_raw("[SCHED DEBUG] Ready queue state after pushing PID\n");
+    crate::process::debug_print_ready_queue();
 
     // Get the next process from ready queue
     crate::console::write_raw("[SCHED] popping next PID from ready queue\n");
+    crate::info!("switch_to_next_process: attempting to pop next PID from ready queue");
     if let Some(mut next_pid) = crate::process::ready_queue_pop() {
         crate::console::write_raw("[SCHED] got next_pid\n");
+        crate::info!("switch_to_next_process: popped PID {}", next_pid);
+        crate::console::write_raw("[SCHED DEBUG] Ready queue state after popping\n");
+        crate::process::debug_print_ready_queue();
+
         // Avoid switching to the same process if possible
         if next_pid as u64 == effective_pid {
             crate::console::write_raw("[SCHED] next_pid same as current, popping again\n");
@@ -268,6 +281,8 @@ pub fn switch_to_next_process() -> ! {
     } else {
         // No process ready, just idle
         info!("scheduler: no ready processes, idling");
+        crate::console::write_raw("[SCHED DEBUG] Ready queue is empty!\n");
+        crate::process::debug_print_ready_queue();
         loop {
             crate::arch::cpu::wait_for_interrupt();
         }

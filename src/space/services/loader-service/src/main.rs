@@ -2,31 +2,30 @@
 #![no_main]
 
 use core::panic::PanicInfo;
-
+use hnxlib::println;
+use hnx_abi::*;
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
     // 简单测试：输出信息并调用yield系统调用
 
     // 首先尝试输出一条消息
     let msg = b"loader-service started!\n";
-    unsafe {
-        // 使用内联汇编调用write系统调用
-        // HNX_SYS_WRITE = 0x1001, fd=1 (stdout)
-        core::arch::asm!(
-            "svc #0",
-            in("x8") 0x1001u64,  // syscall number
-            in("x0") 1u64,       // fd (stdout)
-            in("x1") msg.as_ptr(),
-            in("x2") msg.len(),
-        );
-    }
-
+    println!("{}", core::str::from_utf8(msg).unwrap());
+    println!("loader-service: calling yield");
     // 然后调用yield系统切换回init
     unsafe {
         // HNX_SYS_YIELD = 24 (0x18)
+        // 明确清零所有参数寄存器
+        let syscall_num: u64 = 24;
         core::arch::asm!(
             "svc #0",
-            in("x8") 24u64,  // HNX_SYS_YIELD
+            in("x8") syscall_num,
+            in("x0") 0u64,
+            in("x1") 0u64,
+            in("x2") 0u64,
+            in("x3") 0u64,
+            in("x4") 0u64,
+            in("x5") 0u64,
         );
     }
 

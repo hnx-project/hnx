@@ -479,3 +479,27 @@ pub fn update_process_context(pid: u32, pc: usize, sp: usize) -> bool {
         false
     }
 }
+
+/// Debug function to print ready queue state
+pub fn debug_print_ready_queue() {
+    let h = READY_HEAD.load(Ordering::Relaxed);
+    let t = READY_TAIL.load(Ordering::Relaxed);
+    let queue = READY_QUEUE.lock();
+
+    crate::info!("[DEBUG] Ready queue state: head={}, tail={}, size={}", h, t, if h <= t { t - h } else { 32 - (h - t) });
+    crate::info!("[DEBUG] Queue contents (indices {} to {}):", h % 32, t % 32);
+
+    let mut current = h;
+    while current != t {
+        let idx = current % 32;
+        let pid = queue[idx];
+        if pid != 0 {
+            crate::info!("[DEBUG]   index {}: PID {}", idx, pid);
+        }
+        current = (current + 1) % (1 << 16);
+    }
+
+    if h == t {
+        crate::info!("[DEBUG]   queue is empty");
+    }
+}

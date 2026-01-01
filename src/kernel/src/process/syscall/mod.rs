@@ -425,7 +425,30 @@ pub fn dispatch(
             fs_stubs::sys_rmdir(x0)
         }
         HNX_SYS_YIELD => {
-            crate::info!("syscall enter yield - switching to next process");
+            let current_pid = crate::core::scheduler::current_pid();
+            crate::info!("syscall enter yield from PID {} - switching to next process", current_pid);
+            // Also write raw to console for immediate visibility
+            crate::console::write_raw("[SYS_YIELD] PID ");
+            // Simple PID output - just write the number as ASCII
+            let pid_str = if current_pid < 10 {
+                match current_pid {
+                    0 => "0",
+                    1 => "1",
+                    2 => "2",
+                    3 => "3",
+                    4 => "4",
+                    5 => "5",
+                    6 => "6",
+                    7 => "7",
+                    8 => "8",
+                    9 => "9",
+                    _ => "?",
+                }
+            } else {
+                "?"
+            };
+            crate::console::write_raw(pid_str);
+            crate::console::write_raw(" calling yield\n");
             crate::core::scheduler::switch_to_next_process();
             // switch_to_next_process never returns
         }

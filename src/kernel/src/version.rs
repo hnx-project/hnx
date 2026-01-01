@@ -13,7 +13,7 @@ pub const PATCH: u32 = 0;
 pub const PRERELEASE: &str = "alpha.1";
 
 /// 完整版本字符串
-pub const VERSION_STRING: &str = "0.2.0-alpha.1+20260101.f4f587f";
+pub const VERSION_STRING: &str = "0.2.0-alpha.1+20260101.3bb75d1";
 
 /// 获取版本字符串
 #[no_mangle]
