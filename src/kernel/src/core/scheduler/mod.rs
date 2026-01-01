@@ -1,5 +1,6 @@
 use crate::arch::common::mmu::MmuFlags;
 use crate::console;
+use crate::error;
 use crate::info;
 use crate::memory::virtual_::map_in_pt;
 use crate::process::task::{Task, TaskState};
@@ -137,9 +138,12 @@ pub fn schedule_priority() {
 }
 
 pub fn current_pid() -> u64 {
-    if let Some(ref t) = *CURRENT.lock() {
-        t.id
+    // Use try_lock to avoid deadlock in exception context
+    if let Some(cur) = CURRENT.try_lock() {
+        cur.as_ref().map(|t| t.id).unwrap_or(0)
     } else {
+        // Lock unavailable - might be in exception context
+        crate::warn!("scheduler::current_pid: lock unavailable, returning 0");
         0
     }
 }
@@ -165,4 +169,92 @@ pub fn exit_current() -> ! {
     }
     info!("process task exited");
     run()
+}
+
+/// Switch to the next ready process
+///
+/// This implements cooperative multitasking - the current process yields CPU
+/// and we switch to the next process in the ready queue.
+pub fn switch_to_next_process() -> ! {
+    // Immediate debug output to confirm function is called
+    crate::console::write_raw("[SCHED] switch_to_next_process called\n");
+
+    let current_pid = current_pid();
+    crate::console::write_raw("[SCHED] got current_pid\n");
+    crate::info!("switch_to_next_process: current_pid={}", current_pid);
+
+    // If we have a current process, put it back in ready queue
+    let effective_pid = if current_pid != 0 {
+        current_pid
+    } else {
+        // Lock was unavailable, but we know init is PID 1
+        crate::console::write_raw("[SCHED] assuming current_pid=1 (init)\n");
+        1
+    };
+
+    crate::console::write_raw("[SCHED] pushing PID back to ready queue\n");
+    crate::process::ready_queue_push(effective_pid as u32);
+
+    // Get the next process from ready queue
+    crate::console::write_raw("[SCHED] popping next PID from ready queue\n");
+    if let Some(mut next_pid) = crate::process::ready_queue_pop() {
+        crate::console::write_raw("[SCHED] got next_pid\n");
+        // Avoid switching to the same process if possible
+        if next_pid as u64 == effective_pid {
+            crate::console::write_raw("[SCHED] next_pid same as current, popping again\n");
+            if let Some(another_pid) = crate::process::ready_queue_pop() {
+                // Push the original back to queue
+                crate::process::ready_queue_push(next_pid);
+                next_pid = another_pid;
+                crate::info!("[SCHED] new next_pid={}", next_pid);
+            }
+        }
+        crate::info!("switch_to_next_process: next_pid={}", next_pid);
+        // Get process information for context switching
+        if let Some((entry_point, stack_pointer, ttbr0_base, asid)) =
+            crate::process::get_process_for_scheduling(next_pid)
+        {
+            info!("scheduler: switching from PID {} to PID {}", current_pid, next_pid);
+            info!("scheduler: entry=0x{:X} sp=0x{:X} ttbr0=0x{:X} asid={}",
+                entry_point, stack_pointer, ttbr0_base, asid);
+
+            // Update current task in scheduler
+            {
+                let mut cur = CURRENT.lock();
+                *cur = Some(crate::process::Task {
+                    id: next_pid as u64,
+                    state: crate::process::TaskState::Running,
+                    context: crate::process::TaskContext {
+                        sp: stack_pointer,
+                        pc: entry_point,
+                    },
+                    entry_point,
+                    stack: 0..0, // Not used for user processes
+                    ttbr0_base,
+                    asid,
+                });
+            }
+
+            // Perform architecture-specific context switch
+            use crate::arch::Context;
+            crate::arch::context::exec_user(
+                entry_point,
+                stack_pointer,
+                ttbr0_base,
+                asid,
+                (0, 0, 0, 0),  // No arguments for now
+            );
+        } else {
+            error!("scheduler: PID {} not found in PCB table", next_pid);
+            loop {
+                crate::arch::cpu::wait_for_interrupt();
+            }
+        }
+    } else {
+        // No process ready, just idle
+        info!("scheduler: no ready processes, idling");
+        loop {
+            crate::arch::cpu::wait_for_interrupt();
+        }
+    }
 }

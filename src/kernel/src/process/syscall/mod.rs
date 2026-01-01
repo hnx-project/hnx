@@ -425,9 +425,9 @@ pub fn dispatch(
             fs_stubs::sys_rmdir(x0)
         }
         HNX_SYS_YIELD => {
-            crate::debug!("syscall enter yield");
-            crate::core::scheduler::schedule_priority();
-            0
+            crate::info!("syscall enter yield - switching to next process");
+            crate::core::scheduler::switch_to_next_process();
+            // switch_to_next_process never returns
         }
         HNX_SYS_IPC_WAIT => {
             let _ = crate::process::block_process(

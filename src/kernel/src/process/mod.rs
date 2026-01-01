@@ -48,6 +48,8 @@ pub struct ProcessControlBlock {
     pub sid: u32,             // Session ID (for later use)
     pub ttbr0_base: usize,    // User page table base for fork
     pub asid: u16,            // Address Space ID
+    pub entry_point: usize,   // Process entry point (PC)
+    pub stack_pointer: usize, // Process stack pointer (SP)
     pub wakeup_time: u64,     // Timestamp when process should be woken up (0 = no timeout)
 }
 
@@ -84,20 +86,23 @@ pub fn ipc_handler(msg: &crate::core::ipc::IpcMessage) -> crate::core::ipc::IpcR
 
 // ===== Ready Queue Management =====
 
-fn ready_queue_push(pid: u32) {
+pub fn ready_queue_push(pid: u32) {
     let t = READY_TAIL.load(Ordering::Relaxed);
     READY_QUEUE.lock()[t % 32] = pid;
     READY_TAIL.store((t + 1) % (1 << 16), Ordering::Relaxed);
+    crate::info!("ready_queue: pushed PID {}, tail={}", pid, (t + 1) % (1 << 16));
 }
 
-fn ready_queue_pop() -> Option<u32> {
+pub fn ready_queue_pop() -> Option<u32> {
     let h = READY_HEAD.load(Ordering::Relaxed);
     let t = READY_TAIL.load(Ordering::Relaxed);
     if h == t {
+        crate::info!("ready_queue: empty, head={}, tail={}", h, t);
         return None;
     }
     let pid = READY_QUEUE.lock()[h % 32];
     READY_HEAD.store((h + 1) % (1 << 16), Ordering::Relaxed);
+    crate::info!("ready_queue: popped PID {}, head={}", pid, (h + 1) % (1 << 16));
     Some(pid)
 }
 
@@ -118,6 +123,8 @@ pub fn create_process(priority: u8) -> Option<u32> {
         sid: pid,          // By default, process is its own session leader
         ttbr0_base: 0,
         asid: 0,
+        entry_point: 0,    // Will be set when process is started
+        stack_pointer: 0,  // Will be set when process is started
         wakeup_time: 0,
     };
     
@@ -153,6 +160,8 @@ pub fn create_child_process(parent_pid: u32, priority: u8, ttbr0_base: usize, as
         sid,               // Inherit parent's session
         ttbr0_base,
         asid,
+        entry_point: 0,    // Will be set when process is started
+        stack_pointer: 0,  // Will be set when process is started
         wakeup_time: 0,
     };
     
@@ -178,6 +187,8 @@ pub fn spawn_kernel_task(_entry: fn() -> !) -> u32 {
             sid: pid,
             ttbr0_base: 0,
             asid: 0,
+            entry_point: 0,    // Will be set when process is started
+            stack_pointer: 0,  // Will be set when process is started
             wakeup_time: 0,
         };
         
@@ -253,7 +264,10 @@ pub fn set_process_state(pid: usize, state: ProcState) -> bool {
         // If transitioning to Ready state, add to ready queue
         if old_state != ProcState::Ready && state == ProcState::Ready {
             drop(table); // Release lock before calling ready_queue_push
+            crate::info!("process: PID {} added to ready queue", pid);
             ready_queue_push(pid as u32);
+        } else {
+            crate::debug!("process: PID {} state changed from {:?} to {:?}", pid, old_state, state);
         }
         true
     } else {
@@ -430,4 +444,22 @@ pub fn on_rr_tick() {
         // Move process to the end of the queue for round-robin scheduling
         ready_queue_push(pid);
     }
+}
+
+/// Get process information for scheduling
+pub fn get_process_for_scheduling(pid: u32) -> Option<(usize, usize, usize, u16)> {
+    let table = PCB_TABLE.lock();
+    let idx = (pid as usize) % table.len();
+    table[idx].map(|pcb| {
+        let mut asid = pcb.asid as u16;
+        if asid == 0 {
+            asid = pid as u16;
+        }
+        (
+            pcb.entry_point,
+            pcb.stack_pointer,
+            pcb.ttbr0_base,
+            asid
+        )
+    })
 }

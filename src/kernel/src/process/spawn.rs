@@ -74,17 +74,26 @@ pub fn sys_mmap_process(
 ///
 /// Sets the entry point and stack pointer, then marks process as Ready.
 ///
-/// # Arguments  
+/// # Arguments
 /// * `pid` - Process ID to start
 /// * `entry` - Entry point address (must be mapped)
 /// * `sp` - Stack pointer (must be mapped)
 pub fn sys_process_start(pid: u32, entry: usize, sp: usize) -> Result<(), ()> {
-    // TODO: Set entry point and SP in process structure
-    // TODO: Create initial thread
-    
-    set_process_state(pid as usize, ProcState::Ready);
-    
+    // Set entry point and SP in process structure
+    let mut table = super::PCB_TABLE.lock();
+    let idx = (pid as usize) % table.len();
+    if let Some(ref mut pcb) = table[idx] {
+        pcb.entry_point = entry;
+        pcb.stack_pointer = sp;
+    } else {
+        return Err(());
+    }
+    drop(table);
+
+    // Mark process as ready (which will add it to ready queue)
+    super::set_process_state(pid as usize, super::ProcState::Ready);
+
     info!("process: started pid={} entry=0x{:X} sp=0x{:X}", pid, entry, sp);
-    
+
     Ok(())
 }
