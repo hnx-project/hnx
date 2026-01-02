@@ -530,7 +530,8 @@ pub fn dispatch(
             sys_spawn_service(x0, x1)
         }
         0x9999 => {
-            crate::info!("TEST_SYSCALL: Test system call called, returning 42");
+            // Simple test system call that just returns 42
+            // No logging to avoid any potential issues
             42
         }
         _ => -1,

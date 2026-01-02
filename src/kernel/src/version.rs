@@ -4,7 +4,7 @@
 pub const MAJOR: u32 = 0;
 
 /// 次版本号
-pub const MINOR: u32 = 2;
+pub const MINOR: u32 = 3;
 
 /// 修订版本号
 pub const PATCH: u32 = 0;
@@ -13,7 +13,7 @@ pub const PATCH: u32 = 0;
 pub const PRERELEASE: &str = "alpha.1";
 
 /// 完整版本字符串
-pub const VERSION_STRING: &str = "0.2.0-alpha.1+20260102.d93f21c";
+pub const VERSION_STRING: &str = "0.3.0-alpha.1+20260102.df37bc5";
 
 /// 获取版本字符串
 #[no_mangle]
