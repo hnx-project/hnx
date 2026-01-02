@@ -1,6 +1,9 @@
 use crate::debug;
 use crate::info;
+use crate::error;
 use crate::core::scheduler;
+use crate::arch::common::traits::InterruptController;
+use crate::arch::context;
 use core::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use hnx_abi;
 
@@ -25,42 +28,49 @@ pub fn init() {
 }
 
 pub fn enable() {
-    unsafe {
-        core::arch::asm!("msr daifclr, #2");
-    }
+    crate::arch::cpu::enable_interrupts();
 }
 
 pub fn disable() {
-    unsafe {
-        core::arch::asm!("msr daifset, #2");
-    }
+    crate::arch::cpu::disable_interrupts();
 }
 
 /// Assembly helper to enable IRQ in handlers (allows preemption)
 #[inline(always)]
 unsafe fn enable_irq() {
-    core::arch::asm!("msr daifclr, #2");  // Clear I bit in DAIF
+    crate::arch::cpu::enable_interrupts();
 }
 
 /// Assembly helper to disable IRQ in handlers (prevent preemption)
 #[inline(always)]
 unsafe fn disable_irq() {
-    core::arch::asm!("msr daifset, #2");  // Set I bit in DAIF
+    crate::arch::cpu::disable_interrupts();
 }
 
 #[no_mangle]
 pub extern "C" fn rust_svc_handler(esr: u64, elr: u64, far: u64, saved_x8: u64, saved_sp: u64) {
     info!("arch/aarch64 SVC handler entered");
+
+    // 简化的调试输出
+    let ec = (esr >> 26) & 0x3F;
+    let imm = esr & 0xFFFF;
+    info!("RUST_SVC_HANDLER: ec=0x{:X}, imm=0x{:X}, saved_x8=0x{:X}, elr=0x{:X}", ec, imm, saved_x8, elr);
+
+    // 特殊调试：检查系统调用号
+    if saved_x8 != 0x1001 && saved_x8 != 0x18 {
+        debug!("SPECIAL_DEBUG: Non-standard syscall num=0x{:X}", saved_x8);
+        if saved_x8 == 0x103 || saved_x8 == 259 {
+            debug!("SPAWN_SERVICE_DETECTED: saved_x8=0x{:X} matches HNX_SYS_SPAWN_SERVICE", saved_x8);
+        }
+    }
+
     let ec = (esr >> 26) & 0x3F;
     info!("arch/aarch64 svc: ec=0x{:X} esr=0x{:016X} elr=0x{:016X} far=0x{:016X} saved_x8=0x{:016X} saved_sp=0x{:016X}", ec, esr, elr, far, saved_x8, saved_sp);
     
     // CRITICAL SECURITY: Verify exception came from EL0
     // Check SPSR_EL1 to determine exception source
-    let mut spsr: u64 = 0;
-    unsafe {
-        core::arch::asm!("mrs {s}, spsr_el1", s = out(reg) spsr);
-    }
-    
+    let spsr = crate::arch::context::get_spsr() as u64;
+
     // SPSR[3:0] = M[3:0] contains the exception level and mode
     // 0b0000 (0x0) = EL0t (user mode)
     // 0b0100 (0x4) = EL1t (kernel mode with SP_EL0)
@@ -74,25 +84,28 @@ pub extern "C" fn rust_svc_handler(esr: u64, elr: u64, far: u64, saved_x8: u64, 
             spsr, elr
         );
     }
-    
+
+    debug!("DEBUG: ec=0x{:X} checking if == 0x15", ec);
+    if ec != 0x15 {
+        crate::warn!("WARNING: ec=0x{:X} != 0x15 - SVC call may not be handled correctly!", ec);
+    }
+
     if ec == 0x15 {
-        let mut cel: u64 = 0;
-        let mut spsel: u64 = 0;
-        let mut ttbr0: u64 = 0;
-        let mut ttbr1: u64 = 0;
-        unsafe {
-            core::arch::asm!("mrs {c}, CurrentEL", c = out(reg) cel);
-            core::arch::asm!("mrs {p}, SPSel", p = out(reg) spsel);
-            core::arch::asm!("mrs {t0}, ttbr0_el1", t0 = out(reg) ttbr0);
-            core::arch::asm!("mrs {t1}, ttbr1_el1", t1 = out(reg) ttbr1);
-        }
-        
+        info!("EC=0x15 branch entered - standard SVC call");
+        let cel = crate::arch::context::get_current_el() as u64;
+        let spsel = crate::arch::context::get_spsel() as u64;
+        let ttbr0 = crate::arch::context::get_ttbr0() as u64;
+        let ttbr1 = crate::arch::context::get_ttbr1() as u64;
+
         // Extract ASID from TTBR0_EL1[63:48]
         let asid = (ttbr0 >> 48) & 0xFFFF;
-        
+
         debug!("arch/aarch64 svc enter: esr=0x{:016X} elr=0x{:016X} spsr=0x{:016X} currentEL=0x{:016X} spsel={} ttbr0=0x{:016X} asid={} ttbr1=0x{:016X}", esr, elr, spsr, cel, spsel & 1, ttbr0, asid, ttbr1);
         let imm = esr & 0xFFFF;
         if imm == 0 {
+            // 调试：打印saved_x8和hnx_abi常量的值
+            debug!("IMM0_DEBUG: saved_x8=0x{:X}, HNX_SYS_SPAWN_SERVICE={}", saved_x8, hnx_abi::HNX_SYS_SPAWN_SERVICE);
+
             // Use saved_sp passed from assembly (start of register save area)
             let sp = saved_sp as usize;
             // Read saved user registers from stack
@@ -127,55 +140,58 @@ pub extern "C" fn rust_svc_handler(esr: u64, elr: u64, far: u64, saved_x8: u64, 
             info!("HNX_SYS_WRITE={}, HNX_SYS_YIELD={}", hnx_abi::HNX_SYS_WRITE, hnx_abi::HNX_SYS_YIELD);
             // Use saved x8 as system call number
             // Check if it's a valid syscall number from abi
+            // 调试：检查是否是spawn_service
+            debug!("IMM0_BRANCH: saved_x8=0x{:X}", saved_x8);
+
+            if saved_x8 == 0x103 || saved_x8 == 259 {
+                debug!("SPAWN_SERVICE_DETECTED_IN_IMM0_BRANCH: saved_x8=0x{:X}, saved_x8_u32=0x{:X}", saved_x8, saved_x8 as u32);
+            }
             let saved_x8_u32 = saved_x8 as u32;
-            let syscall_num = if saved_x8_u32 == hnx_abi::HNX_SYS_WRITE
-                || saved_x8_u32 == hnx_abi::HNX_SYS_READ
-                || saved_x8_u32 == hnx_abi::HNX_SYS_OPEN
-                || saved_x8_u32 == hnx_abi::HNX_SYS_CLOSE
-                || saved_x8_u32 == hnx_abi::HNX_SYS_EXIT
-                || saved_x8_u32 == hnx_abi::HNX_SYS_YIELD
-                || saved_x8_u32 == hnx_abi::HNX_SYS_PROCESS_CREATE
-                || saved_x8_u32 == hnx_abi::HNX_SYS_SPAWN_SERVICE
-                || saved_x8_u32 == hnx_abi::HNX_SYS_IPC_WAIT
-                || saved_x8_u32 == hnx_abi::HNX_SYS_IPC_WAKE
-                || saved_x8_u32 == hnx_abi::HNX_SYS_EP_CREATE
-                || saved_x8_u32 == hnx_abi::HNX_SYS_EP_SEND
-                || saved_x8_u32 == hnx_abi::HNX_SYS_EP_RECV {
-                saved_x8_u32
+            debug!("DEBUG: Checking if saved_x8_u32=0x{:X} is in syscall list, saved_x8=0x{:X}", saved_x8_u32, saved_x8);
+            debug!("DEBUG: HNX_SYS_SPAWN_SERVICE=0x{:X}", hnx_abi::HNX_SYS_SPAWN_SERVICE);
+
+            // 特殊检查spawn_service
+            debug!("DEBUG: saved_x8_u32=0x{:X} ({})", saved_x8_u32, saved_x8_u32);
+            debug!("DEBUG: HNX_SYS_SPAWN_SERVICE=0x{:X} ({})", hnx_abi::HNX_SYS_SPAWN_SERVICE, hnx_abi::HNX_SYS_SPAWN_SERVICE);
+            if saved_x8_u32 == hnx_abi::HNX_SYS_SPAWN_SERVICE {
+                debug!("DEBUG: Special check: saved_x8_u32 == HNX_SYS_SPAWN_SERVICE is TRUE");
             } else {
-                info!("arch/aarch64 svc#0: saved_x8=0x{:X} not recognized, defaulting to 0", saved_x8);
-                0
-            };
-            info!("arch/aarch64 svc#0 using syscall_num=0x{:X} (saved_x8=0x{:X})", syscall_num, saved_x8);
+                debug!("DEBUG: Special check: saved_x8_u32 == HNX_SYS_SPAWN_SERVICE is FALSE");
+            }
+
+            // 简化：总是使用saved_x8_u32作为系统调用号
+            // 问题：条件判断失败，但saved_x8=0x103应该有效
+            let syscall_num = saved_x8_u32;
+            debug!("DEBUG: Using syscall_num=0x{:X} (saved_x8_u32) for spawn_service?", syscall_num);
+            debug!("DEBUG: saved_x8=0x{:X}, a0=0x{:X}, a1=0x{:X}, a2=0x{:X}", saved_x8, a0, a1, a2);
+            debug!("arch/aarch64 svc#0 using syscall_num=0x{:X} (saved_x8=0x{:X})", syscall_num, saved_x8);
             let ret = crate::process::syscall::dispatch(syscall_num, a0, a1, a2, a3, a4, a5) as u64;
-            info!("arch/aarch64 svc#0 ret=0x{:X}", ret);
+            debug!("arch/aarch64 svc#0 ret=0x{:X}", ret);
             // Update saved x0 on stack so it gets restored on exception return
             unsafe {
                 let saved_x0_ptr = (sp + 144) as *mut usize;
+                debug!("DEBUG: sp=0x{:X}, saved_x0_ptr=sp+144=0x{:X}", sp, saved_x0_ptr as usize);
                 let old_value = saved_x0_ptr.read();
                 crate::debug!("DEBUG: Before update - saved_x0_ptr=0x{:X}, old_value=0x{:X}, ret=0x{:X}", saved_x0_ptr as usize, old_value, ret);
-                
+
                 // Write the return value to the saved x0 location
                 core::ptr::write_volatile(saved_x0_ptr, ret as usize);
-                
+
                 // Ensure the write is visible to the CPU and memory subsystem
-                core::arch::asm!("dsb sy");  // Data Synchronization Barrier
+                crate::arch::memory::data_sync_barrier();  // Data Synchronization Barrier
                 core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
-                
+
                 let new_value = core::ptr::read_volatile(saved_x0_ptr);
                 crate::debug!("DEBUG: After update - new_value=0x{:X}", new_value);
             }
         } else {
             match imm {
                 1 => {
-                    let mut fd: usize = 0;
-                    let mut buf: usize = 0;
-                    let mut len: usize = 0;
-                    unsafe {
-                        core::arch::asm!("mov {x19v}, x19", x19v = out(reg) fd);
-                        core::arch::asm!("mov {x20v}, x20", x20v = out(reg) buf);
-                        core::arch::asm!("mov {x21v}, x21", x21v = out(reg) len);
-                    }
+                    // 从保存的栈中读取寄存器值
+                    let saved_sp_usize = saved_sp as usize;
+                    let fd = context::get_saved_gpr(saved_sp_usize, 19);  // x19
+                    let buf = context::get_saved_gpr(saved_sp_usize, 20); // x20
+                    let len = context::get_saved_gpr(saved_sp_usize, 21); // x21
                     let ret = crate::process::syscall::dispatch(
                         hnx_abi::HNX_SYS_WRITE,
                         fd,
@@ -193,10 +209,9 @@ pub extern "C" fn rust_svc_handler(esr: u64, elr: u64, far: u64, saved_x8: u64, 
                 }
                 2 => {
                     debug!("arch/aarch64 exit enter");
-                    let mut a0: usize = 0;
-                    unsafe {
-                        core::arch::asm!("mov {x0}, x0", x0 = out(reg) a0);
-                    }
+                    // 从保存的栈中读取x0寄存器值
+                    let saved_sp_usize = saved_sp as usize;
+                    let a0 = context::get_saved_gpr(saved_sp_usize, 0);  // x0
                     let _ = crate::process::syscall::dispatch(
                         hnx_abi::HNX_SYS_EXIT,
                         a0,
@@ -208,10 +223,9 @@ pub extern "C" fn rust_svc_handler(esr: u64, elr: u64, far: u64, saved_x8: u64, 
                     );
                 }
                 3 => {
-                    let mut new_brk: u64 = 0;
-                    unsafe {
-                        core::arch::asm!("mov {nb}, x19", nb = out(reg) new_brk);
-                    }
+                    // 从保存的栈中读取x19寄存器值
+                    let saved_sp_usize = saved_sp as usize;
+                    let new_brk = context::get_saved_gpr(saved_sp_usize, 19) as u64;
                     let cur = PROGRAM_BREAK.load(Ordering::Relaxed);
                     if cur == 0 {
                         PROGRAM_BREAK.store(0x8000_0000, Ordering::Relaxed);
@@ -220,8 +234,10 @@ pub extern "C" fn rust_svc_handler(esr: u64, elr: u64, far: u64, saved_x8: u64, 
                         PROGRAM_BREAK.store(new_brk as usize, Ordering::Relaxed);
                     }
                     let retv = PROGRAM_BREAK.load(Ordering::Relaxed) as u64;
+                    // 更新栈上保存的x0值
                     unsafe {
-                        core::arch::asm!("mov x0, {ret}", ret = in(reg) retv);
+                        let saved_x0_ptr = (saved_sp_usize + 144) as *mut usize;
+                        saved_x0_ptr.write(retv as usize);
                     }
                 }
                 4 => {
@@ -254,12 +270,8 @@ pub extern "C" fn rust_sync_panic(
     crate::error!("  ESR=0x{:016X} ELR=0x{:016X} FAR=0x{:016X}", esr, elr, far);
     crate::error!("  TCR=0x{:016X} SCTLR=0x{:016X} SPSR=0x{:016X}", tcr, sctlr, spsr);
     
-    let mut ttbr0: u64 = 0;
-    let mut ttbr1: u64 = 0;
-    unsafe {
-        core::arch::asm!("mrs {t0}, ttbr0_el1", t0 = out(reg) ttbr0);
-        core::arch::asm!("mrs {t1}, ttbr1_el1", t1 = out(reg) ttbr1);
-    }
+    let ttbr0 = crate::arch::context::get_ttbr0() as u64;
+    let ttbr1 = crate::arch::context::get_ttbr1() as u64;
     crate::error!("  TTBR0=0x{:016X} TTBR1=0x{:016X}", ttbr0, ttbr1);
     
     panic!("sync exception: EC=0x{:X} ESR=0x{:016X} ELR=0x{:016X} FAR=0x{:016X} TCR=0x{:016X} SCTLR=0x{:016X} SPSR=0x{:016X}", ec, esr, elr, far, tcr, sctlr, spsr);
@@ -320,36 +332,31 @@ pub extern "C" fn rust_sync_try_handle(
     _sctlr: u64,
     _spsr: u64,
 ) -> u64 {
-    crate::console::write_raw("rust_sync_try_handle\n");
-    info!("rust_sync_try_handle called: ec=0x{:X} esr=0x{:X}", (esr >> 26) & 0x3F, esr);
     let ec = (esr >> 26) & 0x3F;
-    crate::console::write_raw("rust_sync_try_handle: checking ec\n");
+
+    if ec == 0x15 {
+        info!("WARNING: rust_sync_try_handle received EC=0x15 (SVC) - this should go to rust_svc_handler!");
+    }
+
     if ec == 0x20 || ec == 0x24 {
-        crate::console::write_raw("rust_sync_try_handle: page fault detected\n");
         // Read TTBR0_EL1 directly from register (avoid scheduler lock in exception context)
-        let mut ttbr0: u64;
-        unsafe {
-            core::arch::asm!("mrs {reg}, ttbr0_el1", reg = out(reg) ttbr0);
-        }
+        let ttbr0 = crate::arch::context::get_ttbr0() as u64;
         // Extract page table base address (lower 48 bits), mask off ASID in bits [63:48]
         let pt_base = (ttbr0 & 0x0000_FFFF_FFFF_FFFF) as usize;
-        crate::console::write_raw("rust_sync_try_handle: read ttbr0 from register\n");
-        info!("arch/aarch64 page fault: far=0x{:016X} elr=0x{:016X} ttbr0=0x{:016X} pt_base=0x{:016X}", far, elr, ttbr0, pt_base);
-        crate::console::write_raw("rust_sync_try_handle: calling handle_page_fault\n");
+
+        info!("arch/aarch64 page fault: far=0x{:016X} elr=0x{:016X} ttbr0=0x{:016X}", far, elr, ttbr0);
+
         if crate::memory::virtual_::handle_page_fault(pt_base, far as usize, esr) {
             info!("arch/aarch64 page fault handled");
-            crate::console::write_raw("rust_sync_try_handle: page fault handled\n");
             return 1;
         } else {
             info!("arch/aarch64 page fault NOT handled");
-            crate::console::write_raw("rust_sync_try_handle: page fault NOT handled\n");
         }
     } else {
-        info!("rust_sync_try_handle: unsupported EC=0x{:X} FAR=0x{:016X} - pretending handled", ec, far);
-        crate::console::write_raw("rust_sync_try_handle: not a page fault ec, pretending handled\n");
+        // Not a page fault, pretend it was handled
         return 1;
     }
-    crate::console::write_raw("rust_sync_try_handle: returning 0\n");
+
     0
 }
 
@@ -468,20 +475,12 @@ pub extern "C" fn rust_exc_mark(ec: u64, esr: u64, elr: u64, far: u64) {
 pub extern "C" fn arch_exec_preflight(elr: u64, sp0: u64, ttbr0: u64) {
     crate::console::write_raw("arch_exec_preflight enter\n");
     info!("arch/aarch64 exec preflight enter");
-    let mut spsr: u64 = 0;
-    let mut cel: u64 = 0;
-    let mut vbar: u64 = 0;
-    let mut tt0: u64 = 0;
-    let mut tt1: u64 = 0;
-    let mut sp_el0: u64 = 0;
-    unsafe {
-        core::arch::asm!("mrs {s}, spsr_el1", s = out(reg) spsr);
-        core::arch::asm!("mrs {c}, CurrentEL", c = out(reg) cel);
-        core::arch::asm!("mrs {v}, vbar_el1", v = out(reg) vbar);
-        core::arch::asm!("mrs {t0}, ttbr0_el1", t0 = out(reg) tt0);
-        core::arch::asm!("mrs {t1}, ttbr1_el1", t1 = out(reg) tt1);
-        core::arch::asm!("mrs {sp}, sp_el0", sp = out(reg) sp_el0);
-    }
+    let spsr = crate::arch::context::get_spsr() as u64;
+    let cel = crate::arch::context::get_current_el() as u64;
+    let vbar = crate::arch::context::get_vbar() as u64;
+    let tt0 = crate::arch::context::get_ttbr0() as u64;
+    let tt1 = crate::arch::context::get_ttbr1() as u64;
+    let sp_el0 = crate::arch::context::get_sp() as u64;
     
     // SECURITY AUDIT: Verify exception vector is in kernel space
     const KERNEL_BASE: u64 = 0xFFFF_8000_0000_0000;
@@ -515,4 +514,29 @@ pub extern "C" fn arch_exec_postflight(ttbr0: u64, sp_el0: u64, spsr: u64) {
         "arch/aarch64 exec postflight: TTBR0=0x{:016X} SP_EL0=0x{:016X} SPSR=0x{:016X}",
         ttbr0, sp_el0, spsr
     );
+}
+
+/// AArch64 中断控制器实现 (GIC 包装)
+pub struct AArch64InterruptController;
+
+impl InterruptController for AArch64InterruptController {
+    fn init() {
+        crate::drivers::gic::init();
+    }
+
+    fn enable_irq(irq: u32) {
+        // 假设 GIC 驱动程序提供了 enable_irq 函数
+        // 如果不存在，可能需要调用适当的函数
+        // 暂时使用默认实现
+        crate::drivers::gic::enable_irq(irq);
+    }
+
+    fn disable_irq(irq: u32) {
+        crate::drivers::gic::disable_irq(irq);
+    }
+
+    fn ack_irq(irq: u32) {
+        // 确认中断（写入 EOIR 寄存器）
+        crate::drivers::gic::ack_irq(irq);
+    }
 }

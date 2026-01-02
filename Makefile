@@ -23,8 +23,18 @@ PROFILE ?= debug
 
 # 导出环境变量
 export ARCH BOARD PROFILE
+
+# 目标架构到Rust目标三元组的映射
+ifeq ($(ARCH),riscv64)
+export KERNEL_TARGET = riscv64gc-unknown-none-elf
+export SPACE_TARGET = riscv64gc-unknown-none-elf
+else ifeq ($(ARCH),x86_64)
+export KERNEL_TARGET = x86_64-unknown-none
+export SPACE_TARGET = x86_64-unknown-none
+else
 export KERNEL_TARGET = $(ARCH)-unknown-none
 export SPACE_TARGET = $(ARCH)-unknown-none
+endif
 
 
 # 版本信息（从脚本获取）

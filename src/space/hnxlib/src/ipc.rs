@@ -250,14 +250,16 @@ impl ServiceFramework {
         // 注册服务
         if let Err(_e) = self.router.register_service(self.name, &self.endpoint) {
             // 注册失败，仍然可以运行但不支持服务发现
-            let _ = crate::safe_syscall::debug_print("[Service] Failed to register service\n");
+            // 静默失败，不输出错误信息
         } else {
-            let _ = crate::safe_syscall::debug_print("[Service] Service registered successfully\n");
+            // 注册成功，输出简单信息
+            let _ = crate::safe_syscall::debug_print("[Service] Registered\n");
         }
 
         // 消息处理循环
         let mut buffer = [0u8; 256];
         let mut response_buf = [0u8; 256];
+        let mut error_count = 0;
         loop {
             match self.endpoint.recv(&mut buffer) {
                 Ok((op, len)) => {
@@ -276,7 +278,49 @@ impl ServiceFramework {
                 }
                 Err(e) => {
                     // 接收错误，继续循环
-                    let _ = crate::safe_syscall::debug_print("[Service] Receive error\n");
+                    error_count += 1;
+                    // 每10次错误才输出一次，避免输出过多
+                    if error_count % 10 == 0 {
+                        match e {
+                            IpcError::SyscallFailed(code) => {
+                                let _ = crate::safe_syscall::debug_print("[Service] Receive error -1 (");
+                                // 输出错误次数（简化版，只输出固定文本）
+                                if code == -1 {
+                                    let _ = crate::safe_syscall::debug_print("-1");
+                                } else if code == -2 {
+                                    let _ = crate::safe_syscall::debug_print("-2");
+                                } else {
+                                    let _ = crate::safe_syscall::debug_print("unknown");
+                                }
+                                let _ = crate::safe_syscall::debug_print(") x");
+                                // 简单输出错误计数（使用除法和取模显示大致数字）
+                                if error_count >= 100 {
+                                    let _ = crate::safe_syscall::debug_print("100+");
+                                } else if error_count >= 50 {
+                                    let _ = crate::safe_syscall::debug_print("50+");
+                                } else if error_count >= 20 {
+                                    let _ = crate::safe_syscall::debug_print("20+");
+                                } else {
+                                    let _ = crate::safe_syscall::debug_print("10+");
+                                }
+                                let _ = crate::safe_syscall::debug_print("\n");
+                            }
+                            _ => {
+                                let _ = crate::safe_syscall::debug_print("[Service] Receive error x");
+                                // 简单输出错误计数
+                                if error_count >= 100 {
+                                    let _ = crate::safe_syscall::debug_print("100+");
+                                } else if error_count >= 50 {
+                                    let _ = crate::safe_syscall::debug_print("50+");
+                                } else if error_count >= 20 {
+                                    let _ = crate::safe_syscall::debug_print("20+");
+                                } else {
+                                    let _ = crate::safe_syscall::debug_print("10+");
+                                }
+                                let _ = crate::safe_syscall::debug_print("\n");
+                            }
+                        }
+                    }
                 }
             }
 

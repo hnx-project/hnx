@@ -30,6 +30,89 @@ pub trait Mmu {
     fn virt_to_phys(vaddr: usize) -> Option<usize>;
 }
 
+// 内存操作 trait (屏障、TLB、缓存)
+pub trait Memory {
+    /// 数据同步屏障 (Data Synchronization Barrier)
+    fn data_sync_barrier();
+
+    /// 指令同步屏障 (Instruction Synchronization Barrier)
+    fn instruction_barrier();
+
+    /// 数据内存屏障 (Data Memory Barrier)
+    fn data_memory_barrier();
+
+    /// 刷新整个 TLB (所有条目)
+    fn tlb_flush_all();
+
+    /// 按虚拟地址使 TLB 条目无效 (可选的 ASID)
+    fn tlb_invalidate(vaddr: usize, asid: Option<u16>);
+
+    /// 获取当前 ASID (地址空间标识符)
+    fn get_current_asid() -> u16;
+
+    /// 清理数据缓存范围
+    fn clean_dcache_range(addr: usize, size: usize);
+
+    /// 刷新指令缓存全部
+    fn flush_icache_all();
+
+    /// 让出 CPU 执行权 (用于自旋等待)
+    fn yield_cpu();
+
+    /// 获取当前页表基址 (TTBR0)
+    fn get_current_page_table_base() -> usize;
+
+    /// 设置当前页表基址 (TTBR0)
+    ///
+    /// # 参数
+    /// - `base`: 页表物理基址
+    /// - `asid`: 可选的地址空间标识符 (ASID)
+    fn set_current_page_table_base(base: usize, asid: Option<u16>);
+}
+
+// CPU 操作 trait
+pub trait Cpu {
+    /// 获取当前 CPU 核心 ID
+    fn id() -> u32;
+
+    /// 让出 CPU 执行权 (用于自旋等待)
+    fn yield_cpu();
+
+    /// 内存屏障 (全功能屏障)
+    fn barrier();
+
+    /// 读内存屏障 (Load-Load 和 Load-Store)
+    fn read_barrier();
+
+    /// 写内存屏障 (Store-Store)
+    fn write_barrier();
+
+    /// 等待中断 (Wait For Interrupt)
+    ///
+    /// # 安全
+    /// 此函数会暂停 CPU 执行直到中断发生
+    /// 只能在中断使能的情况下调用
+    fn wait_for_interrupt();
+
+    /// 全局使能中断
+    ///
+    /// # 安全
+    /// 此函数允许 CPU 响应外部中断
+    fn enable_interrupts();
+
+    /// 全局禁用中断
+    ///
+    /// # 安全
+    /// 此函数阻止 CPU 响应外部中断
+    fn disable_interrupts();
+
+    /// 检查中断是否启用
+    ///
+    /// # 返回值
+    /// 如果中断启用返回 `true`，否则返回 `false`
+    fn interrupts_enabled() -> bool;
+}
+
 // 中断控制器 trait
 pub trait InterruptController {
     fn init();
@@ -43,4 +126,60 @@ pub trait Timer {
     fn init(frequency: u64);
     fn set_timeout(ms: u64, callback: fn());
     fn get_ticks() -> u64;
+}
+
+// 上下文切换 trait
+pub trait Context {
+    /// 执行用户空间上下文切换
+    ///
+    /// # 参数
+    /// - `entry_point`: 用户空间程序入口点
+    /// - `stack_pointer`: 用户空间栈指针
+    /// - `page_table_base`: 页表物理基址
+    /// - `asid`: 地址空间标识符
+    /// - `args`: 系统调用参数 (a0, a1, a2, a8)
+    ///
+    /// # 安全
+    /// 此函数从不返回，会直接切换到用户空间执行
+    fn exec_user(
+        entry_point: usize,
+        stack_pointer: usize,
+        page_table_base: usize,
+        asid: u16,
+        args: (usize, usize, usize, usize),
+    ) -> !;
+
+    /// 获取当前异常链接寄存器 (ELR)
+    fn get_elr() -> usize;
+
+    /// 获取当前栈指针 (SP)
+    fn get_sp() -> usize;
+
+    /// 获取向量基址寄存器 (VBAR)
+    fn get_vbar() -> usize;
+
+    /// 获取当前异常级别 (CurrentEL)
+    fn get_current_el() -> u32;
+
+    /// 获取当前保存的程序状态寄存器 (SPSR)
+    fn get_spsr() -> usize;
+
+    /// 获取当前转换表基址寄存器 0 (TTBR0)
+    fn get_ttbr0() -> usize;
+
+    /// 获取当前转换表基址寄存器 1 (TTBR1)
+    fn get_ttbr1() -> usize;
+
+    /// 获取当前栈指针选择器 (SPSel)
+    fn get_spsel() -> u32;
+
+    /// 从异常栈中读取保存的通用寄存器
+    ///
+    /// # 参数
+    /// - `saved_sp`: 异常栈指针（寄存器保存区域的起始地址）
+    /// - `reg`: 寄存器索引（0-30对应x0-x30）
+    ///
+    /// # 返回值
+    /// 寄存器保存的值
+    fn get_saved_gpr(saved_sp: usize, reg: usize) -> usize;
 }

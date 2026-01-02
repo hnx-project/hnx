@@ -65,9 +65,7 @@ pub fn panic_handler(
     
     // Halt the system
     loop {
-        unsafe {
-            core::arch::asm!("wfi");
-        }
+        crate::arch::cpu::wait_for_interrupt();
     }
 }
 

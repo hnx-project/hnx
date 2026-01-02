@@ -1,0 +1,32 @@
+# configs/arch/riscv64.toml
+# RISC-V 64位架构配置（占位符）
+[arch]
+name = "riscv64"
+data-layout = "e-m:e-p:64:64-i64:64-i128:128-n64-S128"
+features = ["+m", "+a", "+f", "+d", "+c"]  # 乘除、原子、浮点、双精度、压缩
+endian = "little"
+
+[memory]
+page_size = 4096
+kernel_base = "0xffffff0000000000"  # Sv39高半部
+user_base = "0x0000000000400000"
+physical_base = "0x80000000"  # QEMU virt物理基址
+stack_size = 65536
+
+# 设备配置（示例）
+[devices.uart]
+base = "0x10000000"  # UART0
+driver = "ns16550a"
+
+[devices.clint]
+base = "0x2000000"
+driver = "clint"
+
+[devices.plic]
+base = "0x0c000000"
+driver = "plic"
+
+[kernel]
+max_processes = 256
+max_threads = 1024
+max_handles_per_process = 1024

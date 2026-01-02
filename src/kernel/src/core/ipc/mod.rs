@@ -251,6 +251,7 @@ fn add_pending_response(msg_id: u64, sender_pid: u32) -> Result<(), IpcError> {
         }
     }
 
+    #[cfg(debug_assertions)]
     crate::warn!("add_pending_response: no empty slots, queue full");
     Err(IpcError::QueueFull)
 }
@@ -295,7 +296,13 @@ fn push_message_to_queue(queue: &mut [Option<IpcMessage>; 32], head: &mut usize,
     if *len >= queue.len() {
         return Err(IpcError::QueueFull);
     }
-    
+
+    // 安全检查：确保tail在有效范围内
+    if *tail >= queue.len() {
+        crate::error!("IPC: invalid tail index {} (queue len {}), resetting to 0", *tail, queue.len());
+        *tail = 0;
+    }
+
     queue[*tail] = Some(msg);
     *tail = (*tail + 1) % queue.len();
     *len += 1;
@@ -325,6 +332,7 @@ pub fn endpoint_send_sync(dst_epid: u32, mut msg: IpcMessage) -> Result<IpcRespo
 
     // Add pending response entry before sending message
     if let Err(e) = add_pending_response(msg_id, current_pid) {
+        #[cfg(debug_assertions)]
         crate::warn!("endpoint_send_sync: failed to add pending response: {:?}", e);
         return Err(e);
     }
@@ -436,6 +444,7 @@ pub fn endpoint_send_sync(dst_epid: u32, mut msg: IpcMessage) -> Result<IpcRespo
                     crate::info!("endpoint_send_sync: received response for msg_id={}, code={}", msg_id, response.code);
                     return Ok(response);
                 } else {
+                    #[cfg(debug_assertions)]
                     crate::warn!("endpoint_send_sync: timeout waiting for response, msg_id={}", msg_id);
                     return Err(IpcError::Timeout);
                 }
@@ -444,6 +453,7 @@ pub fn endpoint_send_sync(dst_epid: u32, mut msg: IpcMessage) -> Result<IpcRespo
     }
 
     // Clean up pending response if endpoint not found
+    #[cfg(debug_assertions)]
     crate::warn!("endpoint_send_sync: endpoint {} not found, cleaning up pending response msg_id={}", dst_epid, msg_id);
     let _ = get_and_remove_pending_response(msg_id);
     Err(IpcError::InvalidEndpoint)
@@ -614,6 +624,7 @@ pub fn endpoint_send_response(msg_id: u64, code: i32, data: &[u8]) -> Result<(),
             Ok(())
         }
         Err(e) => {
+            #[cfg(debug_assertions)]
             crate::warn!("endpoint_send_response: failed to set response for msg_id={}: {:?}", msg_id, e);
             Err(e)
         }

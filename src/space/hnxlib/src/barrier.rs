@@ -59,20 +59,21 @@ pub fn release_barrier() {
 ///
 /// 这个特殊的屏障用于保护关键寄存器（如x8）在系统调用前后不被破坏。
 /// 它通过强制编译器将所有寄存器溢出到内存来实现。
+///
+/// 注意：避免破坏以下寄存器：
+/// - x0-x7: 系统调用参数和返回值
+/// - x8: 系统调用号（调用后不再需要）
+/// - x18: 平台保留寄存器（Darwin上不可用）
+/// - x19-x28: 被调用者保存寄存器
+/// - x29: 帧指针
+/// - x30: 链接寄存器
+/// - x31 (sp): 栈指针
 #[inline(never)]
 pub fn register_preservation_barrier() {
     // 使用volatile汇编确保编译器不会优化掉寄存器使用
+    // 只破坏临时寄存器 x9-x15，x16-x17 可能被内部使用，但通常安全
     unsafe {
         core::arch::asm!("",
-            out("x0") _,
-            out("x1") _,
-            out("x2") _,
-            out("x3") _,
-            out("x4") _,
-            out("x5") _,
-            out("x6") _,
-            out("x7") _,
-            out("x8") _,
             out("x9") _,
             out("x10") _,
             out("x11") _,
@@ -82,7 +83,6 @@ pub fn register_preservation_barrier() {
             out("x15") _,
             out("x16") _,
             out("x17") _,
-            out("x18") _,
             options(nomem, nostack, preserves_flags)
         );
     }

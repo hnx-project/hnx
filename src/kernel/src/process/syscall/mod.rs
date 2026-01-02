@@ -2,8 +2,10 @@ use core::ptr;
 use spin::Mutex;
 use crate::security::{self, validate_capability, rights};
 use crate::console;
+use crate::arch::memory;
 use crate::loader;
 use crate::loader::spawn_service_from_initrd;
+use crate::error;
 
 // Syscall stubs that delegate to user space services
 mod fs_stubs;
@@ -17,7 +19,7 @@ use hnx_abi::{
     HNX_SYS_GETPPID, HNX_SYS_WAIT4, HNX_SYS_DRIVER_REGISTER, HNX_SYS_DRIVER_REQUEST_IRQ,
     HNX_SYS_DRIVER_MAP_MMIO, HNX_SYS_DRIVER_DMA_ALLOC, HNX_SYS_SOCKET, HNX_SYS_BIND, HNX_SYS_CONNECT,
     HNX_SYS_LISTEN, HNX_SYS_ACCEPT, HNX_SYS_SEND, HNX_SYS_RECV,
-    HNX_SYS_PROCESS_CREATE, SysResult
+    HNX_SYS_PROCESS_CREATE, HNX_SYS_SPAWN_SERVICE, SysResult
 };
 
 #[derive(Copy, Clone)]
@@ -87,7 +89,7 @@ fn copy_to_user(dst: usize, src: &[u8]) -> usize {
 }
 
 fn sys_spawn_service(path_ptr: usize, path_len: usize) -> SysResult {
-    crate::info!("sys_spawn_service: path_ptr=0x{:X}, path_len={}", path_ptr, path_len);
+    crate::debug!("sys_spawn_service ENTER: path_ptr=0x{:X}, path_len={}", path_ptr, path_len);
 
     // Validate path length
     if path_len == 0 || path_len > 256 {
@@ -185,11 +187,7 @@ fn user_range_ok(addr: usize, len: usize, write: bool) -> bool {
     
     crate::info!("4. Validate memory access");
     // 4. Get current page table base from TTBR0_EL1
-    let base = unsafe {
-        let ttbr0: u64;
-        core::arch::asm!("mrs {}, ttbr0_el1", out(reg) ttbr0);
-        ttbr0 as usize
-    };
+    let base = memory::get_current_page_table_base();
     crate::info!("user_range_ok: TTBR0_EL1 = 0x{:X}", base);
     
     // 5. Validate using memory protection module
@@ -339,11 +337,12 @@ pub fn dispatch(
     _x4: usize,
     _x5: usize,
 ) -> SysResult {
-    crate::info!("syscall dispatch: num={} (0x{:X}), x0=0x{:X}, x1=0x{:X}, x2=0x{:X}", num, num, x0, x1, x2);
+    crate::debug!("syscall dispatch: num={} (0x{:X}), x0=0x{:X}, x1=0x{:X}, x2=0x{:X}", num, num, x0, x1, x2);
     match num {
         0 => {
             // Special case: init process uses syscall 0 for write
             crate::debug!("syscall 0: treating as write, fd={}, buf=0x{:X}, len={}", x1, x0, x2);
+            crate::debug!("Legacy syscall 0 received from init process for console output");
             // Assume fd=1 (stdout) if x1 is 0, otherwise use x1
             let fd = if x1 == 0 { 1 } else { x1 };
             // Try to actually write the character to console
@@ -426,8 +425,10 @@ pub fn dispatch(
             fs_stubs::sys_rmdir(x0)
         }
         HNX_SYS_YIELD => {
-            crate::core::scheduler::on_tick();
-            0
+            let current_pid = crate::core::scheduler::current_pid();
+            crate::info!("syscall enter yield from PID {} - switching to next process", current_pid);
+            crate::core::scheduler::switch_to_next_process();
+            // switch_to_next_process never returns
         }
         HNX_SYS_IPC_WAIT => {
             let _ = crate::process::block_process(
@@ -523,9 +524,14 @@ pub fn dispatch(
             crate::debug!("syscall enter process_create");
             crate::user::sys_process_create(x0, x1)
         }
-        0x0103 => {  // HNX_SYS_SPAWN_SERVICE (temporary until bindings regenerated)
-            crate::debug!("syscall enter spawn_service");
+        HNX_SYS_SPAWN_SERVICE => {
+            crate::debug!("syscall enter spawn_service: num=0x{:X} (HNX_SYS_SPAWN_SERVICE)", num);
+            crate::debug!("sys_spawn_service parameters: path_ptr=0x{:X}, path_len={}", x0, x1);
             sys_spawn_service(x0, x1)
+        }
+        0x9999 => {
+            crate::info!("TEST_SYSCALL: Test system call called, returning 42");
+            42
         }
         _ => -1,
     }

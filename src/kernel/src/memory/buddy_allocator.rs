@@ -7,6 +7,7 @@ use core::alloc::{GlobalAlloc, Layout};
 use core::ptr;
 use core::cell::UnsafeCell;
 use core::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
+use crate::arch::memory;
 
 /// Maximum order of the buddy system (2^MAX_ORDER bytes)
 const MAX_ORDER: usize = 32;
@@ -208,7 +209,7 @@ unsafe impl GlobalAlloc for BuddyAllocator {
         if !self.lock() {
             // Spin until we can acquire the lock
             while !self.lock() {
-                core::arch::asm!("yield");
+                memory::yield_cpu();
             }
         }
         
@@ -239,7 +240,7 @@ unsafe impl GlobalAlloc for BuddyAllocator {
         if !self.lock() {
             // Spin until we can acquire the lock
             while !self.lock() {
-                core::arch::asm!("yield");
+                memory::yield_cpu();
             }
         }
         

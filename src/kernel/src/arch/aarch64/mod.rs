@@ -1,52 +1,66 @@
 //! ARMv8 (aarch64) 架构实现
 
-pub struct Arch;
+use crate::arch::common::traits::Arch;
+
+pub struct AArch64;
 pub const ARCH_NAME: &str = "aarch64";
+
+impl Arch for AArch64 {
+    const NAME: &'static str = ARCH_NAME;
+
+    fn init() {
+        interrupt::init();
+        mmu::init();
+        timer::init();
+        crate::security::init();
+    }
+
+    fn cpu_id() -> u32 {
+        cpu::id()
+    }
+
+    fn halt() -> ! {
+        loop {
+            cpu::wait_for_interrupt();
+        }
+    }
+}
 
 pub mod boot;
 pub mod console;
 pub mod interrupt;
+pub mod memory;
 pub mod mmu;
 pub mod timer;
+pub mod cpu;
+pub mod context;
 
 pub fn init() {
-    interrupt::init();
-    mmu::init();
-    timer::init();
-    crate::security::init();
+    AArch64::init();
 }
 
 pub fn cpu_id() -> u32 {
-    let mut cpu_id: u64;
-    unsafe {
-        core::arch::asm!("mrs {}, mpidr_el1", out(reg) cpu_id);
-    }
-    (cpu_id & 0xFF) as u32
+    cpu::id()
 }
 
 pub fn disable() {
-    interrupt::disable();
+    cpu::disable_interrupts();
 }
 
 pub fn exec_preflight(elr: usize) {
-    unsafe {
-        let mut spsr: u64 = 0;
-        let mut cel: u64 = 0;
-        let mut vbar: u64 = 0;
-        let mut tt0: u64 = 0;
-        let mut tt1: u64 = 0;
-        let mut sp_el0: u64 = 0;
-        core::arch::asm!("mrs {s}, spsr_el1", s = out(reg) spsr);
-        core::arch::asm!("mrs {c}, CurrentEL", c = out(reg) cel);
-        core::arch::asm!("mrs {v}, vbar_el1", v = out(reg) vbar);
-        core::arch::asm!("mrs {t0}, ttbr0_el1", t0 = out(reg) tt0);
-        core::arch::asm!("mrs {t1}, ttbr1_el1", t1 = out(reg) tt1);
-        core::arch::asm!("mrs {sp}, sp_el0", sp = out(reg) sp_el0);
-        crate::debug!(
-            "arch/aarch64 exec preflight: ELR=0x{:016X} SPSR=0x{:016X} VBAR=0x{:016X} CurrentEL=0x{:016X} SP_EL0=0x{:016X} TTBR0=0x{:016X} TTBR1=0x{:016X}",
-            elr as u64, spsr, vbar, cel, sp_el0, tt0, tt1
-        );
-    }
+    use crate::arch::Context;
+
+    let vbar = context::get_vbar();
+    let cur_el = context::get_current_el();
+    let sp = context::get_sp();
+    let ttbr0 = memory::get_current_page_table_base();
+    // 使用 Context trait 获取 TTBR1 和 SPSR
+    let tt1 = context::get_ttbr1() as u64;
+    let spsr = context::get_spsr() as u64;
+    crate::debug!(
+        "arch/aarch64 exec preflight: ELR=0x{:016X} SPSR=0x{:016X} VBAR=0x{:016X} CurrentEL={} SP_EL0=0x{:016X} TTBR0=0x{:016X} TTBR1=0x{:016X}",
+        elr as u64, spsr, vbar, cur_el, sp, ttbr0, tt1
+    );
 }
 
 pub fn dump_panic_state() {

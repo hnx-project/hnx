@@ -193,8 +193,8 @@ class ImageBuilder:
         """复制核心服务二进制文件到 initrd 的 bin 目录"""
         print("Looking for core service binaries...")
 
-        # 核心服务列表
-        core_services = ["loader-service", "vfs-service"]
+        # 核心服务列表（新架构：init -> loader + ipcrouter）
+        core_services = ["loader-service", "ipcrouter-service"]
 
         for service_name in core_services:
             service_binary = None

@@ -118,12 +118,12 @@ exception_vector_table:
 
 /* 异常处理程序（简化版） */
 exception_handler_sync:
-    /* 保存所有被调用者保存寄存器到栈中 (x19-x25) */
+    /* 保存所有被调用者保存寄存器到栈中 (x19-x25, x30) */
     stp x19, x20, [sp, #-16]!
     stp x21, x22, [sp, #-16]!
     stp x23, x24, [sp, #-16]!
-    stp x25, xzr, [sp, #-16]!
-    /* 保存所有调用者保存寄存器到栈中 (x0-x18) */
+    stp x25, x30, [sp, #-16]!   /* 保存x25和lr (x30) */
+    /* 保存所有调用者保存寄存器到栈中 (x0-x18, x29) */
     stp x0, x1, [sp, #-16]!
     stp x2, x3, [sp, #-16]!
     stp x4, x5, [sp, #-16]!
@@ -133,7 +133,7 @@ exception_handler_sync:
     stp x12, x13, [sp, #-16]!
     stp x14, x15, [sp, #-16]!
     stp x16, x17, [sp, #-16]!
-    stp x18, xzr, [sp, #-16]!
+    stp x18, x29, [sp, #-16]!   /* 保存x18和帧指针x29 */
 
     /* 读取异常信息 */
     mrs x0, esr_el1
@@ -172,8 +172,8 @@ exception_handler_sync:
     add x22, x22, #4
     msr elr_el1, x22
     /* 恢复所有调用者保存寄存器从栈中 */
-    ldp x18, xzr, [sp], #16
-    ldp x16, x17, [sp], #16
+    ldp x18, x29, [sp], #16   /* 恢复x18和x29 */
+    ldp x16, x17, [sp], #16    /* 恢复x16和x17 */
     ldp x14, x15, [sp], #16
     ldp x12, x13, [sp], #16
     ldp x10, x11, [sp], #16
@@ -182,9 +182,9 @@ exception_handler_sync:
     ldp x4, x5, [sp], #16
     ldp x2, x3, [sp], #16
     ldp x0, x1, [sp], #16
-    /* 恢复所有被调用者保存寄存器从栈中 (x19-x25) */
-    ldp x25, xzr, [sp], #16
-    ldp x23, x24, [sp], #16
+    /* 恢复所有被调用者保存寄存器从栈中 (x19-x25, x30) */
+    ldp x25, x30, [sp], #16   /* 恢复x25和lr (x30) */
+    ldp x23, x24, [sp], #16    /* 恢复x23和x24 */
     ldp x21, x22, [sp], #16
     ldp x19, x20, [sp], #16
     eret
@@ -202,8 +202,8 @@ exception_handler_sync:
     b exception_panic
 10:
     /* 恢复所有调用者保存寄存器从栈中 */
-    ldp x18, xzr, [sp], #16
-    ldp x16, x17, [sp], #16
+    ldp x18, x29, [sp], #16   /* 恢复x18和x29 */
+    ldp x16, x17, [sp], #16    /* 恢复x16和x17 */
     ldp x14, x15, [sp], #16
     ldp x12, x13, [sp], #16
     ldp x10, x11, [sp], #16
@@ -212,15 +212,15 @@ exception_handler_sync:
     ldp x4, x5, [sp], #16
     ldp x2, x3, [sp], #16
     ldp x0, x1, [sp], #16
-    /* 恢复所有被调用者保存寄存器从栈中 (x19-x25) */
-    ldp x25, xzr, [sp], #16
-    ldp x23, x24, [sp], #16
+    /* 恢复所有被调用者保存寄存器从栈中 (x19-x25, x30) */
+    ldp x25, x30, [sp], #16   /* 恢复x25和lr (x30) */
+    ldp x23, x24, [sp], #16    /* 恢复x23和x24 */
     ldp x21, x22, [sp], #16
     ldp x19, x20, [sp], #16
     eret
 
 exception_handler_irq:
-    /* Save caller-saved registers (x0-x18) */
+    /* Save caller-saved registers (x0-x18, x29) */
     stp x0, x1, [sp, #-16]!
     stp x2, x3, [sp, #-16]!
     stp x4, x5, [sp, #-16]!
@@ -230,10 +230,10 @@ exception_handler_irq:
     stp x12, x13, [sp, #-16]!
     stp x14, x15, [sp, #-16]!
     stp x16, x17, [sp, #-16]!
-    stp x18, xzr, [sp, #-16]!
+    stp x18, x29, [sp, #-16]!   /* 保存x18和帧指针x29 */
     bl rust_irq_handler
     /* Restore caller-saved registers */
-    ldp x18, xzr, [sp], #16
+    ldp x18, x29, [sp], #16   /* 恢复x18和x29 */
     ldp x16, x17, [sp], #16
     ldp x14, x15, [sp], #16
     ldp x12, x13, [sp], #16

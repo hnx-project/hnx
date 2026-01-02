@@ -127,11 +127,11 @@ macro_rules! println_raw {
 }
 
 pub fn log(level: &str, module: &str, args: fmt::Arguments) {
-    if level == "ERROR" || level == "WARN" {
-        write(format_args!("[{}] <{}> => {}\n", level, module, args));
-        return;
-    }
-    write(format_args!("[{}] => {}\n", level, args));
+    // if level == "ERROR" || level == "WARN" {
+    write(format_args!("[{}] <{}> => {}\n", level, module, args));
+        // return;
+    // }
+    // write(format_args!("[{}] => {}\n", level, args));
 }
 
 pub mod loglvl {
@@ -145,7 +145,7 @@ pub mod loglvl {
         Warn = 3,
         Error = 4,
     }
-    static LOG_LEVEL: AtomicU8 = AtomicU8::new(LogLevel::Debug as u8);
+    static LOG_LEVEL: AtomicU8 = AtomicU8::new(LogLevel::Warn as u8);
     pub fn set_log_level(level: LogLevel) {
         LOG_LEVEL.store(level as u8, Ordering::Relaxed)
     }
@@ -196,5 +196,13 @@ macro_rules! error {
         if $crate::console::loglvl::enabled($crate::console::loglvl::LogLevel::Error) {
             $crate::console::log("ERROR", module_path!(), format_args!($($arg)*));
         }
+    }}
+}
+
+#[macro_export]
+macro_rules! test {
+    ($($arg:tt)*) => {{
+        // test!宏总是输出，不受日志级别控制，格式为[TEST] <消息>
+        $crate::console::log("[TEST]", module_path!(), format_args!($($arg)*));
     }}
 }

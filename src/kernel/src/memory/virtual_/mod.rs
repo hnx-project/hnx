@@ -1,6 +1,7 @@
 use super::physical::alloc_pages;
 use super::physical::PhysAddr;
 use crate::arch::common::mmu::{ArchType, MmuFlags};
+use crate::arch::memory;
 use crate::console;
 use spin::Mutex;
 
@@ -181,7 +182,8 @@ pub fn map(vaddr: VirtAddr, paddr: PhysAddr, flags: MmuFlags) {
                 core::ptr::write_volatile(l3_ptr.add(idx3), entry);
             }
         }
-        core::arch::asm!("dsb ish", "isb");
+        memory::data_sync_barrier();
+        memory::instruction_barrier();
     }
 }
 
@@ -214,7 +216,8 @@ pub fn remap(vaddr: VirtAddr, new_flags: MmuFlags) {
                 }
             }
         }
-        core::arch::asm!("dsb ish", "isb");
+        memory::data_sync_barrier();
+        memory::instruction_barrier();
     }
 }
 
@@ -237,7 +240,8 @@ pub fn map_in_pt(pt_base: usize, vaddr: VirtAddr, paddr: PhysAddr, flags: MmuFla
                 crate::info!("mm/vmm map_in_pt: pt=0x{:X} va=0x{:X} pa=0x{:X} l3=0x{:X} idx3={} entry=0x{:016X} flags={:?} flags.bits=0x{:X} attrs=0x{:X} AP[7:6]=0b{:02b}",
                     pt_base, vaddr, paddr, l3 as usize, idx3, entry, flags, flags.bits(), attrs, (attrs >> 6) & 0x3);
             }
-            core::arch::asm!("dsb ish", "isb");
+            memory::data_sync_barrier();
+        memory::instruction_barrier();
         }
     }
 }
@@ -261,7 +265,8 @@ pub fn remap_in_pt(pt_base: usize, vaddr: VirtAddr, new_flags: MmuFlags) {
                 let new_entry = paddr | 3u64 | attrs;
                 crate::info!("remap_in_pt: writing new_entry=0x{:016X}", new_entry);
                 core::ptr::write_volatile(l3.add(idx3), new_entry);
-                core::arch::asm!("dsb ish", "isb");
+                memory::data_sync_barrier();
+        memory::instruction_barrier();
                 // Verify the write
                 let verify = core::ptr::read_volatile(l3.add(idx3));
                 crate::info!("remap_in_pt: verified entry=0x{:016X}", verify);
@@ -327,18 +332,8 @@ pub fn handle_page_fault(pt: usize, vaddr: usize, esr: u64) -> bool {
                             }
                         }
                         // Invalidate TLB entry for this page
-                        unsafe {
-                            core::arch::asm!("dsb ish");
-                            // Try to invalidate by VA with ASID for more precise invalidation
-                            let ttbr0: u64;
-                            core::arch::asm!("mrs {}, ttbr0_el1", out(reg) ttbr0);
-                            let asid = (ttbr0 >> 48) & 0xFFFF;
-                            let va_bits = (va as u64 >> 12) & 0xFFFFFFFFFFFF;
-                            let value = va_bits | (asid << 48);
-                            // tlbi vae1is: Invalidate TLB entry by VA and ASID, inner shareable
-                            core::arch::asm!("tlbi vae1is, {}", in(reg) value);
-                            core::arch::asm!("dsb ish", "isb");
-                        }
+                        let asid = memory::get_current_asid();
+                        memory::tlb_invalidate(va, Some(asid));
                         crate::info!("handle_page_fault: success, TLB invalidated");
                         return true;
                     } else {
@@ -499,7 +494,7 @@ pub fn unmap(vaddr: VirtAddr) {
                 core::ptr::write_volatile(l3_ptr.add(idx3), 0u64);
             }
         }
-        core::arch::asm!("dsb ish", "tlbi vmalle1", "dsb ish", "isb");
+        memory::tlb_flush_all();
     }
 }
 
@@ -511,7 +506,7 @@ pub fn unmap_in_pt(pt_base: usize, vaddr: VirtAddr) {
                 let idx3 = l3_index(vaddr);
                 core::ptr::write_volatile(l3.add(idx3), 0u64);
             }
-            core::arch::asm!("dsb ish", "tlbi vmalle1", "dsb ish", "isb");
+            memory::tlb_flush_all();
         }
     }
 }
