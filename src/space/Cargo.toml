@@ -17,7 +17,7 @@ members = [
     #"services/device-manager",
     #"services/display-server",
     #"drivers/uart-driver",
-    #"apps/shell",
+    "apps/shell",
     #"apps/terminal",
     #"apps/hello-world",
     #"boot/userboot",

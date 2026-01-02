@@ -20,6 +20,7 @@ pub mod syscall {
     // 重新导出安全系统调用作为主要实现
     pub use crate::safe_syscall::{
         write,
+        read,
         debug_print,
         yield_cpu,
         spawn_service,

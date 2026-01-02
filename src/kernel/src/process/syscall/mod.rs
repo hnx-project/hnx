@@ -529,11 +529,6 @@ pub fn dispatch(
             crate::debug!("sys_spawn_service parameters: path_ptr=0x{:X}, path_len={}", x0, x1);
             sys_spawn_service(x0, x1)
         }
-        0x9999 => {
-            // Simple test system call that just returns 42
-            // No logging to avoid any potential issues
-            42
-        }
         _ => -1,
     }
 }

@@ -174,12 +174,30 @@ pub fn write(fd: i32, buf: &[u8]) -> isize {
     if buf.is_empty() {
         return 0;
     }
-    
+
     unsafe {
         syscall_3(
             HNX_SYS_WRITE,
             fd as usize,
             buf.as_ptr() as usize,
+            buf.len(),
+        )
+    }
+}
+
+/// 安全的 read 系统调用
+#[inline(never)]
+pub fn read(fd: i32, buf: &mut [u8]) -> isize {
+    // 安全检查：确保缓冲区有效
+    if buf.is_empty() {
+        return 0;
+    }
+
+    unsafe {
+        syscall_3(
+            HNX_SYS_READ,
+            fd as usize,
+            buf.as_mut_ptr() as usize,
             buf.len(),
         )
     }

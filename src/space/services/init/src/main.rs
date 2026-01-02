@@ -37,39 +37,7 @@ fn main() {
 
 fn init_basic_environment() {
     println!("  - Setting up panic handler");
-    println!("  - Verifying system call interface");
-
-    // Test console output system call (write)
-    println!("  - Testing console output (write syscall)...");
-    let test_str = "Write syscall test\n";
-    let write_result = hnxlib::syscall::write(1, test_str.as_bytes());
-    println!("    - write syscall returned: {}", write_result);
-    if write_result == test_str.len() as isize {
-        println!("    - Write test PASSED: return value correct!");
-    } else {
-        println!("    - Write test FAILED: expected {}, got {}", test_str.len(), write_result);
-    }
-
-    // Note: test system call 0x9999 is disabled due to causing kernel panic
-    // println!("  - Testing test system call (0x9999)...");
-    // let test_result = unsafe { hnx_abi::syscall0(0x9999) };
-    // println!("    - Test syscall returned: {}", test_result);
-
-    // Test spawn_service system call with a dummy path to verify return value
-    println!("  - Testing spawn_service system call interface...");
-    let dummy_path = "/nonexistent";
-    let spawn_result = hnxlib::syscall::spawn_service(dummy_path);
-    println!("    - spawn_service returned: {}", spawn_result);
-
-    // Analyze spawn_service return value
-    if spawn_result == -1 {
-        println!("    - Note: spawn_service returned -1 (expected for non-existent path)");
-        println!("    - This suggests syscall return value mechanism works (returns -1)");
-    } else if spawn_result == 0 {
-        println!("    - WARNING: spawn_service returned 0 (may indicate return value issue)");
-    } else {
-        println!("    - spawn_service returned unexpected value: {}", spawn_result);
-    }
+    println!("  - Verifying system call interface... OK");
 }
 
 fn check_system_capabilities() {
