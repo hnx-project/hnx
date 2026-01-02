@@ -1,5 +1,6 @@
 use crate::arch::common::mmu::MmuFlags;
 use crate::console;
+use crate::debug;
 use crate::error;
 use crate::info;
 use crate::memory::virtual_::map_in_pt;
@@ -95,7 +96,6 @@ pub fn run_task_with_args(task: Task, a0: usize, a1: usize, a2: usize, a8: usize
 
 pub fn run() -> ! {
     crate::info!("scheduler started - HNX kernel successfully booted!");
-    crate::console::write_raw("Scheduler started - HNX kernel successfully booted!\n");
     // For now, let's just loop waiting for interrupts
     loop {
         // For now, we just wait for interrupts
@@ -177,28 +177,21 @@ pub fn exit_current() -> ! {
 /// This implements cooperative multitasking - the current process yields CPU
 /// and we switch to the next process in the ready queue.
 pub fn switch_to_next_process() -> ! {
-    // Immediate debug output to confirm function is called
-    crate::console::write_raw("[SCHED] switch_to_next_process called\n");
-
-    // Debug: print ready queue state before any operations
-    crate::console::write_raw("[SCHED DEBUG] Ready queue state at start\n");
-    crate::process::debug_print_ready_queue();
 
     let current_pid = current_pid();
-    crate::console::write_raw("[SCHED] got current_pid\n");
-    crate::info!("switch_to_next_process: current_pid={}", current_pid);
+    crate::debug!("switch_to_next_process: current_pid={}", current_pid);
 
     // Save current process context before switching away
     let effective_pid = if current_pid != 0 {
         // Get current PC and SP from saved exception context
         let current_pc = crate::arch::context::get_elr();
         let current_sp = crate::arch::context::get_sp();
-        crate::info!("switch_to_next_process: saving context for PID {}: PC=0x{:X}, SP=0x{:X}",
+        crate::debug!("switch_to_next_process: saving context for PID {}: PC=0x{:X}, SP=0x{:X}",
                      current_pid, current_pc, current_sp);
 
         // Update PCB with current context using public API
         if crate::process::update_process_context(current_pid as u32, current_pc, current_sp) {
-            crate::info!("switch_to_next_process: updated PCB for PID {}", current_pid);
+            crate::debug!("switch_to_next_process: updated PCB for PID {}", current_pid);
         } else {
             crate::error!("switch_to_next_process: failed to update PCB for PID {}", current_pid);
         }
@@ -206,43 +199,32 @@ pub fn switch_to_next_process() -> ! {
         current_pid
     } else {
         // Lock was unavailable, but we know init is PID 1
-        crate::console::write_raw("[SCHED] assuming current_pid=1 (init)\n");
         1
     };
 
-    crate::console::write_raw("[SCHED] pushing PID back to ready queue\n");
-    crate::info!("switch_to_next_process: pushing PID {} to ready queue", effective_pid);
+    crate::debug!("switch_to_next_process: pushing PID {} to ready queue", effective_pid);
     crate::process::ready_queue_push(effective_pid as u32);
-    crate::info!("switch_to_next_process: after push, PID {} should be in ready queue", effective_pid);
-    crate::console::write_raw("[SCHED DEBUG] Ready queue state after pushing PID\n");
-    crate::process::debug_print_ready_queue();
 
     // Get the next process from ready queue
-    crate::console::write_raw("[SCHED] popping next PID from ready queue\n");
-    crate::info!("switch_to_next_process: attempting to pop next PID from ready queue");
     if let Some(mut next_pid) = crate::process::ready_queue_pop() {
-        crate::console::write_raw("[SCHED] got next_pid\n");
-        crate::info!("switch_to_next_process: popped PID {}", next_pid);
-        crate::console::write_raw("[SCHED DEBUG] Ready queue state after popping\n");
-        crate::process::debug_print_ready_queue();
+        crate::debug!("switch_to_next_process: popped PID {}", next_pid);
 
         // Avoid switching to the same process if possible
         if next_pid as u64 == effective_pid {
-            crate::console::write_raw("[SCHED] next_pid same as current, popping again\n");
             if let Some(another_pid) = crate::process::ready_queue_pop() {
                 // Push the original back to queue
                 crate::process::ready_queue_push(next_pid);
                 next_pid = another_pid;
-                crate::info!("[SCHED] new next_pid={}", next_pid);
+                crate::debug!("[SCHED] new next_pid={}", next_pid);
             }
         }
-        crate::info!("switch_to_next_process: next_pid={}", next_pid);
+        crate::debug!("switch_to_next_process: switching to next_pid={}", next_pid);
         // Get process information for context switching
         if let Some((entry_point, stack_pointer, ttbr0_base, asid)) =
             crate::process::get_process_for_scheduling(next_pid)
         {
             info!("scheduler: switching from PID {} to PID {}", current_pid, next_pid);
-            info!("scheduler: entry=0x{:X} sp=0x{:X} ttbr0=0x{:X} asid={}",
+            debug!("scheduler: entry=0x{:X} sp=0x{:X} ttbr0=0x{:X} asid={}",
                 entry_point, stack_pointer, ttbr0_base, asid);
 
             // Update current task in scheduler
@@ -263,7 +245,7 @@ pub fn switch_to_next_process() -> ! {
             }
 
             // Perform architecture-specific context switch
-            crate::info!("[SCHED] About to call exec_user for PID {}", next_pid);
+            crate::debug!("[SCHED] About to call exec_user for PID {}", next_pid);
             use crate::arch::Context;
             crate::arch::context::exec_user(
                 entry_point,
@@ -280,9 +262,7 @@ pub fn switch_to_next_process() -> ! {
         }
     } else {
         // No process ready, just idle
-        info!("scheduler: no ready processes, idling");
-        crate::console::write_raw("[SCHED DEBUG] Ready queue is empty!\n");
-        crate::process::debug_print_ready_queue();
+        debug!("scheduler: no ready processes, idling");
         loop {
             crate::arch::cpu::wait_for_interrupt();
         }

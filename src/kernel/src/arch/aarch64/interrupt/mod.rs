@@ -332,37 +332,31 @@ pub extern "C" fn rust_sync_try_handle(
     _sctlr: u64,
     _spsr: u64,
 ) -> u64 {
-    crate::console::write_raw("rust_sync_try_handle\n");
     let ec = (esr >> 26) & 0x3F;
-    let imm = esr & 0xFFFF;
-    info!("rust_sync_try_handle called: ec=0x{:X} imm=0x{:X} esr=0x{:X} elr=0x{:X} far=0x{:X}", ec, imm, esr, elr, far);
+
     if ec == 0x15 {
         info!("WARNING: rust_sync_try_handle received EC=0x15 (SVC) - this should go to rust_svc_handler!");
     }
-    crate::console::write_raw("rust_sync_try_handle: checking ec\n");
+
     if ec == 0x20 || ec == 0x24 {
-        crate::console::write_raw("rust_sync_try_handle: page fault detected\n");
         // Read TTBR0_EL1 directly from register (avoid scheduler lock in exception context)
         let ttbr0 = crate::arch::context::get_ttbr0() as u64;
         // Extract page table base address (lower 48 bits), mask off ASID in bits [63:48]
         let pt_base = (ttbr0 & 0x0000_FFFF_FFFF_FFFF) as usize;
-        crate::console::write_raw("rust_sync_try_handle: read ttbr0 from register\n");
-        info!("arch/aarch64 page fault: far=0x{:016X} elr=0x{:016X} ttbr0=0x{:016X} pt_base=0x{:016X}", far, elr, ttbr0, pt_base);
-        crate::console::write_raw("rust_sync_try_handle: calling handle_page_fault\n");
+
+        info!("arch/aarch64 page fault: far=0x{:016X} elr=0x{:016X} ttbr0=0x{:016X}", far, elr, ttbr0);
+
         if crate::memory::virtual_::handle_page_fault(pt_base, far as usize, esr) {
             info!("arch/aarch64 page fault handled");
-            crate::console::write_raw("rust_sync_try_handle: page fault handled\n");
             return 1;
         } else {
             info!("arch/aarch64 page fault NOT handled");
-            crate::console::write_raw("rust_sync_try_handle: page fault NOT handled\n");
         }
     } else {
-        info!("rust_sync_try_handle: unsupported EC=0x{:X} FAR=0x{:016X} - pretending handled", ec, far);
-        crate::console::write_raw("rust_sync_try_handle: not a page fault ec, pretending handled\n");
+        // Not a page fault, pretend it was handled
         return 1;
     }
-    crate::console::write_raw("rust_sync_try_handle: returning 0\n");
+
     0
 }
 
