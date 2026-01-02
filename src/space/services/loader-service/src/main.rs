@@ -2,7 +2,7 @@
 #![no_main]
 
 use core::panic::PanicInfo;
-use hnxlib::{println, ipc::{IpcError, ServiceFramework}};
+use hnxlib::{println, ipc::{IpcError, ServiceFramework}, syscall::spawn_service};
 
 mod elf;
 
@@ -30,18 +30,27 @@ pub extern "C" fn _start() -> ! {
     let framework = match ServiceFramework::new("loader") {
         Ok(f) => {
             println!("  服务框架创建成功");
-            f
+            Some(f)
         },
         Err(e) => {
             println!("  警告：服务框架创建失败: {:?}", e);
-            // 进入简单模式
-            simple_loader_loop();
+            None
         }
     };
 
-    // 运行服务
-    println!("[INFO] Loader Service 已启动，等待请求...");
-    framework.run(handle_message);
+    // 主动加载核心服务
+    println!("[loader] 主动加载核心服务...");
+    load_core_services();
+
+    if let Some(framework) = framework {
+        // 运行服务框架处理后续请求
+        println!("[INFO] Loader Service 已启动，等待请求...");
+        framework.run(handle_message);
+    } else {
+        // 进入简单模式
+        println!("[loader] 进入简单模式...");
+        simple_loader_loop();
+    }
 }
 
 /// 简单的加载器循环（备用）
@@ -94,19 +103,30 @@ fn handle_load_executable(request: &[u8], response: &mut [u8]) -> Result<usize, 
 
     println!("[loader] 收到加载请求: {}", path);
 
-    // TODO: 实际加载逻辑
-    // 1. 从 initrd 读取文件
-    // 2. 解析 ELF
-    // 3. 分配内存并加载
-    // 4. 返回加载信息
+    // 调用内核系统调用来加载服务
+    let result = spawn_service(path);
+    println!("[loader] spawn_service 返回: {}", result);
 
-    // 临时响应
-    let response_msg = b"Loader ready (ELF parser available)";
-    let len = response_msg.len().min(response.len());
-    response[..len].copy_from_slice(&response_msg[..len]);
+    // 响应格式：[结果代码(8字节)][PID(8字节)可选]
+    if response.len() < 8 {
+        return Ok(0);
+    }
 
-    println!("[loader] 返回响应: {} bytes", len);
-    Ok(len)
+    if result >= 0 {
+        // 成功：返回PID
+        let pid = result as usize;
+        let pid_bytes = pid.to_ne_bytes();
+        response[0..8].copy_from_slice(&pid_bytes);
+        println!("[loader] 服务加载成功，PID: {}", pid);
+        Ok(8)
+    } else {
+        // 失败：返回错误代码
+        let error_code = result as i64;
+        let error_bytes = error_code.to_ne_bytes();
+        response[0..8].copy_from_slice(&error_bytes);
+        println!("[loader] 服务加载失败，错误代码: {}", error_code);
+        Ok(8)
+    }
 }
 
 /// 处理获取加载器信息请求
@@ -167,6 +187,37 @@ fn handle_test(request: &[u8], response: &mut [u8]) -> Result<usize, IpcError> {
     let len = RESPONSE_AVAILABLE.len().min(response.len());
     response[..len].copy_from_slice(&RESPONSE_AVAILABLE[..len]);
     Ok(len)
+}
+
+/// 加载核心服务
+fn load_core_services() {
+    println!("[loader] 开始加载核心服务...");
+
+    // 首先测试加载一个已知存在的服务
+    println!("[loader] 测试加载自身: /bin/loader-service");
+    let test_result = spawn_service("/bin/loader-service");
+    println!("[loader] 测试结果: {}", test_result);
+
+    // 核心服务列表（完整路径）
+    let services = ["/bin/vfs-service", "/bin/procmgr-service", "/bin/echo-service"];
+
+    for path in services.iter() {
+        println!("[loader] 加载服务: {}", path);
+
+        let result = spawn_service(path);
+        if result >= 0 {
+            println!("[loader]  成功加载 {}，PID: {}", path, result);
+        } else {
+            println!("[loader]  加载 {} 失败，错误代码: {}", path, result);
+        }
+
+        // 短暂让出CPU，让新服务有机会运行
+        for _ in 0..5 {
+            hnxlib::syscall::yield_cpu();
+        }
+    }
+
+    println!("[loader] 核心服务加载完成");
 }
 
 /// 获取进程ID（临时实现）

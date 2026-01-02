@@ -276,7 +276,22 @@ impl ServiceFramework {
                 }
                 Err(e) => {
                     // 接收错误，继续循环
-                    let _ = crate::safe_syscall::debug_print("[Service] Receive error\n");
+                    match e {
+                        IpcError::SyscallFailed(code) => {
+                            let _ = crate::safe_syscall::debug_print("[Service] Receive error - syscall failed: ");
+                            // 简单打印错误代码
+                            if code == -1 {
+                                let _ = crate::safe_syscall::debug_print("-1\n");
+                            } else if code == -2 {
+                                let _ = crate::safe_syscall::debug_print("-2\n");
+                            } else {
+                                let _ = crate::safe_syscall::debug_print("unknown\n");
+                            }
+                        }
+                        _ => {
+                            let _ = crate::safe_syscall::debug_print("[Service] Receive error\n");
+                        }
+                    }
                 }
             }
 
