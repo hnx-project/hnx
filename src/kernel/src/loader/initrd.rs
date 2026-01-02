@@ -82,7 +82,7 @@ fn discover_initrd(_dtb_ptr: usize) -> (usize, usize) {
 fn detect_cpio_size(base: usize) -> usize {
     // 最大 20MB 限制 ？ 防止无限循环
     // TODO 是否合理？如果加入更多的服务，可能需要增加这个限制？
-    const MAX_SIZE: usize = 20 * 1024 * 1024;  // 最大 20MB
+    const MAX_SIZE: usize = 30 * 1024 * 1024;  // 最大 30MB
     let data = unsafe {
         core::slice::from_raw_parts(base as *const u8, MAX_SIZE)
     };

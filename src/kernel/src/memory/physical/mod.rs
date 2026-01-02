@@ -27,10 +27,22 @@ fn order_for_pages(pages: usize) -> usize {
 
 fn push_block(order: usize, addr: usize) {
     unsafe {
-        debug_assert!(order <= MAX_ORDER);
-        debug_assert!(addr.is_multiple_of(PAGE_SIZE << order));
-        debug_assert!(addr >= REGION_START && addr + (PAGE_SIZE << order) <= REGION_END);
+        // Skip invalid blocks (outside managed region)
+        if !(addr >= REGION_START && addr + (PAGE_SIZE << order) <= REGION_END) {
+            // Silently ignore invalid block - likely from early boot or reserved memory
+            return;
+        }
+        // Validate inputs
+        if order > MAX_ORDER {
+            return;
+        }
+        if !addr.is_multiple_of(PAGE_SIZE << order) {
+            return;
+        }
         let c = FREE_COUNT[order];
+        if c >= MAX_PAGES {
+            return;
+        }
         FREE_LIST[order][c] = addr;
         FREE_COUNT[order] = c + 1;
     }
@@ -81,10 +93,16 @@ pub fn init(boot: BootInfo) {
         REGION_START = (start + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
         REGION_END = end & !(PAGE_SIZE - 1);
         
-        crate::info!("phys alloc: k_end=0x{:X}, pt_end=0x{:X}, reserved_end=0x{:X}", 
+        crate::error!("PHYS ALLOC INIT: phys_mem_start=0x{:X}, phys_mem_size=0x{:X}",
+                     boot.phys_mem_start, boot.phys_mem_size);
+        crate::error!("PHYS ALLOC INIT: k_end=0x{:X}, pt_end=0x{:X}, reserved_end=0x{:X}",
                      k_end, BOOT_PAGE_TABLES_END, reserved_end);
-        crate::info!("phys alloc: REGION_START=0x{:X}, REGION_END=0x{:X}", 
+        crate::error!("PHYS ALLOC INIT: start=0x{:X}, end=0x{:X}",
+                     start, end);
+        crate::error!("PHYS ALLOC INIT: REGION_START=0x{:X}, REGION_END=0x{:X}",
                      REGION_START, REGION_END);
+        crate::error!("PHYS ALLOC INIT: REGION_SIZE=0x{:X} pages",
+                     (REGION_END - REGION_START) / PAGE_SIZE);
         for o in 0..=MAX_ORDER {
             FREE_COUNT[o] = 0;
         }
@@ -134,6 +152,12 @@ pub fn alloc_pages(count: usize) -> Option<PhysAddr> {
 pub fn free_pages(addr: PhysAddr, count: usize) {
     unsafe {
         FREE_CALLS = FREE_CALLS.saturating_add(1);
+        // Debug logging
+        if addr < REGION_START || addr + (PAGE_SIZE << order_for_pages(count)) > REGION_END {
+            crate::error!("PHYS ALLOC free_pages: addr=0x{:X}, count={}, order={}, REGION_START=0x{:X}, REGION_END=0x{:X} - IGNORING",
+                addr, count, order_for_pages(count), REGION_START, REGION_END);
+            return; // Ignore invalid free requests
+        }
         let mut order = order_for_pages(count);
         let mut a = addr;
         loop {

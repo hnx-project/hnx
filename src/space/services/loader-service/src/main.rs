@@ -20,7 +20,11 @@ pub extern "C" fn _start() -> ! {
 
     // 等待 IPC Router 服务启动
     for i in 0..10 {
-        println!("  等待 IPC Router (尝试 {}/10)...", i + 1);
+        println!("  [loader] 等待 IPC Router (尝试 {}/10)...", i + 1);
+        // 短暂忙等待，然后让出CPU
+        for _ in 0..1000 {
+            core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+        }
         hnxlib::syscall::yield_cpu();
     }
 
@@ -41,6 +45,7 @@ pub extern "C" fn _start() -> ! {
     // 主动加载核心服务
     println!("[loader] 主动加载核心服务...");
     load_core_services();
+    println!("[loader] 核心服务加载完成，进入主循环");
 
     if let Some(framework) = framework {
         // 运行服务框架处理后续请求
@@ -193,10 +198,10 @@ fn handle_test(request: &[u8], response: &mut [u8]) -> Result<usize, IpcError> {
 fn load_core_services() {
     println!("[loader] 开始加载核心服务...");
 
-    // 首先测试加载一个已知存在的服务
-    println!("[loader] 测试加载自身: /bin/loader-service");
-    let test_result = spawn_service("/bin/loader-service");
-    println!("[loader] 测试结果: {}", test_result);
+    // TODO: 移除自我加载测试，避免创建额外loader实例
+    // println!("[loader] 测试加载自身: /bin/loader-service");
+    // let test_result = spawn_service("/bin/loader-service");
+    // println!("[loader] 测试结果: {}", test_result);
 
     // 核心服务列表（完整路径）
     let services = ["/bin/vfs-service", "/bin/procmgr-service", "/bin/echo-service"];
@@ -205,6 +210,8 @@ fn load_core_services() {
         println!("[loader] 加载服务: {}", path);
 
         let result = spawn_service(path);
+        println!("[loader] spawn_service 返回: {}", result);
+
         if result >= 0 {
             println!("[loader]  成功加载 {}，PID: {}", path, result);
         } else {
@@ -212,7 +219,9 @@ fn load_core_services() {
         }
 
         // 短暂让出CPU，让新服务有机会运行
-        for _ in 0..5 {
+        println!("[loader] 让出CPU给新服务...");
+        for j in 0..5 {
+            println!("[loader] 让出CPU ({}/5)", j + 1);
             hnxlib::syscall::yield_cpu();
         }
     }

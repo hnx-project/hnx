@@ -5,12 +5,26 @@ use core::panic::PanicInfo;
 use hnxlib::println;
 use hnx_abi::*;
 
+/// 混合忙等待和yield的函数，避免永远占用CPU
+fn busy_wait(iterations: u32) {
+    for i in 0..iterations {
+        // 每100次迭代让出CPU一次，给其他进程更多机会
+        if i % 100 == 0 {
+            hnxlib::syscall::yield_cpu();
+        }
+        // 防止编译器优化掉循环
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+        // 空循环
+        let _ = i;
+    }
+}
+
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
     main();
     // Never return
     loop {
-        hnxlib::syscall::yield_cpu();
+        busy_wait(10000);
     }
 }
 
@@ -28,7 +42,14 @@ fn main() {
     println!("[3/5] Starting core services...");
     start_core_services();
 
-    println!("[4/5] Entering service monitor mode...");
+    // TODO: Shell integration - temporarily disabled for service stabilization
+    // println!("[4/5] Starting shell...");
+    // println!("[INIT] Before calling start_shell()");
+    // start_shell();
+    // println!("[INIT] After start_shell() returned");
+    println!("[4/5] Shell startup temporarily disabled (TODO)");
+
+    println!("[5/5] Entering service monitor mode...");
     println!("[init] System initialization complete\n");
 
     // Enter service monitoring loop
@@ -59,50 +80,78 @@ fn start_core_services() {
 
     let mut started_count = 0;
 
-    println!("  阶段1: 启动核心基础设施...");
+    println!("  Phase 1: Starting core infrastructure...");
     for (name, path) in core_services.iter() {
-        println!("  - 启动 {}...", name);
+        println!("  - Starting {}...", name);
 
         let pid: isize = hnxlib::syscall::spawn_service(path);
-        println!("    - 系统调用返回: {}", pid);
+        println!("    - System call returned: {}", pid);
 
         if pid > 0 {
-            println!("    - {} 已启动，PID = {}", name, pid);
+            println!("    - {} started, PID = {}", name, pid);
             started_count += 1;
 
-            // 给服务一些初始化时间
+            // Give service some initialization time
             for _ in 0..3 {
-                hnxlib::syscall::yield_cpu();
+                // 使用忙等待而不是 yield_cpu
+                busy_wait(5000);
             }
         } else {
-            println!("    - 警告: 无法启动 {} (错误: {})", name, pid);
+            println!("    - WARNING: Could not start {} (error: {})", name, pid);
 
             if *name == "loader-service" {
-                println!("    - 严重: loader-service 是关键服务");
+                println!("    - CRITICAL: loader-service is a core service");
             }
         }
     }
 
-    println!("  - 已启动 {}/{} 个核心服务", started_count, core_services.len());
+    println!("  - Started {}/{} core services", started_count, core_services.len());
 
     if started_count == 2 {
-        println!("  - 核心基础设施就绪!");
-        println!("  - 等待 Loader 和 IPC Router 初始化...");
+        println!("  - Core infrastructure ready!");
+        println!("  - Waiting for Loader and IPC Router to initialize...");
 
-        // 给核心服务更多初始化时间
-        for i in 0..15 {
-            println!("  等待服务初始化 ({}/15)...", i + 1);
-            hnxlib::syscall::yield_cpu();
+        // Give core services more initialization time
+        for i in 0..10 {
+            println!("  [INIT] Waiting for services ({}/10)...", i + 1);
+            // 使用忙等待而不是 yield_cpu，避免调度问题
+            busy_wait(10000);
         }
 
-        println!("  - 核心服务初始化完成");
-        println!("  - 注意: 其他服务将由 Loader Service 按需加载");
+        println!("  - Core services initialization complete");
+        println!("  - Note: Other services will be loaded on-demand by Loader Service");
     } else if started_count >= 1 {
-        println!("  - 警告: 部分核心服务启动失败");
-        println!("  - 系统将在有限功能下运行");
+        println!("  - WARNING: Some core services failed to start");
+        println!("  - System will run with limited functionality");
     } else {
-        println!("  - 错误: 无法启动任何核心服务");
-        println!("  - 系统功能严重受限");
+        println!("  - ERROR: Could not start any core services");
+        println!("  - System functionality severely limited");
+    }
+}
+
+fn start_shell() {
+    println!("  - Starting HNX Shell...");
+    println!("[INIT] Calling syscall::spawn_service(\"/bin/hnx-shell\")");
+
+    let shell_path = "/bin/hnx-shell";
+    let pid: isize = hnxlib::syscall::spawn_service(shell_path);
+
+    println!("[INIT] spawn_service returned: {}", pid);
+    println!("    - System call returned: {}", pid);
+
+    if pid > 0 {
+        println!("    - HNX Shell started, PID = {}", pid);
+
+        // 给shell一些初始化时间
+        for i in 0..5 {
+            println!("[INIT] Waiting for shell ({} of 5)", i + 1);
+            busy_wait(5000);
+        }
+
+        println!("  - Shell startup complete");
+    } else {
+        println!("    - WARNING: Could not start HNX Shell (error: {})", pid);
+        println!("    - System will continue without user interface");
     }
 }
 
@@ -119,7 +168,7 @@ fn service_monitor_loop() {
         // Check service health (placeholder)
         // Restart failed services if needed
 
-        hnxlib::syscall::yield_cpu();
+        busy_wait(10000);
     }
 }
 
