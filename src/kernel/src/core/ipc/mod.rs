@@ -295,7 +295,13 @@ fn push_message_to_queue(queue: &mut [Option<IpcMessage>; 32], head: &mut usize,
     if *len >= queue.len() {
         return Err(IpcError::QueueFull);
     }
-    
+
+    // 安全检查：确保tail在有效范围内
+    if *tail >= queue.len() {
+        crate::error!("IPC: invalid tail index {} (queue len {}), resetting to 0", *tail, queue.len());
+        *tail = 0;
+    }
+
     queue[*tail] = Some(msg);
     *tail = (*tail + 1) % queue.len();
     *len += 1;

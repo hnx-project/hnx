@@ -52,48 +52,60 @@ fn check_system_capabilities() {
 fn start_core_services() {
     println!("  - Starting core services...");
 
-    // 服务启动顺序
-    let services = [
+    // 第一阶段：仅启动最核心的两个服务
+    // 1. loader-service: 负责加载所有其他服务
+    // 2. ipcrouter-service: 服务注册和发现
+    let core_services = [
         ("loader-service", "/bin/loader-service"),
-        ("vfs-service", "/bin/vfs-service"),
         ("ipcrouter-service", "/bin/ipcrouter-service"),
-        ("procmgr-service", "/bin/procmgr-service"),
-        ("echo-service", "/bin/echo-service"),
     ];
 
     let mut started_count = 0;
 
-    for (name, path) in services.iter() {
-        println!("  - Attempting to start {}...", name);
+    println!("  阶段1: 启动核心基础设施...");
+    for (name, path) in core_services.iter() {
+        println!("  - 启动 {}...", name);
 
         let pid: isize = hnxlib::syscall::spawn_service(path);
-        println!("    - System call returned: {}", pid);
+        println!("    - 系统调用返回: {}", pid);
 
         if pid > 0 {
-            println!("    - {} started with PID {}", name, pid);
+            println!("    - {} 已启动，PID = {}", name, pid);
             started_count += 1;
 
-            // 等待服务初始化
-            for _ in 0..5 {
+            // 给服务一些初始化时间
+            for _ in 0..3 {
                 hnxlib::syscall::yield_cpu();
             }
         } else {
-            println!("    - Failed to start {} (error: {})", name, pid);
+            println!("    - 警告: 无法启动 {} (错误: {})", name, pid);
 
-            // 如果是关键服务，记录警告但继续
-            if *name == "loader-service" || *name == "vfs-service" {
-                println!("    - Warning: {} is a critical service", name);
+            if *name == "loader-service" {
+                println!("    - 严重: loader-service 是关键服务");
             }
         }
     }
 
-    println!("  - Started {}/{} core services", started_count, services.len());
+    println!("  - 已启动 {}/{} 个核心服务", started_count, core_services.len());
 
-    if started_count >= 3 {
-        println!("  - Core services started successfully!");
+    if started_count == 2 {
+        println!("  - 核心基础设施就绪!");
+        println!("  - 等待 Loader 和 IPC Router 初始化...");
+
+        // 给核心服务更多初始化时间
+        for i in 0..15 {
+            println!("  等待服务初始化 ({}/15)...", i + 1);
+            hnxlib::syscall::yield_cpu();
+        }
+
+        println!("  - 核心服务初始化完成");
+        println!("  - 注意: 其他服务将由 Loader Service 按需加载");
+    } else if started_count >= 1 {
+        println!("  - 警告: 部分核心服务启动失败");
+        println!("  - 系统将在有限功能下运行");
     } else {
-        println!("  - Warning: Some core services failed to start");
-        println!("  - System will continue with available services");
+        println!("  - 错误: 无法启动任何核心服务");
+        println!("  - 系统功能严重受限");
     }
 }
 
