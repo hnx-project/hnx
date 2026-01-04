@@ -49,7 +49,7 @@ The IPC delegation framework provides the infrastructure for delegating kernel s
 
 ### 1. Well-Known Service Endpoints
 
-**File**: `src/kernel/src/ipc_services/endpoints.rs`
+**File**: `kernel/src/ipc_services/endpoints.rs`
 
 Defines the fixed endpoint IDs for system services:
 - **VFS Service** (EPID 1): File system operations
@@ -61,7 +61,7 @@ These endpoints are created at kernel boot time and are available for any proces
 
 ### 2. Service Protocol
 
-**File**: `src/kernel/src/ipc_services/protocol.rs`
+**File**: `kernel/src/ipc_services/protocol.rs`
 
 Defines the communication protocol between kernel and services:
 
@@ -80,7 +80,7 @@ ServiceRequest::new(VFS_EPID, ServiceOp::VfsOpen)
 
 ### 3. Delegation Functions
 
-**File**: `src/kernel/src/ipc_services/delegate.rs`
+**File**: `kernel/src/ipc_services/delegate.rs`
 
 Provides high-level functions for syscall delegation:
 
@@ -96,7 +96,7 @@ Provides high-level functions for syscall delegation:
 
 ### 4. Integration with Kernel
 
-**File**: `src/kernel/src/main.rs`
+**File**: `kernel/src/main.rs`
 
 The framework is initialized during boot in `init_phase3_processes()`:
 
@@ -149,7 +149,7 @@ pub fn sys_open(path_ptr: usize, flags: u32) -> isize {
 ### Service Implementation (User Space - Future)
 
 ```rust
-// In src/space/services/vfs/main.rs (future implementation)
+// In space/services/vfs/main.rs (future implementation)
 
 use hnx_ipc::{endpoint_recv, ServiceOp};
 

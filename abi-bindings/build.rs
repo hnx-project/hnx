@@ -1,13 +1,13 @@
-// src/abi-bindings/build.rs
+// abi-bindings/build.rs
 extern crate bindgen;
 
 use std::env;
 use std::path::PathBuf;
 
 fn main() {
-    println!("cargo:rerun-if-changed=../../include/hnx/abi/syscalls.h");
-    println!("cargo:rerun-if-changed=../../include/hnx/abi/types.h");
-    println!("cargo:rerun-if-changed=../../include/hnx/abi/errors.h");
+    println!("cargo:rerun-if-changed=../include/hnx/abi/syscalls.h");
+    println!("cargo:rerun-if-changed=../include/hnx/abi/types.h");
+    println!("cargo:rerun-if-changed=../include/hnx/abi/errors.h");
     
     // 设置 clang 参数
     let target = env::var("TARGET").unwrap_or_default();
@@ -26,7 +26,7 @@ fn main() {
     
     // 生成绑定
     let bindings = bindgen::Builder::default()
-        .header("../../include/hnx/abi/syscalls.h")
+        .header("../include/hnx/abi/syscalls.h")
         .clang_args(&clang_args)
         .use_core()
         .ctypes_prefix("::core::ffi")
@@ -55,7 +55,7 @@ fn main() {
 
 fn generate_kernel_constants() {
     // 从头文件提取常量，生成简单的 Rust 文件
-    let header_content = std::fs::read_to_string("../../include/hnx/abi/syscalls.h")
+    let header_content = std::fs::read_to_string("../include/hnx/abi/syscalls.h")
         .expect("Failed to read syscalls.h");
     
     let mut rust_constants = String::new();
@@ -89,7 +89,7 @@ fn generate_kernel_constants() {
     }
     
     // 写入内核目录
-    let kernel_abi_path = PathBuf::from("../../src/kernel/src/abi/constants.rs");
+    let kernel_abi_path = PathBuf::from("../kernel/src/abi/constants.rs");
     std::fs::create_dir_all(kernel_abi_path.parent().unwrap())
         .expect("Failed to create directory");
     

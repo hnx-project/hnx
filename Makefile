@@ -118,7 +118,7 @@ endif
 version-clean:
 	@echo "========= Cleaning version generated files ========="
 	@rm -f include/hnx/abi/version.h 2>/dev/null || true
-	@rm -f src/kernel/src/version.rs 2>/dev/null || true
+	@rm -f kernel/src/version.rs 2>/dev/null || true
 	@echo "Version generated files cleaned"
 	@echo ""
 
@@ -175,12 +175,12 @@ check-abi:
 # 构建空间组件（集成版本信息）
 space: kernel
 	@echo "========= Building space components v$(VERSION) for target: $(SPACE_TARGET) ========="
-	@cd src/space && \
+	@cd space && \
 		RUSTFLAGS="-A warnings" cargo build \
 			--workspace \
 			--target $(SPACE_TARGET) 
 	@mkdir -p $(BUILD_ROOT)/space/$(PROFILE)
-	@cp -r src/space/target/$(SPACE_TARGET)/$(PROFILE)/* \
+	@cp -r space/target/$(SPACE_TARGET)/$(PROFILE)/* \
 		$(BUILD_ROOT)/space/$(PROFILE)/
 	@echo "========= Space components built ========="
 	@echo ""
@@ -283,15 +283,15 @@ debug: image
 # 测试（包含版本测试）
 test: version-check
 	@echo "========= Running tests for v$(VERSION) ========="
-	@cd src/kernel && cargo test --lib
-	@cd src/space && cargo test --workspace
+	@cd kernel && cargo test --lib
+	@cd space && cargo test --workspace
 	@echo "========= Tests completed ========="
 	@echo ""
 
 # 快速构建（仅内核）
 quick: configure
 	@echo "========= Quick build (kernel only) v$(VERSION) ========="
-	@cd src/kernel && RUSTFLAGS="-A warnings" cargo build --target $(KERNEL_TARGET) --release
+	@cd kernel && RUSTFLAGS="-A warnings" cargo build --target $(KERNEL_TARGET) --release
 	@echo "========= Quick build completed ========="
 	@echo ""
 
@@ -326,7 +326,7 @@ config: version
 
 doc:
 	@echo "========= Building documentation ========="
-	@cd src/kernel && cargo doc --no-deps --no-open --target-dir $(PROJECT_ROOT)/docs/kernel
+	@cd kernel && cargo doc --no-deps --no-open --target-dir $(PROJECT_ROOT)/docs/kernel
 	@echo "========= Documentation built ========="
 	@echo ""
 

@@ -1,22 +1,14 @@
 # hnx/Cargo.toml
 [workspace]
 members = [
-    # 内核
-    "src/kernel", 
-    # "src/space", 
-    # "src/utils",
-    
-    # 空间组件（通过 workspace 的 Cargo.toml 管理）
-    # 这里列出顶级 crate，详细成员在 space/Cargo.toml
+    "kernel", 
 ]
 
 resolver = "2"
 
 [workspace.dependencies]
-# 可在此定义全局依赖，供所有成员使用
 log = "0.4"
 
-# 定义工作区配置文件
 [profile.dev]
 opt-level = 0
 debug = true
@@ -32,5 +24,5 @@ panic = "abort"
 
 [profile.kernel]
 inherits = "release"
-opt-level = "z"  # 最小体积
+opt-level = "z"
 panic = "abort"

@@ -9,7 +9,7 @@
 //! - Network protocol processing (TCP, UDP, ICMP)
 //!
 //! Communication with kernel is through standardized IPC protocol defined in
-//! src/kernel/src/network/ipc_protocol.rs
+//! kernel/src/network/ipc_protocol.rs
 
 #![no_std]
 

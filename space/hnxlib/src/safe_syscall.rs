@@ -8,7 +8,7 @@ use hnx_abi::*;
 use crate::barrier;
 
 // 编译时检查：确保我们的栈偏移量与内核中的定义匹配
-// 这些值必须与 src/kernel/src/arch/aarch64/boot.S 中的栈布局一致
+// 这些值必须与 kernel/src/arch/aarch64/boot.S 中的栈布局一致
 const _SYSCALL_STACK_OFFSET_X8: usize = 80;
 const _SYSCALL_STACK_OFFSET_X0: usize = 144;
 const _SYSCALL_STACK_OFFSET_X1: usize = 152;

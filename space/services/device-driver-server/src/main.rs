@@ -11,7 +11,7 @@
 //! - Device-specific operations
 //!
 //! Communication with kernel is through standardized IPC protocol defined in
-//! src/kernel/src/drivers/ipc_protocol.rs
+//! kernel/src/drivers/ipc_protocol.rs
 
 #![no_std]
 

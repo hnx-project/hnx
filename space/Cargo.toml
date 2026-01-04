@@ -1,4 +1,4 @@
-# src/space/Cargo.toml
+# space/Cargo.toml
 # 空间组件工作区
 [workspace]
 members = [

@@ -58,7 +58,7 @@ VFS (Virtual File System) service is the first user space service for HNX microk
 
 ### 1. VFS Service Binary
 
-**Location**: `src/space/services/vfs-service/`  
+**Location**: `space/services/vfs-service/`  
 **Binary**: `target/aarch64-unknown-none/debug/vfs-service` (3.4MB ELF)
 
 **Modules**:
@@ -131,7 +131,7 @@ Offset  Size  Field
 
 **Build command**:
 ```bash
-cd src/space/services/vfs-service
+cd space/services/vfs-service
 cargo build --target aarch64-unknown-none
 ```
 
@@ -139,16 +139,16 @@ cargo build --target aarch64-unknown-none
 
 ### Kernel Side (Already Implemented)
 
-1. **IPC Delegation Framework** (`src/kernel/src/ipc_services/`)
+1. **IPC Delegation Framework** (`kernel/src/ipc_services/`)
    - Well-known endpoint 1 for VFS
    - Service operation codes (100-199)
    - Delegation helpers
 
-2. **Syscall Stubs** (`src/kernel/src/process/syscall/fs_stubs.rs`)
+2. **Syscall Stubs** (`kernel/src/process/syscall/fs_stubs.rs`)
    - All FS syscalls delegate to VFS service
    - Example: `sys_open()` → `ipc_delegate(VFS_EPID, VfsOpen, ...)`
 
-3. **User Process Support** (`src/kernel/src/user/`)
+3. **User Process Support** (`kernel/src/user/`)
    - Can spawn VFS service as user process
    - Syscall: `HNX_SYS_PROCESS_CREATE`
 
@@ -217,18 +217,18 @@ Test end-to-end flow:
 ## File Locations
 
 **Source**:
-- `src/space/services/vfs-service/src/main.rs`
-- `src/space/services/vfs-service/src/ramfs.rs`
-- `src/space/services/vfs-service/src/ipc.rs`
-- `src/space/services/vfs-service/Cargo.toml`
+- `space/services/vfs-service/src/main.rs`
+- `space/services/vfs-service/src/ramfs.rs`
+- `space/services/vfs-service/src/ipc.rs`
+- `space/services/vfs-service/Cargo.toml`
 
 **Binary**:
-- `src/space/target/aarch64-unknown-none/debug/vfs-service` (3.4MB)
+- `space/target/aarch64-unknown-none/debug/vfs-service` (3.4MB)
 
 **Documentation**:
-- `src/kernel/USER_PROCESS_IMPLEMENTATION.md`
-- `src/kernel/IPC_DELEGATION_FRAMEWORK.md`
-- `src/kernel/MIGRATION_STATUS.md`
+- `kernel/USER_PROCESS_IMPLEMENTATION.md`
+- `kernel/IPC_DELEGATION_FRAMEWORK.md`
+- `kernel/MIGRATION_STATUS.md`
 
 ## Status
 

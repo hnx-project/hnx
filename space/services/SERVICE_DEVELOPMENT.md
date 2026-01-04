@@ -174,7 +174,7 @@ IPC 操作返回 `Result<T, IpcError>`，错误类型包括：
 ### 1. 创建服务目录
 
 ```bash
-mkdir -p src/space/services/my-service/src
+mkdir -p space/services/my-service/src
 ```
 
 ### 2. 创建 Cargo.toml
@@ -205,7 +205,7 @@ lto = true
 
 ### 4. 添加到工作空间
 
-编辑 `src/space/Cargo.toml`，在 `members` 中添加：
+编辑 `space/Cargo.toml`，在 `members` 中添加：
 
 ```toml
 members = [
@@ -383,9 +383,9 @@ my-service/
 
 ### C. 参考实现
 
-- `src/space/services/echo-service/`: 简单回显服务
-- `src/space/services/ipcrouter-service/`: IPC 路由器服务
-- `src/space/services/procmgr-service/`: 进程管理服务
+- `space/services/echo-service/`: 简单回显服务
+- `space/services/ipcrouter-service/`: IPC 路由器服务
+- `space/services/procmgr-service/`: 进程管理服务
 
 ### D. 相关文档
 
