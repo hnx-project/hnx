@@ -1,7 +1,10 @@
-# .cargo/config.toml
 [build]
 # 使用 nightly 工具链
 rustflags = ["-C", "linker=rust-lld"]
+
+[env.KERNEL_CARGO_TARGET_DIR]
+value = "build/kernel"
+member = "kernel"
 
 [unstable]
 # 启用构建 std 功能
@@ -31,3 +34,4 @@ rustflags = [
 ARCH = "aarch64"
 KERNEL_TARGET = "aarch64-unknown-hnx-kernel"
 SPACE_TARGET = "aarch64-unknown-hnx"
+CARGO_TARGET_DIR = "build/workspace"

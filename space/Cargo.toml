@@ -11,16 +11,7 @@ members = [
     "services/procmgr-service",
     "services/ipcrouter-service",
     "services/echo-service",
-    #"services/filesystem-server",
-    #"services/network-server",
-    #"services/device-driver-server",
-    #"services/device-manager",
-    #"services/display-server",
-    #"drivers/uart-driver",
     "apps/shell",
-    #"apps/terminal",
-    #"apps/hello-world",
-    #"boot/userboot",
 ]
 
 resolver = "2"

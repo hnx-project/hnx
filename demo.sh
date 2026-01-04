@@ -1,0 +1,1 @@
+cargo clean && meson setup build &&  ninja -C build run-simple
