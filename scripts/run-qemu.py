@@ -142,40 +142,46 @@ class QEMURunner:
         qemu_config = self._get_qemu_config()
         
         # 机器类型和 CPU
-        cmd.extend(["-machine", qemu_config["machine"].get("name", "virt")])
+        machine = qemu_config["machine"]
+        if isinstance(machine, dict):
+            machine_name = machine.get("name", "virt")
+        else:
+            machine_name = str(machine)
+        cmd.extend(["-machine", machine_name])
         cmd.extend(["-cpu", qemu_config["cpu"]])
         
         # 内存
         cmd.extend(["-m", qemu_config["memory"]])
         
         # 镜像文件处理
-        if self.board == "raspberry-pi4":
-            # 树莓派特殊处理
-            cmd.extend(["-kernel", str(self.image_path)])
-            # 尝试加载 DTB 文件
-            dtb_path = self.image_path.parent / f"{self.board}.dtb"
+        # 使用 -kernel 加载内核镜像
+        cmd.extend(["-kernel", str(self.image_path)])
+
+        # 添加 DTB 文件（如果配置中指定）
+        if "dtb" in qemu_config:
+            dtb_path = Path(qemu_config["dtb"])
             if dtb_path.exists():
                 cmd.extend(["-dtb", str(dtb_path)])
-        else:
-            # 标准处理 - 直接使用镜像文件作为 kernel
-            cmd.extend(["-kernel", str(self.image_path)])
-            
-            # 检查是否有 initrd.cpio 文件
-            # 优先在 image 同目录查找，然后在 build/ 目录查找
-            initrd_candidates = [
-                self.image_path.parent / "initrd.cpio",
-                self.build_dir / "initrd.cpio",
-            ]
-            initrd_path = None
-            for candidate in initrd_candidates:
-                if candidate.exists():
-                    initrd_path = candidate
-                    break
-            
-            if initrd_path:
-                # 使用 -device loader 加载 initrd 到固定地址 0x42000000
-                cmd.extend(["-device", f"loader,file={initrd_path},addr=0x42000000"])
-                print(f"  Using initrd: {initrd_path} (loaded at 0x42000000)")
+                print(f"  Using DTB: {dtb_path}")
+            else:
+                print(f"  Warning: DTB file not found: {dtb_path}")
+
+        # 检查是否有 initrd.cpio 文件
+        # 优先在 image 同目录查找，然后在 build/ 目录查找
+        initrd_candidates = [
+            self.image_path.parent / "initrd.cpio",
+            self.build_dir / "initrd.cpio",
+        ]
+        initrd_path = None
+        for candidate in initrd_candidates:
+            if candidate.exists():
+                initrd_path = candidate
+                break
+
+        if initrd_path:
+            # 使用 -device loader 加载 initrd 到固定地址 0x42000000
+            cmd.extend(["-device", f"loader,file={initrd_path},addr=0x42000000"])
+            print(f"  Using initrd: {initrd_path} (loaded at 0x42000000)")
         
         
         # 网络配置

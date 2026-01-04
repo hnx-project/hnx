@@ -13,7 +13,10 @@ usb-mouse = "-device usb-mouse"
 [qemu]
 machine_type = "raspi4b"
 cpu_type = "cortex-a72"
-dtb = true  # 需要设备树
+
+[dtb]
+filename = "rpi4.dtb"
+required = true
 
 [firmware]
 # 树莓派需要额外的固件文件
