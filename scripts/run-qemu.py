@@ -42,6 +42,7 @@ class QEMURunner:
         self.headless = headless
         self.gdb = gdb
         self.monitor = monitor
+        self.build_dir = Path(os.environ.get("MESON_BUILD_ROOT", "build"))
         
         # 加载配置
         if config_dir:
@@ -86,8 +87,8 @@ class QEMURunner:
         """自动查找配置目录"""
         # 尝试几个可能的配置目录
         candidates = [
-            Path("build") / "config",
-            Path("build") / f"config-{self.arch}-{self.board}",
+            self.build_dir / "config",
+            self.build_dir / f"config-{self.arch}-{self.board}",
             Path(".") / "config",
         ]
         
@@ -163,7 +164,7 @@ class QEMURunner:
             # 优先在 image 同目录查找，然后在 build/ 目录查找
             initrd_candidates = [
                 self.image_path.parent / "initrd.cpio",
-                Path("build") / "initrd.cpio",
+                self.build_dir / "initrd.cpio",
             ]
             initrd_path = None
             for candidate in initrd_candidates:
