@@ -5,7 +5,7 @@ extern crate alloc;
 
 use core::panic::PanicInfo;
 use core::alloc::{GlobalAlloc, Layout};
-use hnx_abi::*;
+use shared::abi::*;
 
 mod ramfs;
 mod ipc;

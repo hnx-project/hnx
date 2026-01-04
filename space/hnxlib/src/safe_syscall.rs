@@ -4,7 +4,7 @@
 //! 主要解决系统调用后寄存器被破坏的问题，特别是x8寄存器。
 
 use core::arch::asm;
-use hnx_abi::*;
+use shared::abi::syscalls::*;
 use crate::barrier;
 
 // 编译时检查：确保我们的栈偏移量与内核中的定义匹配

@@ -8,8 +8,8 @@
 use core::arch::asm;
 
 // System call numbers (must match kernel definitions)
-// Use constants from hnx_abi crate
-use hnx_abi::*;
+// Use constants from shared::abi crate
+use shared::abi::syscalls::*;
 
 /// System call wrappers
 pub mod syscalls {

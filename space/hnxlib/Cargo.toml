@@ -10,4 +10,4 @@ x86_64 = []
 riscv64 = []
 
 [dependencies]
-hnx-abi = { path = "../../abi-bindings" }
+shared = { path = "../../shared" }

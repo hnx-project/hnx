@@ -11,15 +11,10 @@ use crate::error;
 mod fs_stubs;
 
 // 使用 abi 中定义的系统调用号和类型
-use hnx_abi::{
-    HNX_SYS_WRITE, HNX_SYS_EXIT, HNX_SYS_GETPID, HNX_SYS_OPEN, HNX_SYS_READ, HNX_SYS_CLOSE, HNX_SYS_YIELD,
-    HNX_SYS_IPC_WAIT, HNX_SYS_IPC_WAKE, HNX_SYS_EP_CREATE, HNX_SYS_EP_SEND, HNX_SYS_EP_RECV,
-    HNX_SYS_DLOPEN, HNX_SYS_DLCLOSE, HNX_SYS_DLSYM, HNX_SYS_CREAT, HNX_SYS_UNLINK, HNX_SYS_MKDIR, HNX_SYS_RMDIR,
-    HNX_SYS_MMAP, HNX_SYS_MUNMAP, HNX_SYS_MPROTECT, HNX_SYS_FORK, HNX_SYS_KILL, HNX_SYS_SETPGID, HNX_SYS_GETPGID,
-    HNX_SYS_GETPPID, HNX_SYS_WAIT4, HNX_SYS_DRIVER_REGISTER, HNX_SYS_DRIVER_REQUEST_IRQ,
-    HNX_SYS_DRIVER_MAP_MMIO, HNX_SYS_DRIVER_DMA_ALLOC, HNX_SYS_SOCKET, HNX_SYS_BIND, HNX_SYS_CONNECT,
-    HNX_SYS_LISTEN, HNX_SYS_ACCEPT, HNX_SYS_SEND, HNX_SYS_RECV,
-    HNX_SYS_PROCESS_CREATE, HNX_SYS_SPAWN_SERVICE, SysResult
+use shared::abi::{
+    syscalls::*,
+    types::*,
+    constants::*,
 };
 
 #[derive(Copy, Clone)]
@@ -681,11 +676,7 @@ fn sys_getpid() -> SysResult {
     }
 }
 
-// File descriptor open flags (using hnx-abi definitions)
-use hnx_abi::{O_RDONLY, O_WRONLY, O_RDWR, O_CREAT, O_TRUNC, O_APPEND};
 
-// File descriptor entry (using hnx-abi definition)
-use hnx_abi::FdEntry;
 
 static FD_TABLE: Mutex<[Option<FdEntry>; 32]> = Mutex::new([None; 32]);
 

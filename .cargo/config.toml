@@ -1,6 +1,7 @@
 [build]
 # 使用 nightly 工具链
 rustflags = ["-C", "linker=rust-lld"]
+target-dir = "build"
 
 [env.KERNEL_CARGO_TARGET_DIR]
 value = "build/kernel"

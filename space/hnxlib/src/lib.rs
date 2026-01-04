@@ -15,7 +15,7 @@ pub mod ipc;
 // 传统系统调用模块（向后兼容）
 pub mod syscall {
     use core::arch::asm;
-    use hnx_abi::{HNX_SYS_WRITE, HNX_SYS_YIELD, HNX_SYS_SPAWN_SERVICE};
+    use shared::abi::syscalls::*;
 
     // 重新导出安全系统调用作为主要实现
     pub use crate::safe_syscall::{

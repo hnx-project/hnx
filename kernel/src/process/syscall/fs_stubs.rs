@@ -4,7 +4,7 @@
 //! They replace the old direct kernel VFS implementation.
 
 use crate::ipc_services::{ServiceOp, ipc_delegate};
-use hnx_abi::SysResult;
+use shared::abi::types::SysResult;
 
 // VFS service endpoint ID (well-known)
 const VFS_EPID: u32 = 1;

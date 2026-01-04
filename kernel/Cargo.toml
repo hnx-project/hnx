@@ -10,7 +10,7 @@ bitflags = { version = "2.0", default-features = false }
 spin = "0.9.8"
 lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
 heapless = "0.8"
-hnx-abi = { path = "../abi-bindings" }
+shared = { path = "../shared" }
 
 [target.'cfg(target_arch = "aarch64")'.dependencies]
 cortex-a = { version = "8.0.0", default-features = false }

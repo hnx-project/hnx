@@ -5,7 +5,7 @@ use crate::core::scheduler;
 use crate::arch::common::traits::InterruptController;
 use crate::arch::context;
 use core::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
-use hnx_abi;
+use shared::abi;
 
 static PROGRAM_BREAK: AtomicUsize = AtomicUsize::new(0);
 #[no_mangle]
@@ -104,7 +104,7 @@ pub extern "C" fn rust_svc_handler(esr: u64, elr: u64, far: u64, saved_x8: u64, 
         let imm = esr & 0xFFFF;
         if imm == 0 {
             // 调试：打印saved_x8和hnx_abi常量的值
-            debug!("IMM0_DEBUG: saved_x8=0x{:X}, HNX_SYS_SPAWN_SERVICE={}", saved_x8, hnx_abi::HNX_SYS_SPAWN_SERVICE);
+            debug!("IMM0_DEBUG: saved_x8=0x{:X}, HNX_SYS_SPAWN_SERVICE={}", saved_x8,shared::abi::syscalls::HNX_SYS_SPAWN_SERVICE);
 
             // Use saved_sp passed from assembly (start of register save area)
             let sp = saved_sp as usize;
@@ -137,7 +137,7 @@ pub extern "C" fn rust_svc_handler(esr: u64, elr: u64, far: u64, saved_x8: u64, 
 
             info!("arch/aarch64 svc#0: saved registers - x8=0x{:X}, x0=0x{:X}, x1=0x{:X}, x2=0x{:X}, x3=0x{:X}, x4=0x{:X}, x5=0x{:X}, saved_sp=0x{:X}",
                   saved_x8, a0, a1, a2, a3, a4, a5, sp);
-            info!("HNX_SYS_WRITE={}, HNX_SYS_YIELD={}", hnx_abi::HNX_SYS_WRITE, hnx_abi::HNX_SYS_YIELD);
+            info!("HNX_SYS_WRITE={}, HNX_SYS_YIELD={}",shared::abi::syscalls::HNX_SYS_WRITE,shared::abi::syscalls::HNX_SYS_YIELD);
             // Use saved x8 as system call number
             // Check if it's a valid syscall number from abi
             // 调试：检查是否是spawn_service
@@ -148,12 +148,12 @@ pub extern "C" fn rust_svc_handler(esr: u64, elr: u64, far: u64, saved_x8: u64, 
             }
             let saved_x8_u32 = saved_x8 as u32;
             debug!("DEBUG: Checking if saved_x8_u32=0x{:X} is in syscall list, saved_x8=0x{:X}", saved_x8_u32, saved_x8);
-            debug!("DEBUG: HNX_SYS_SPAWN_SERVICE=0x{:X}", hnx_abi::HNX_SYS_SPAWN_SERVICE);
+            debug!("DEBUG: HNX_SYS_SPAWN_SERVICE=0x{:X}",shared::abi::syscalls::HNX_SYS_SPAWN_SERVICE);
 
             // 特殊检查spawn_service
             debug!("DEBUG: saved_x8_u32=0x{:X} ({})", saved_x8_u32, saved_x8_u32);
-            debug!("DEBUG: HNX_SYS_SPAWN_SERVICE=0x{:X} ({})", hnx_abi::HNX_SYS_SPAWN_SERVICE, hnx_abi::HNX_SYS_SPAWN_SERVICE);
-            if saved_x8_u32 == hnx_abi::HNX_SYS_SPAWN_SERVICE {
+            debug!("DEBUG: HNX_SYS_SPAWN_SERVICE=0x{:X} ({})",shared::abi::syscalls::HNX_SYS_SPAWN_SERVICE,shared::abi::syscalls::HNX_SYS_SPAWN_SERVICE);
+            if saved_x8_u32 ==shared::abi::syscalls::HNX_SYS_SPAWN_SERVICE {
                 debug!("DEBUG: Special check: saved_x8_u32 == HNX_SYS_SPAWN_SERVICE is TRUE");
             } else {
                 debug!("DEBUG: Special check: saved_x8_u32 == HNX_SYS_SPAWN_SERVICE is FALSE");
@@ -193,7 +193,7 @@ pub extern "C" fn rust_svc_handler(esr: u64, elr: u64, far: u64, saved_x8: u64, 
                     let buf = context::get_saved_gpr(saved_sp_usize, 20); // x20
                     let len = context::get_saved_gpr(saved_sp_usize, 21); // x21
                     let ret = crate::process::syscall::dispatch(
-                        hnx_abi::HNX_SYS_WRITE,
+                       shared::abi::syscalls::HNX_SYS_WRITE,
                         fd,
                         buf,
                         len,
@@ -213,7 +213,7 @@ pub extern "C" fn rust_svc_handler(esr: u64, elr: u64, far: u64, saved_x8: u64, 
                     let saved_sp_usize = saved_sp as usize;
                     let a0 = context::get_saved_gpr(saved_sp_usize, 0);  // x0
                     let _ = crate::process::syscall::dispatch(
-                        hnx_abi::HNX_SYS_EXIT,
+                       shared::abi::syscalls::HNX_SYS_EXIT,
                         a0,
                         0,
                         0,

@@ -3,7 +3,7 @@
 
 use core::panic::PanicInfo;
 use hnxlib::println;
-use hnx_abi::*;
+use shared::abi::*;
 
 /// 混合忙等待和yield的函数，避免永远占用CPU
 fn busy_wait(iterations: u32) {

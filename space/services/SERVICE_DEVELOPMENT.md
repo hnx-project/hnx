@@ -186,7 +186,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-hnx-abi = { path = "../../../abi-bindings" }
+shared = { path = "../../../shared" }
 libc = { path = "../../libc" }
 hnxlib = { path = "../../hnxlib" }
 

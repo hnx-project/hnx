@@ -1,7 +1,7 @@
 # hnx/Cargo.toml
 [workspace]
 members = [
-    "kernel", 
+    "kernel",
 ]
 
 resolver = "2"

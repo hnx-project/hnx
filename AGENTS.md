@@ -27,13 +27,19 @@ hnx-core/
 │   ├── board/                 # 开发板特定配置 (qemu-virt.toml)
 │   ├── profile/               # 构建配置文件
 │   └── scripts/               # 配置脚本
-├── include/                   # C 头文件目录（ABI 定义）
-│   └── hnx/abi/              # 系统 ABI 头文件 (syscalls.h, types.h)
-├── scripts/                   # 构建和工具脚本目录
-│   ├── create-image.py       # 系统镜像创建工具
-│   ├── version.py            # 版本管理脚本
-│   └── verify_version.py     # 版本一致性检查脚本
-├── abi-bindings/         # Rust ABI 绑定
+├── shared/                    # 共享库（核心）
+│   ├── Cargo.toml
+│   ├── src/
+│   │   ├── lib.rs
+│   │   ├── abi/              # ABI 定义（核心）
+│   │   │   ├── mod.rs        # 主模块
+│   │   │   ├── syscalls.rs   # 系统调用定义
+│   │   │   ├── types.rs      # 类型定义
+│   │   │   ├── errors.rs     # 错误定义
+│   │   │   └── constants.rs  # 常量定义
+│   │   ├── collections/      # 数据结构
+│   │   └── sync/            # 同步原语
+│   └── README.md
 ├── kernel/               # 内核核心（库 crate）
 │   ├── src/              # 内核源文件
 │   ├── include/          # C 头文件

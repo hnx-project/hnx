@@ -1,5 +1,5 @@
 use crate::ramfs::RamFs;
-use hnx_abi::*;
+use shared::abi::*;
 
 const VFS_OP_OPEN: u16 = 100;
 const VFS_OP_READ: u16 = 101;

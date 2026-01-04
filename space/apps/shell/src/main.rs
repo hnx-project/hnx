@@ -3,7 +3,7 @@
 
 use core::panic::PanicInfo;
 use hnxlib::{println, print, syscall};
-use hnx_abi::*;
+use shared::abi::*;
 use hnxlib::ipc::{IpcError, IpcRouterClient, Endpoint};
 
 #[no_mangle]

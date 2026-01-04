@@ -7,7 +7,7 @@
 #![no_std]
 
 use core::arch::asm;
-use hnx_abi::*;
+use shared::abi::*;
 
 /// 测试系统调用号定义的一致性
 #[test]
