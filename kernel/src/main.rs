@@ -130,45 +130,52 @@ fn init_phase3_processes() {
 fn init_phase4_scheduler() -> ! {
     println!("Kernel core ready");
     
-    println!("Attempting to bootstrap init process...");
-    match loader::bootstrap_init_process() {
-        Ok((entry, sp, pt_base)) => {
-            println!("Init process loaded successfully!");
-            println!("  Entry: 0x{:X}", entry);
-            println!("  Stack: 0x{:X}", sp);
-            println!("  PT:    0x{:X}", pt_base);
-            
-            let pid = process::create_process(128).expect("Failed to create init process");
-            process::update_process_memory(pid as usize, pt_base, 0);
-            
-            let mut task = process::Task::new_kernel(unsafe {
-                ::core::mem::transmute::<usize, fn() -> !>(entry)
-            });
-            
-            unsafe {
-                task.ttbr0_base = pt_base;
-                task.context.sp = sp;
-                task.entry_point = entry;
-                task.asid = pid as u16;
-            }
-            
-            process::set_process_state(pid as usize, process::ProcState::Ready);
-            
-            println!("Init process created with PID {}", pid);
-            println!("Starting scheduler - init will run at EL0...");
-            
-            crate::core::scheduler::run_task(task);
-        }
-        Err(_) => {
-            crate::error!("Failed to load init process!");
-            crate::error!("System cannot boot without init.");
-            crate::error!("Ensure initrd contains a valid 'init' ELF binary.");
-            
-            loop {
-                crate::arch::cpu::wait_for_interrupt();
-            }
-        }
+    println!("User space is not yet implemented until complete the kernel.");
+
+
+    loop {
+        crate::arch::cpu::wait_for_interrupt();
     }
+    
+    // println!("Attempting to bootstrap init process...");
+    // match loader::bootstrap_init_process() {
+    //     Ok((entry, sp, pt_base)) => {
+    //         println!("Init process loaded successfully!");
+    //         println!("  Entry: 0x{:X}", entry);
+    //         println!("  Stack: 0x{:X}", sp);
+    //         println!("  PT:    0x{:X}", pt_base);
+            
+    //         let pid = process::create_process(128).expect("Failed to create init process");
+    //         process::update_process_memory(pid as usize, pt_base, 0);
+            
+    //         let mut task = process::Task::new_kernel(unsafe {
+    //             ::core::mem::transmute::<usize, fn() -> !>(entry)
+    //         });
+            
+    //         unsafe {
+    //             task.ttbr0_base = pt_base;
+    //             task.context.sp = sp;
+    //             task.entry_point = entry;
+    //             task.asid = pid as u16;
+    //         }
+            
+    //         process::set_process_state(pid as usize, process::ProcState::Ready);
+            
+    //         println!("Init process created with PID {}", pid);
+    //         println!("Starting scheduler - init will run at EL0...");
+            
+    //         crate::core::scheduler::run_task(task);
+    //     }
+    //     Err(_) => {
+    //         crate::error!("Failed to load init process!");
+    //         crate::error!("System cannot boot without init.");
+    //         crate::error!("Ensure initrd contains a valid 'init' ELF binary.");
+            
+    //         loop {
+    //             crate::arch::cpu::wait_for_interrupt();
+    //         }
+    //     }
+    // }
 }
 
 /// Parse boot command line parameters (currently unused)
