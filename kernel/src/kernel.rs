@@ -1,5 +1,6 @@
 use crate::drivers::device_manager::DeviceManager;
 use crate::memory::mmap_manager::MemoryMapManager;
+use crate::process::ProcessManager;
 use crate::security::capability::CapabilityManager;
 use shared::sync::mutex::Mutex;
 
@@ -11,6 +12,8 @@ pub struct Kernel {
     pub device_manager: Mutex<DeviceManager>,
     /// 能力管理器
     pub capability_manager: Mutex<CapabilityManager>,
+    /// 进程管理器
+    pub process_manager: Mutex<ProcessManager>,
 }
 
 impl Kernel {
@@ -21,11 +24,13 @@ impl Kernel {
         let memory_manager = Mutex::new(MemoryMapManager::new());
         let device_manager = Mutex::new(DeviceManager::new());
         let capability_manager = Mutex::new(CapabilityManager::new());
+        let process_manager = Mutex::new(ProcessManager::new());
 
         Self {
             memory_manager,
             device_manager,
             capability_manager,
+            process_manager,
         }
     }
 }

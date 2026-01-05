@@ -53,13 +53,97 @@ pub struct ProcessControlBlock {
     pub wakeup_time: u64,     // Timestamp when process should be woken up (0 = no timeout)
 }
 
-// Global process management state
+/// 进程管理器
+///
+/// 管理所有进程状态，包括进程控制块、就绪队列等。
+pub struct ProcessManager {
+    /// 系统计时器滴答数
+    system_ticks: AtomicU64,
+    /// 下一个可用的进程ID
+    next_pid: AtomicUsize,
+    /// 进程控制块表（固定大小，32个槽位）
+    pcb_table: Mutex<[Option<ProcessControlBlock>; 32]>,
+    /// 就绪队列（固定大小，32个槽位）
+    ready_queue: Mutex<[u32; 32]>,
+    /// 就绪队列头部索引
+    ready_head: AtomicUsize,
+    /// 就绪队列尾部索引
+    ready_tail: AtomicUsize,
+}
+
+// Global process management state (legacy - will be removed after migration)
 static SYSTEM_TICKS: AtomicU64 = AtomicU64::new(0);
 static NEXT_PID: AtomicUsize = AtomicUsize::new(1);
 static PCB_TABLE: Mutex<[Option<ProcessControlBlock>; 32]> = Mutex::new([const { None }; 32]);
 static READY_QUEUE: Mutex<[u32; 32]> = Mutex::new([0; 32]);
 static READY_HEAD: AtomicUsize = AtomicUsize::new(0);
 static READY_TAIL: AtomicUsize = AtomicUsize::new(0);
+
+/// 全局进程管理器实例（临时，迁移期间使用）
+static PROCESS_MANAGER: ProcessManager = ProcessManager::new();
+
+impl ProcessManager {
+    /// 创建新的进程管理器
+    pub const fn new() -> Self {
+        Self {
+            system_ticks: AtomicU64::new(0),
+            next_pid: AtomicUsize::new(1),
+            pcb_table: Mutex::new([const { None }; 32]),
+            ready_queue: Mutex::new([0; 32]),
+            ready_head: AtomicUsize::new(0),
+            ready_tail: AtomicUsize::new(0),
+        }
+    }
+
+    /// 将进程ID推入就绪队列
+    pub fn ready_queue_push(&self, pid: u32) {
+        let t = self.ready_tail.load(Ordering::Relaxed);
+        self.ready_queue.lock()[t % 32] = pid;
+        self.ready_tail.store((t + 1) % (1 << 16), Ordering::Relaxed);
+        crate::info!("ready_queue: pushed PID {}, tail={}", pid, (t + 1) % (1 << 16));
+    }
+
+    /// 从就绪队列弹出进程ID
+    pub fn ready_queue_pop(&self) -> Option<u32> {
+        let h = self.ready_head.load(Ordering::Relaxed);
+        let t = self.ready_tail.load(Ordering::Relaxed);
+        if h == t {
+            crate::info!("ready_queue: empty, head={}, tail={}", h, t);
+            return None;
+        }
+        let pid = self.ready_queue.lock()[h % 32];
+        self.ready_head.store((h + 1) % (1 << 16), Ordering::Relaxed);
+        crate::info!("ready_queue: popped PID {}, head={}", pid, (h + 1) % (1 << 16));
+        Some(pid)
+    }
+
+    /// 创建新进程
+    pub fn create_process(&self, priority: u8) -> Option<u32> {
+        let pid = self.next_pid.fetch_add(1, Ordering::Relaxed) as u32;
+
+        let pcb = ProcessControlBlock {
+            pid,
+            state: ProcState::Created,
+            priority,
+            ticks: 0,
+            parent_pid: 0,     // 0 means no parent (init process)
+            exit_status: 0,
+            pgid: pid,         // By default, process is its own group leader
+            sid: pid,          // By default, process is its own session leader
+            ttbr0_base: 0,
+            asid: 0,
+            entry_point: 0,    // Will be set when process is started
+            stack_pointer: 0,  // Will be set when process is started
+            wakeup_time: 0,
+        };
+
+        let mut table = self.pcb_table.lock();
+        let idx = (pid as usize) % table.len();
+        table[idx] = Some(pcb);
+
+        Some(pid)
+    }
+}
 
 // Re-export commonly used types
 pub use task::{Task, TaskState, TaskContext, TaskId, Asid, allocate_asid};
@@ -87,52 +171,18 @@ pub fn ipc_handler(msg: &crate::core::ipc::IpcMessage) -> crate::core::ipc::IpcR
 // ===== Ready Queue Management =====
 
 pub fn ready_queue_push(pid: u32) {
-    let t = READY_TAIL.load(Ordering::Relaxed);
-    READY_QUEUE.lock()[t % 32] = pid;
-    READY_TAIL.store((t + 1) % (1 << 16), Ordering::Relaxed);
-    crate::info!("ready_queue: pushed PID {}, tail={}", pid, (t + 1) % (1 << 16));
+    PROCESS_MANAGER.ready_queue_push(pid);
 }
 
 pub fn ready_queue_pop() -> Option<u32> {
-    let h = READY_HEAD.load(Ordering::Relaxed);
-    let t = READY_TAIL.load(Ordering::Relaxed);
-    if h == t {
-        crate::info!("ready_queue: empty, head={}, tail={}", h, t);
-        return None;
-    }
-    let pid = READY_QUEUE.lock()[h % 32];
-    READY_HEAD.store((h + 1) % (1 << 16), Ordering::Relaxed);
-    crate::info!("ready_queue: popped PID {}, head={}", pid, (h + 1) % (1 << 16));
-    Some(pid)
+    PROCESS_MANAGER.ready_queue_pop()
 }
 
 // ===== Process Creation =====
 
 /// Create a new process with specified priority
 pub fn create_process(priority: u8) -> Option<u32> {
-    let pid = NEXT_PID.fetch_add(1, Ordering::Relaxed) as u32;
-    
-    let pcb = ProcessControlBlock {
-        pid,
-        state: ProcState::Created,
-        priority,
-        ticks: 0,
-        parent_pid: 0,     // 0 means no parent (init process)
-        exit_status: 0,
-        pgid: pid,         // By default, process is its own group leader
-        sid: pid,          // By default, process is its own session leader
-        ttbr0_base: 0,
-        asid: 0,
-        entry_point: 0,    // Will be set when process is started
-        stack_pointer: 0,  // Will be set when process is started
-        wakeup_time: 0,
-    };
-    
-    let mut table = PCB_TABLE.lock();
-    let idx = (pid as usize) % table.len();
-    table[idx] = Some(pcb);
-    
-    Some(pid)
+    PROCESS_MANAGER.create_process(priority)
 }
 
 /// Create a child process (for fork)
