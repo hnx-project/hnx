@@ -121,7 +121,7 @@ fn init_phase3_processes() {
     
     let boot_info = crate::arch::boot::get_boot_info();
     println!("Initializing initrd accessor (dtb_ptr=0x{:X})...", boot_info.dtb_ptr);
-    loader::initrd::init(boot_info.dtb_ptr as usize);
+    loader::init(boot_info.dtb_ptr as usize);
     
     println!("Process and IPC subsystems ready");
 }

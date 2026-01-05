@@ -31,6 +31,77 @@ pub mod bootstrap_elf;
 
 pub use initrd::{get_initrd_base, get_initrd_size, find_file_in_initrd};
 
+use core::sync::atomic::{AtomicUsize, Ordering};
+
+/// 加载器管理器
+///
+/// 管理 initrd 状态和引导加载相关功能
+pub struct LoaderManager {
+    /// initrd 内存基地址
+    initrd_base: AtomicUsize,
+    /// initrd 大小（字节）
+    initrd_size: AtomicUsize,
+}
+
+/// 全局加载器管理器实例（临时，迁移期间使用）
+static LOADER_MANAGER: LoaderManager = LoaderManager::new();
+
+/// 初始化加载器管理器（临时，迁移期间使用）
+pub fn init(dtb_ptr: usize) {
+    LOADER_MANAGER.init(dtb_ptr);
+}
+
+impl LoaderManager {
+    /// 创建新的加载器管理器
+    pub const fn new() -> Self {
+        Self {
+            initrd_base: AtomicUsize::new(0),
+            initrd_size: AtomicUsize::new(0),
+        }
+    }
+
+    /// 初始化 initrd（从 DTB 中发现）
+    pub fn init(&self, dtb_ptr: usize) {
+        let (base, size) = self::initrd::discover_initrd(dtb_ptr);
+        self.initrd_base.store(base, Ordering::SeqCst);
+        self.initrd_size.store(size, Ordering::SeqCst);
+        crate::info!("loader: initrd discovered at 0x{:X}, size {} bytes", base, size);
+    }
+
+    /// 获取 initrd 基地址
+    pub fn get_initrd_base(&self) -> usize {
+        self.initrd_base.load(Ordering::SeqCst)
+    }
+
+    /// 获取 initrd 大小
+    pub fn get_initrd_size(&self) -> usize {
+        self.initrd_size.load(Ordering::SeqCst)
+    }
+
+    /// 获取 initrd 数据切片
+    pub fn get_initrd_slice(&self) -> &'static [u8] {
+        let base = self.get_initrd_base();
+        let size = self.get_initrd_size();
+
+        if base == 0 || size == 0 {
+            return &[];
+        }
+
+        unsafe {
+            let slice = core::slice::from_raw_parts(base as *const u8, size);
+
+            // 检查 gzip 魔数 (0x1F 0x8B)
+            if slice.len() >= 2 && slice[0] == 0x1F && slice[1] == 0x8B {
+                crate::error!("loader: initrd is gzip compressed, kernel cannot decompress");
+                crate::error!("loader: please use uncompressed initrd or implement gzip decompression");
+                return &[];
+            }
+
+            slice
+        }
+    }
+}
+
 /// Bootstrap the first user process from initrd
 ///
 /// This function ONLY loads the init process. It's hardcoded and minimal.
@@ -38,14 +109,14 @@ pub use initrd::{get_initrd_base, get_initrd_size, find_file_in_initrd};
 pub fn bootstrap_init_process() -> Result<(usize, usize, usize), ()> {
     crate::info!("loader: bootstrapping init process from initrd");
 
-    let initrd = initrd::get_initrd_slice();
+    let initrd = LOADER_MANAGER.get_initrd_slice();
     if initrd.is_empty() {
         crate::error!("loader: no initrd found - cannot boot");
         return Err(());
     }
 
     crate::debug!("loader: initrd at 0x{:X}, size {} bytes",
-                 initrd::get_initrd_base(), initrd::get_initrd_size());
+                 LOADER_MANAGER.get_initrd_base(), LOADER_MANAGER.get_initrd_size());
 
     let init_elf = find_file_in_cpio(initrd, "init")?;
 
@@ -74,7 +145,7 @@ pub fn bootstrap_init_process() -> Result<(usize, usize, usize), ()> {
 pub fn spawn_service_from_initrd(path: &str) -> Result<(usize, usize, usize), ()> {
     crate::info!("loader: spawning service from initrd: {}", path);
 
-    let initrd = initrd::get_initrd_slice();
+    let initrd = LOADER_MANAGER.get_initrd_slice();
     if initrd.is_empty() {
         crate::error!("loader: no initrd found");
         return Err(());

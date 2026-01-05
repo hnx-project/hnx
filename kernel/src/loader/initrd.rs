@@ -1,41 +1,26 @@
 use crate::arch;
 
-static mut INITRD_BASE: usize = 0;
-static mut INITRD_SIZE: usize = 0;
+// 静态变量已迁移到 LoaderManager 中，这些函数现在委托给 LOADER_MANAGER
+// 为了保持向后兼容，保留函数签名但更改实现
 
 pub fn init(dtb_ptr: usize) {
-    unsafe {
-        let (base, size) = discover_initrd(dtb_ptr);
-        INITRD_BASE = base;
-        INITRD_SIZE = size;
-        crate::info!("loader/initrd: discovered at 0x{:X}, size {} bytes", base, size);
-    }
+    // 委托给父模块中的全局 LoaderManager
+    super::init(dtb_ptr);
 }
 
 pub fn get_initrd_base() -> usize {
-    unsafe { INITRD_BASE }
+    // 委托给父模块中的全局 LoaderManager
+    super::LOADER_MANAGER.get_initrd_base()
 }
 
 pub fn get_initrd_size() -> usize {
-    unsafe { INITRD_SIZE }
+    // 委托给父模块中的全局 LoaderManager
+    super::LOADER_MANAGER.get_initrd_size()
 }
 
 pub fn get_initrd_slice() -> &'static [u8] {
-    unsafe {
-        if INITRD_BASE == 0 || INITRD_SIZE == 0 {
-            return &[];
-        }
-        let slice = core::slice::from_raw_parts(INITRD_BASE as *const u8, INITRD_SIZE);
-
-        // Check for gzip magic number (0x1F 0x8B)
-        if slice.len() >= 2 && slice[0] == 0x1F && slice[1] == 0x8B {
-            crate::error!("loader/initrd: initrd is gzip compressed, kernel cannot decompress");
-            crate::error!("loader/initrd: please use uncompressed initrd or implement gzip decompression");
-            return &[];
-        }
-
-        slice
-    }
+    // 委托给父模块中的全局 LoaderManager
+    super::LOADER_MANAGER.get_initrd_slice()
 }
 
 pub fn find_file_in_initrd(_path: &str) -> Option<&'static [u8]> {
@@ -44,7 +29,7 @@ pub fn find_file_in_initrd(_path: &str) -> Option<&'static [u8]> {
     None
 }
 
-fn discover_initrd(_dtb_ptr: usize) -> (usize, usize) {
+pub fn discover_initrd(_dtb_ptr: usize) -> (usize, usize) {
     // 方案：使用 QEMU -device loader 将 initrd 加载到固定地址
     const INITRD_FIXED_ADDR: usize = 0x4200_0000;
     
