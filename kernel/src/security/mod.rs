@@ -14,7 +14,7 @@ pub mod capability;
 pub mod test;
 
 use core::sync::atomic::{AtomicU32, Ordering};
-use spin::Mutex;
+use shared::sync::mutex::Mutex;
 
 // Re-export commonly used items
 pub use capability::{validate_capability as validate_security_capability, rights as security_rights};

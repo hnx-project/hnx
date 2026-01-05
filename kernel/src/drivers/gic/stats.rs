@@ -3,7 +3,7 @@
 //! This module provides detailed statistics tracking for interrupt handling,
 //! including per-IRQ counts, preemption tracking, and nesting level monitoring.
 
-use spin::Mutex;
+use shared::sync::mutex::Mutex;
 extern crate alloc;
 use alloc::vec::Vec;
 

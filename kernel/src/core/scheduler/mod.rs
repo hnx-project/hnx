@@ -5,7 +5,7 @@ use crate::error;
 use crate::info;
 use crate::memory::virtual_::map_in_pt;
 use crate::process::task::{Task, TaskState};
-use spin::Mutex;
+use shared::sync::mutex::Mutex;
 
 static CURRENT: Mutex<Option<Task>> = Mutex::new(None);
 

@@ -13,7 +13,7 @@ pub mod task;
 pub mod spawn;
 
 use core::sync::atomic::{AtomicUsize, AtomicU64, Ordering};
-use spin::Mutex;
+use shared::sync::mutex::Mutex;
 
 pub use spawn::{sys_process_create_empty, sys_mmap_process, sys_process_start};
 

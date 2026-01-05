@@ -2,7 +2,7 @@
 //! priority-based messaging, and improved security integration.
 
 use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use spin::Mutex;
+use shared::sync::mutex::Mutex;
 
 /// Priority levels for messages
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

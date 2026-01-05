@@ -4,8 +4,8 @@
 //! 并支持不同类型的内存映射（如RAM、ROM、设备内存等）。
 
 use core::ops::Range;
-use lazy_static::lazy_static;
-use spin::Mutex;
+
+use shared::sync::mutex::Mutex;
 
 /// 内存映射类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -278,9 +278,7 @@ impl MemoryMapManager {
 }
 
 // 全局内存映射管理器实例
-lazy_static! {
-    pub static ref MEMORY_MAP_MANAGER: Mutex<MemoryMapManager> = Mutex::new(MemoryMapManager::new());
-}
+pub static MEMORY_MAP_MANAGER: Mutex<MemoryMapManager> = Mutex::new(MemoryMapManager::new());
 
 /// 初始化内存映射管理器
 pub fn init() {

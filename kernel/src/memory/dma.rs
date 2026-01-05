@@ -6,7 +6,7 @@
 
 extern crate alloc;
 
-use spin::Mutex;
+use shared::sync::mutex::Mutex;
 use alloc::collections::BTreeMap;
 use crate::memory::physical::alloc_pages;
 use crate::drivers::ipc_protocol::DriverError;

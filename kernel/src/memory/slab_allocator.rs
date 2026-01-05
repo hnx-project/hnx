@@ -9,7 +9,7 @@ use core::alloc::Layout;
 use core::ptr;
 use core::mem;
 use core::sync::atomic::{AtomicUsize, AtomicPtr, Ordering};
-use spin::Mutex;
+use shared::sync::mutex::Mutex;
 use crate::memory::physical;
 
 /// Statistics for cache monitoring (only in debug builds)

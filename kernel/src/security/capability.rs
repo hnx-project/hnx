@@ -7,7 +7,7 @@
 
 extern crate alloc;
 
-use spin::Mutex;
+use shared::sync::mutex::Mutex;
 use alloc::collections::BTreeMap;
 use core::sync::atomic::{AtomicU32, Ordering};
 

@@ -2,9 +2,9 @@
 
 use crate::drivers::uart::r#trait::UartDriver;
 use core::fmt;
-use spin::Mutex;
+use shared::sync::mutex::Mutex;
 use core::sync::atomic::{AtomicBool, Ordering};
-use lazy_static::lazy_static;
+
 
 // Re-export the macros from the error module
 // pub use crate::debug;
@@ -12,9 +12,7 @@ use lazy_static::lazy_static;
 // pub use crate::info;
 // pub use crate::warn;
 
-lazy_static! {
-    static ref CONSOLE_LOCK: Mutex<()> = Mutex::new(());
-}
+static CONSOLE_LOCK: Mutex<()> = Mutex::new(());
 static mut LAST_CHAR: u8 = 0;
 static mut REPEAT_COUNT: u32 = 0;
 static mut TOTAL_COUNT: u32 = 0;

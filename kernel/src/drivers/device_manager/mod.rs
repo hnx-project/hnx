@@ -12,7 +12,7 @@ extern crate alloc;
 use crate::drivers::ipc_protocol::*;
 use crate::drivers::gic;
 use crate::core::ipc::{endpoint_send_sync, IpcMessage, Priority};
-use spin::Mutex;
+use shared::sync::mutex::Mutex;
 use alloc::collections::BTreeMap;
 use core::sync::atomic::{AtomicU64, Ordering};
 use alloc::vec::Vec;

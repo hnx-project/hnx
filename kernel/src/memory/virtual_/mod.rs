@@ -3,7 +3,7 @@ use super::physical::PhysAddr;
 use crate::arch::common::mmu::{ArchType, MmuFlags};
 use crate::arch::memory;
 use crate::console;
-use spin::Mutex;
+use shared::sync::mutex::Mutex;
 
 pub type VirtAddr = usize;
 

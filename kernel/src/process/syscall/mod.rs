@@ -1,5 +1,5 @@
 use core::ptr;
-use spin::Mutex;
+use shared::sync::mutex::Mutex;
 use crate::security::{self, validate_capability, rights};
 use crate::console;
 use crate::arch::memory;
