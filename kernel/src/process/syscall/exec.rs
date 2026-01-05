@@ -3,7 +3,7 @@ use crate::arch::common::mmu::MmuFlags;
 use crate::console;
 use crate::fs::elf;
 use crate::core::scheduler;
-use crate::memory::virtual_::{create_user_l1, map, map_in_pt, KERNEL_BASE};
+use crate::memory::virt::{create_user_l1, map, map_in_pt, KERNEL_BASE};
 use crate::process::task::Task;
 use crate::{error, info};
 use crate::{fs, print};

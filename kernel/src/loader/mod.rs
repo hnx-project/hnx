@@ -44,11 +44,19 @@ pub struct LoaderManager {
 }
 
 /// 全局加载器管理器实例（临时，迁移期间使用）
-static LOADER_MANAGER: LoaderManager = LoaderManager::new();
+// static mut LOADER_MANAGER: LoaderManager = LoaderManager::new();
 
-/// 初始化加载器管理器（临时，迁移期间使用）
+/// 初始化加载器管理器
 pub fn init(dtb_ptr: usize) {
-    LOADER_MANAGER.init(dtb_ptr);
+    // 确保全局内核实例已初始化
+    crate::println!("[loader::init] Calling get_kernel()...");
+    crate::kernel::get_kernel().loader_manager.lock().init(dtb_ptr);
+    //（临时，迁移期间使用）
+    // crate::println!("[loader::init] Initializing static loader manager...");
+    // unsafe {
+    //     LOADER_MANAGER.init(dtb_ptr);
+    // }
+    crate::println!("[loader::init] Done");
 }
 
 impl LoaderManager {
@@ -109,14 +117,15 @@ impl LoaderManager {
 pub fn bootstrap_init_process() -> Result<(usize, usize, usize), ()> {
     crate::info!("loader: bootstrapping init process from initrd");
 
-    let initrd = LOADER_MANAGER.get_initrd_slice();
+    let loader = crate::kernel::get_kernel().loader_manager.lock();
+    let initrd = loader.get_initrd_slice();
     if initrd.is_empty() {
         crate::error!("loader: no initrd found - cannot boot");
         return Err(());
     }
 
     crate::debug!("loader: initrd at 0x{:X}, size {} bytes",
-                 LOADER_MANAGER.get_initrd_base(), LOADER_MANAGER.get_initrd_size());
+                 loader.get_initrd_base(), loader.get_initrd_size());
 
     let init_elf = find_file_in_cpio(initrd, "init")?;
 
@@ -145,7 +154,8 @@ pub fn bootstrap_init_process() -> Result<(usize, usize, usize), ()> {
 pub fn spawn_service_from_initrd(path: &str) -> Result<(usize, usize, usize), ()> {
     crate::info!("loader: spawning service from initrd: {}", path);
 
-    let initrd = LOADER_MANAGER.get_initrd_slice();
+    let loader = crate::kernel::get_kernel().loader_manager.lock();
+    let initrd = loader.get_initrd_slice();
     if initrd.is_empty() {
         crate::error!("loader: no initrd found");
         return Err(());

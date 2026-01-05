@@ -47,6 +47,11 @@ impl ConsoleManager {
     pub fn init(&self) {
         crate::arch::console::init();
         crate::drivers::uart::default().init();
+
+        // 从 DTB 初始化其他驱动程序
+        let boot_info = crate::arch::boot::get_boot_info();
+        crate::drivers::init_from_dtb(&boot_info);
+        self.driver_ready();
     }
 
     /// 标记驱动程序就绪（切换到 UART 驱动程序）
@@ -193,7 +198,11 @@ pub mod loglvl {
         Warn = 3,
         Error = 4,
     }
-    static LOG_LEVEL: AtomicU8 = AtomicU8::new(LogLevel::Warn as u8);
+    /// 设置日志级别
+    ///
+    /// 日志级别按优先级排序：Trace < Debug < Info < Warn < Error
+    /// 设置级别后，低于该级别的日志将被忽略
+    pub static LOG_LEVEL: AtomicU8 = AtomicU8::new(LogLevel::Debug as u8);
     pub fn set_log_level(level: LogLevel) {
         LOG_LEVEL.store(level as u8, Ordering::Relaxed)
     }

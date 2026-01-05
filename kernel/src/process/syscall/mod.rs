@@ -1118,9 +1118,9 @@ fn sys_mmap(addr: usize, length: usize, prot: usize, flags: usize, fd: usize, of
     
     // Determine mapping type based on flags
     let map_type = if (flags & 0x20) != 0 { // MAP_ANONYMOUS
-        crate::memory::mmap_manager::MemoryMapType::Anonymous
+        crate::memory::manager::MemoryMapType::Anonymous
     } else {
-        crate::memory::mmap_manager::MemoryMapType::File
+        crate::memory::manager::MemoryMapType::File
     };
     
     // Determine the address to use
@@ -1137,7 +1137,7 @@ fn sys_mmap(addr: usize, length: usize, prot: usize, flags: usize, fd: usize, of
     };
     
     // Create memory mapping flags
-    let map_flags = crate::memory::mmap_manager::MemoryMapFlags::new(
+    let map_flags = crate::memory::manager::MemoryMapFlags::new(
         readable, 
         writable, 
         executable, 
@@ -1146,7 +1146,7 @@ fn sys_mmap(addr: usize, length: usize, prot: usize, flags: usize, fd: usize, of
     );
     
     // Create memory mapping entry
-    let mut entry = crate::memory::mmap_manager::MemoryMapEntry::new(
+    let mut entry = crate::memory::manager::MemoryMapEntry::new(
         effective_addr, 
         aligned_length, 
         map_type, 
@@ -1154,7 +1154,7 @@ fn sys_mmap(addr: usize, length: usize, prot: usize, flags: usize, fd: usize, of
     );
     
     // Set file descriptor data if this is a file mapping
-    if map_type == crate::memory::mmap_manager::MemoryMapType::File {
+    if map_type == crate::memory::manager::MemoryMapType::File {
         entry.data = Some(fd as u64);
     }
     
@@ -1238,7 +1238,7 @@ fn sys_mprotect(addr: usize, length: usize, prot: usize) -> SysResult {
     drop(overlapping_entries);
     
     // Update the flags for all overlapping entries, handling partial overlaps
-    let new_flags = crate::memory::mmap_manager::MemoryMapFlags::new(
+    let new_flags = crate::memory::manager::MemoryMapFlags::new(
         readable, 
         writable, 
         executable, 

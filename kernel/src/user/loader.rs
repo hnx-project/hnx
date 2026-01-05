@@ -1,5 +1,5 @@
 use crate::arch::common::mmu::MmuFlags;
-use crate::memory::virtual_::{create_user_l1, map_in_pt};
+use crate::memory::virt::{create_user_l1, map_in_pt};
 use crate::{error, info};
 
 pub struct UserProgram {

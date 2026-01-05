@@ -6,7 +6,9 @@
 use core::ops::Range;
 
 use shared::sync::mutex::Mutex;
-use super::dma::DmaAllocator;
+use super::allocator::dma::DmaAllocator;
+use super::allocator::buddy::BuddyAllocator;
+use super::allocator::slab::SlabAllocator;
 
 /// 内存映射类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -108,21 +110,71 @@ impl MemoryMapEntry {
     }
 }
 
-/// 内存映射管理器
-pub struct MemoryMapManager {
+/// 内存管理器
+pub struct MemoryManager {
     /// 内存映射区域列表
     entries: heapless::Vec<MemoryMapEntry, 64>, // 最多支持64个映射区域
     /// DMA 分配器
     dma_allocator: DmaAllocator,
+    /// 伙伴分配器
+    buddy_allocator: BuddyAllocator,
+    /// slab 分配器
+    slab_allocator: SlabAllocator,
 }
 
-impl MemoryMapManager {
+impl MemoryManager {
     /// 创建新的内存映射管理器
     pub const fn new() -> Self {
         Self {
             entries: heapless::Vec::new(),
             dma_allocator: DmaAllocator::new(),
+            buddy_allocator: BuddyAllocator::new(),
+            slab_allocator: SlabAllocator::new(),
         }
+    }
+
+    /// 初始化内存管理器
+    pub fn init(&mut self) {
+        let boot_info = crate::arch::boot::get_boot_info();
+
+        crate::info!("memory: initializing subsystem");
+
+        // Initialize physical memory allocator
+        crate::info!("memory: initializing physical memory allocator");
+        super::physical::init(boot_info);
+
+        // Print physical memory statistics
+        let s = super::physical::stats();
+        crate::info!(
+            "memory: phys stats: free_pages={} alloc_calls={} free_calls={} coalesce={} frag={:.3}",
+            s.total_free_pages,
+            s.alloc_calls,
+            s.free_calls,
+            s.coalesce_events,
+            s.fragmentation_index,
+        );
+
+        // Verify physical allocator invariants
+        let inv = super::physical::check_invariants();
+        crate::info!("memory: phys invariants {}", if inv { "ok" } else { "bad" });
+
+        // Initialize virtual memory management
+        crate::info!("memory: initializing virtual memory");
+        super::virt::init();
+
+        // Initialize slab allocator for small objects
+        crate::info!("memory: initializing slab allocator");
+        super::allocator::slab::SLAB_ALLOCATOR.init();
+
+        // Initialize buddy allocator for kernel heap
+        crate::info!("memory: initializing buddy allocator");
+        let heap_start = 0x40000000; // TODO: Get from device tree
+        let heap_size = 0x10000000;  // TODO: Get from device tree
+        unsafe {
+            super::allocator::buddy::ALLOCATOR.init(heap_start, heap_size);
+        }
+
+        crate::info!("memory: memory manager initialization complete");
     }
     
     /// 添加新的内存映射区域
@@ -363,22 +415,22 @@ mod tests {
     
     #[test]
     fn test_memory_map_manager_add_entry() {
-        let mut manager = MemoryMapManager::new();
-        
+        let mut manager = MemoryManager::new();
+
         let entry1 = MemoryMapEntry::new(
             0x1000,
             0x1000,
             MemoryMapType::Ram,
             MemoryMapFlags::ram_default(),
         );
-        
+
         let entry2 = MemoryMapEntry::new(
             0x3000,
             0x1000,
             MemoryMapType::Rom,
             MemoryMapFlags::rom_default(),
         );
-        
+
         assert!(manager.add_entry(entry1.clone()).is_ok());
         assert!(manager.add_entry(entry2.clone()).is_ok());
         assert_eq!(manager.entries().len(), 2);
@@ -386,22 +438,22 @@ mod tests {
     
     #[test]
     fn test_memory_map_manager_add_conflicting_entry() {
-        let mut manager = MemoryMapManager::new();
-        
+        let mut manager = MemoryManager::new();
+
         let entry1 = MemoryMapEntry::new(
             0x1000,
             0x1000,
             MemoryMapType::Ram,
             MemoryMapFlags::ram_default(),
         );
-        
+
         let entry2 = MemoryMapEntry::new(
             0x1800,
             0x1000,
             MemoryMapType::Rom,
             MemoryMapFlags::rom_default(),
         );
-        
+
         assert!(manager.add_entry(entry1.clone()).is_ok());
         assert!(manager.add_entry(entry2.clone()).is_err());
         assert_eq!(manager.entries().len(), 1);
@@ -409,17 +461,17 @@ mod tests {
     
     #[test]
     fn test_memory_map_manager_find_entry() {
-        let mut manager = MemoryMapManager::new();
-        
+        let mut manager = MemoryManager::new();
+
         let entry = MemoryMapEntry::new(
             0x1000,
             0x1000,
             MemoryMapType::Ram,
             MemoryMapFlags::ram_default(),
         );
-        
+
         assert!(manager.add_entry(entry.clone()).is_ok());
-        
+
         assert!(manager.find_entry(0x1500).is_some());
         assert!(manager.find_entry(0x500).is_none());
         assert!(manager.find_entry(0x2500).is_none());
@@ -427,25 +479,25 @@ mod tests {
     
     #[test]
     fn test_memory_map_manager_remove_entries() {
-        let mut manager = MemoryMapManager::new();
-        
+        let mut manager = MemoryManager::new();
+
         let entry1 = MemoryMapEntry::new(
             0x1000,
             0x1000,
             MemoryMapType::Ram,
             MemoryMapFlags::ram_default(),
         );
-        
+
         let entry2 = MemoryMapEntry::new(
             0x3000,
             0x1000,
             MemoryMapType::Rom,
             MemoryMapFlags::rom_default(),
         );
-        
+
         assert!(manager.add_entry(entry1.clone()).is_ok());
         assert!(manager.add_entry(entry2.clone()).is_ok());
-        
+
         let removed = manager.remove_entries_in_range(0x500..0x2000);
         assert_eq!(removed, 1);
         assert_eq!(manager.entries().len(), 1);

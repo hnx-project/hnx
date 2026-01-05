@@ -346,7 +346,7 @@ pub extern "C" fn rust_sync_try_handle(
 
         info!("arch/aarch64 page fault: far=0x{:016X} elr=0x{:016X} ttbr0=0x{:016X}", far, elr, ttbr0);
 
-        if crate::memory::virtual_::handle_page_fault(pt_base, far as usize, esr) {
+        if crate::memory::virt::handle_page_fault(pt_base, far as usize, esr) {
             info!("arch/aarch64 page fault handled");
             return 1;
         } else {

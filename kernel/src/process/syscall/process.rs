@@ -9,7 +9,7 @@
 use crate::process::{self, ProcState};
 use crate::process::task::{allocate_asid, Asid};
 use crate::memory::physical::alloc_pages;
-use crate::memory::virtual_::create_user_l1;
+use crate::memory::virt::create_user_l1;
 use crate::arch::common::mmu::MmuFlags;
 use super::SysResult;
 

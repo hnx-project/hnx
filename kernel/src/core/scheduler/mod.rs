@@ -3,8 +3,9 @@ use crate::console;
 use crate::debug;
 use crate::error;
 use crate::info;
-use crate::memory::virtual_::map_in_pt;
+use crate::memory::virt::map_in_pt;
 use crate::process::task::{Task, TaskState};
+use crate::kernel::get_kernel;
 use shared::sync::mutex::Mutex;
 
 static CURRENT: Mutex<Option<Task>> = Mutex::new(None);
@@ -110,13 +111,13 @@ pub fn on_tick() {
     // Update current process ticks
     let current_pid = current_pid();
     if current_pid != 0 {
-        crate::process::increment_process_ticks(current_pid as usize);
+        get_kernel().process_manager.lock().increment_process_ticks(current_pid as usize);
     }
 }
 
 pub fn schedule_rr_tick() {
     on_tick();
-    crate::process::on_rr_tick();
+    get_kernel().process_manager.lock().on_rr_tick();
 }
 
 // Enhanced scheduler with priority-based scheduling
@@ -131,11 +132,11 @@ pub fn schedule_priority() {
     let current_pid = current_pid();
     if current_pid != 0 {
         // Set current process to ready state before rescheduling
-        crate::process::set_process_state(current_pid as usize, crate::process::ProcState::Running);
+        get_kernel().process_manager.lock().set_process_state(current_pid as usize, crate::process::ProcState::Running);
     }
     
     // Trigger round-robin for now (could be enhanced with priority-based selection)
-    crate::process::on_rr_tick();
+    get_kernel().process_manager.lock().on_rr_tick();
 }
 
 pub fn current_pid() -> u64 {
@@ -190,7 +191,7 @@ pub fn switch_to_next_process() -> ! {
                      current_pid, current_pc, current_sp);
 
         // Update PCB with current context using public API
-        if crate::process::update_process_context(current_pid as u32, current_pc, current_sp) {
+        if get_kernel().process_manager.lock().update_process_context(current_pid as u32, current_pc, current_sp) {
             crate::debug!("switch_to_next_process: updated PCB for PID {}", current_pid);
         } else {
             crate::error!("switch_to_next_process: failed to update PCB for PID {}", current_pid);
@@ -203,17 +204,17 @@ pub fn switch_to_next_process() -> ! {
     };
 
     crate::debug!("switch_to_next_process: pushing PID {} to ready queue", effective_pid);
-    crate::process::ready_queue_push(effective_pid as u32);
+    get_kernel().process_manager.lock().ready_queue_push(effective_pid as u32);
 
     // Get the next process from ready queue
-    if let Some(mut next_pid) = crate::process::ready_queue_pop() {
+    if let Some(mut next_pid) = get_kernel().process_manager.lock().ready_queue_pop() {
         crate::debug!("switch_to_next_process: popped PID {}", next_pid);
 
         // Avoid switching to the same process if possible
         if next_pid as u64 == effective_pid {
-            if let Some(another_pid) = crate::process::ready_queue_pop() {
+            if let Some(another_pid) = get_kernel().process_manager.lock().ready_queue_pop() {
                 // Push the original back to queue
-                crate::process::ready_queue_push(next_pid);
+                get_kernel().process_manager.lock().ready_queue_push(next_pid);
                 next_pid = another_pid;
                 crate::debug!("[SCHED] new next_pid={}", next_pid);
             }
@@ -221,7 +222,7 @@ pub fn switch_to_next_process() -> ! {
         crate::debug!("switch_to_next_process: switching to next_pid={}", next_pid);
         // Get process information for context switching
         if let Some((entry_point, stack_pointer, ttbr0_base, asid)) =
-            crate::process::get_process_for_scheduling(next_pid)
+            get_kernel().process_manager.lock().get_process_for_scheduling(next_pid)
         {
             info!("scheduler: switching from PID {} to PID {}", current_pid, next_pid);
             debug!("scheduler: entry=0x{:X} sp=0x{:X} ttbr0=0x{:X} asid={}",

@@ -11,7 +11,7 @@
 //! All real ELF loading should be done by user space Loader Service.
 
 use crate::arch::common::mmu::MmuFlags;
-use crate::memory::virtual_::{create_user_l1, map_in_pt, vma_add};
+use crate::memory::virt::{create_user_l1, map_in_pt, vma_add};
 use crate::{info, error};
 
 const ELF_MAGIC: &[u8] = &[0x7F, b'E', b'L', b'F'];

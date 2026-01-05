@@ -10,17 +10,17 @@ pub fn init(dtb_ptr: usize) {
 
 pub fn get_initrd_base() -> usize {
     // 委托给父模块中的全局 LoaderManager
-    super::LOADER_MANAGER.get_initrd_base()
+    crate::kernel::get_kernel().loader_manager.lock().get_initrd_base()
 }
 
 pub fn get_initrd_size() -> usize {
     // 委托给父模块中的全局 LoaderManager
-    super::LOADER_MANAGER.get_initrd_size()
+    crate::kernel::get_kernel().loader_manager.lock().get_initrd_size()
 }
 
 pub fn get_initrd_slice() -> &'static [u8] {
     // 委托给父模块中的全局 LoaderManager
-    super::LOADER_MANAGER.get_initrd_slice()
+    crate::kernel::get_kernel().loader_manager.lock().get_initrd_slice()
 }
 
 pub fn find_file_in_initrd(_path: &str) -> Option<&'static [u8]> {

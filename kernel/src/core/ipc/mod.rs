@@ -2,6 +2,7 @@
 //! priority-based messaging, and improved security integration.
 
 use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use crate::kernel::get_kernel;
 use shared::sync::mutex::Mutex;
 
 /// Priority levels for messages
@@ -425,7 +426,7 @@ pub fn endpoint_send_sync(dst_epid: u32, mut msg: IpcMessage) -> Result<IpcRespo
                     let pid = endpoint.waiters[endpoint.waiters_head];
                     endpoint.waiters_head = (endpoint.waiters_head + 1) % endpoint.waiters.len();
                     endpoint.waiters_len -= 1;
-                    let _ = crate::process::wake_process(pid as usize);
+                    let _ = get_kernel().process_manager.lock().wake_process(pid as usize);
                 }
 
                 // Release endpoint lock before waiting for response
@@ -433,7 +434,7 @@ pub fn endpoint_send_sync(dst_epid: u32, mut msg: IpcMessage) -> Result<IpcRespo
 
                 // Wait for response with timeout using process blocking
                 const TIMEOUT_TICKS: u64 = 1000; // Adjust based on desired timeout
-                if !crate::process::block_process_timeout(current_pid as usize, TIMEOUT_TICKS) {
+                if !get_kernel().process_manager.lock().block_process_timeout(current_pid as usize, TIMEOUT_TICKS) {
                     // Failed to block, clean up pending response
                     let _ = get_and_remove_pending_response(msg_id);
                     return Err(IpcError::SystemError);
@@ -535,7 +536,7 @@ pub fn endpoint_recv_sync(epid: u32, _timeout_ms: Option<u64>) -> Result<IpcMess
                     
                     // Drop the lock before blocking
                     drop(endpoints);
-                    let _ = crate::process::block_process(current_pid as usize);
+                    let _ = get_kernel().process_manager.lock().block_process(current_pid as usize);
                     
                     // When woken up, try again (simplified - in reality would need to check again)
                     return Err(IpcError::Timeout);
@@ -620,7 +621,7 @@ pub fn endpoint_send_response(msg_id: u64, code: i32, data: &[u8]) -> Result<(),
         Ok(sender_pid) => {
             crate::info!("endpoint_send_response: response set for msg_id={}, waking sender pid={}", msg_id, sender_pid);
             // Wake up the sender process
-            let _ = crate::process::wake_process(sender_pid as usize);
+            let _ = get_kernel().process_manager.lock().wake_process(sender_pid as usize);
             Ok(())
         }
         Err(e) => {

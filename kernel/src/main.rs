@@ -48,27 +48,17 @@ pub extern "C" fn rust_main() -> ! {
     // Initialize the global Kernel object. This must be the first step.
     kernel::init();
 
-    init_phase1_hardware();
-    init_phase2_memory();
-    init_phase3_processes();
-    init_phase4_scheduler();
+    // init_phase1_hardware();
+    // init_phase2_memory();
+    // init_phase3_processes();
+    // init_phase4_scheduler();
+    loop {
+        crate::arch::cpu::wait_for_interrupt();
+    }
 }
 
-/// Phase 1: Hardware Initialization
-///
-/// Initializes the minimal hardware required for kernel operation:
-/// - Debug console (UART)
-/// - Device Tree Blob (DTB) parsing
-/// - Interrupt controller (GIC)
-/// - Timer
+// deprecated
 fn init_phase1_hardware() {
-    // Initialize debug console (UART)
-    crate::console::init();
-    
-    // Parse Device Tree and initialize core drivers
-    let boot_info = crate::arch::boot::get_boot_info();
-    crate::drivers::init_from_dtb(&boot_info);
-    crate::console::driver_ready();
     
     // Print kernel boot banner
     println!("======= HNX Microkernel Booting =======");
@@ -88,17 +78,16 @@ fn init_phase1_hardware() {
 /// - Slab allocator for small objects
 /// - Memory mapping manager
 fn init_phase2_memory() {
-    let boot_info = crate::arch::boot::get_boot_info();
     
     println!("Initializing memory subsystem...");
-    memory::init(boot_info);
+    // memory::init();
     
     // Initialize kernel heap allocator
     println!("Initializing buddy allocator...");
     let heap_start = 0x40000000; // TODO: Get from device tree
     let heap_size = 0x10000000;  // TODO: Get from device tree
     unsafe {
-        crate::memory::BUDDY_ALLOCATOR.init(heap_start, heap_size);
+        // crate::memory::BUDDY_ALLOCATOR.init(heap_start, heap_size);
     }
     println!("Memory subsystem ready");
 }
@@ -112,8 +101,8 @@ fn init_phase2_memory() {
 /// - Well-known service endpoints for user space services
 fn init_phase3_processes() {
     crate::info!("Initializing process subsystem...");
-    process::init();
-    
+    // process::init() already called in kernel::init()
+
     println!("Initializing IPC service delegation...");
     if let Err(_) = ipc_services::delegate::init() {
         crate::warn!("Failed to initialize IPC service endpoints (services won't be available)");

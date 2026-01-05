@@ -1,7 +1,8 @@
 use crate::process::{create_process, set_process_state, ProcState};
 use crate::arch::common::mmu::MmuFlags;
-use crate::memory::virtual_::{create_user_l1, map_in_pt};
+use crate::memory::virt::{create_user_l1, map_in_pt};
 use crate::{info, error};
+use crate::kernel;
 
 /// Create an empty user process with a page table
 ///
@@ -80,15 +81,10 @@ pub fn sys_mmap_process(
 /// * `sp` - Stack pointer (must be mapped)
 pub fn sys_process_start(pid: u32, entry: usize, sp: usize) -> Result<(), ()> {
     // Set entry point and SP in process structure
-    let mut table = super::PCB_TABLE.lock();
-    let idx = (pid as usize) % table.len();
-    if let Some(ref mut pcb) = table[idx] {
-        pcb.entry_point = entry;
-        pcb.stack_pointer = sp;
-    } else {
+    let success = crate::kernel::get_kernel().process_manager.lock().update_process_context(pid, entry, sp);
+    if !success {
         return Err(());
     }
-    drop(table);
 
     // Mark process as ready (which will add it to ready queue)
     super::set_process_state(pid as usize, super::ProcState::Ready);

@@ -4,7 +4,7 @@
 //! stack canaries, guard pages, and address space layout randomization.
 
 use crate::memory::physical::alloc_pages;
-use crate::memory::virtual_::{map_in_pt, VirtAddr};
+use crate::memory::virt::{map_in_pt, VirtAddr};
 use crate::arch::common::mmu::MmuFlags;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
