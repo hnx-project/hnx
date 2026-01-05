@@ -1,9 +1,5 @@
 
-//! 内核核心对象
-//!
-//! 该模块定义了 HNX 内核的顶层 `Kernel` 结构体，它将持有所有核心
-//! 内核服务的实例，例如内存管理器、设备管理器等。
-
+use crate::drivers::device_manager::DeviceManager;
 use crate::memory::mmap_manager::MemoryMapManager;
 use shared::sync::mutex::Mutex;
 
@@ -11,6 +7,8 @@ use shared::sync::mutex::Mutex;
 pub struct Kernel {
     /// 内存映射管理器
     pub memory_manager: Mutex<MemoryMapManager>,
+    /// 设备管理器
+    pub device_manager: Mutex<DeviceManager>,
 }
 
 impl Kernel {
@@ -19,13 +17,14 @@ impl Kernel {
     /// 这个函数会在内核初始化时被调用，按顺序创建所有内核管理器。
     pub fn new() -> Self {
         let memory_manager = Mutex::new(MemoryMapManager::new());
+        let device_manager = Mutex::new(DeviceManager::new());
 
         Self {
             memory_manager,
+            device_manager,
         }
     }
 }
-
 /// 全局内核实例
 ///
 /// # 安全性

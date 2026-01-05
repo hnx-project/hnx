@@ -8,7 +8,7 @@
 extern crate alloc;
 
 use crate::drivers::ipc_protocol::*;
-use crate::drivers::device_manager::DEVICE_MANAGER;
+
 use crate::process::syscall::{SysResult, user_range_ok};
 use crate::security::capability::CAPABILITY_MANAGER;
 use crate::memory::dma::DMA_ALLOCATOR;
@@ -41,7 +41,7 @@ pub fn sys_driver_register(reg_ptr: usize, reg_size: usize) -> SysResult {
     };
 
     // Register with device manager
-    let result = DEVICE_MANAGER.lock().register_driver(registration, current_epid);
+    let result = crate::kernel::get_kernel().device_manager.lock().register_driver(registration, current_epid);
     
     match result {
         Ok(driver_id) => driver_id.0 as SysResult,
@@ -58,7 +58,7 @@ pub fn sys_driver_request_irq(irq_num: u32) -> SysResult {
         driver_epid: current_epid,
     };
 
-    match DEVICE_MANAGER.lock().request_irq(req) {
+    match crate::kernel::get_kernel().device_manager.lock().request_irq(req) {
         Ok(()) => 0,
         Err(_) => -1, // Request failed
     }
@@ -74,7 +74,7 @@ pub fn sys_driver_map_mmio(phys_addr: u64, size: usize) -> SysResult {
         driver_epid: current_epid,
     };
 
-    let result = DEVICE_MANAGER.lock().request_mmio_mapping(req);
+    let result = crate::kernel::get_kernel().device_manager.lock().request_mmio_mapping(req);
     
     match result {
         Ok(capability) => {

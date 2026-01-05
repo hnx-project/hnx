@@ -408,9 +408,9 @@ pub extern "C" fn rust_irq_handler() {
         }
         
         // NEW: Check if this IRQ should be forwarded to user-space
-        if crate::drivers::device_manager::DEVICE_MANAGER.lock().is_user_space_irq(intid as u32) {
+        if crate::kernel::get_kernel().device_manager.lock().is_user_space_irq(intid as u32) {
             // Forward to user-space driver
-            crate::drivers::device_manager::DEVICE_MANAGER.lock().forward_interrupt(intid as u32);
+            crate::kernel::get_kernel().device_manager.lock().forward_interrupt(intid as u32);
             
             // Disable interrupts before EOI to prevent race conditions
             disable_irq();

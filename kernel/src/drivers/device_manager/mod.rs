@@ -17,8 +17,7 @@ use alloc::collections::BTreeMap;
 use core::sync::atomic::{AtomicU64, Ordering};
 use alloc::vec::Vec;
 
-/// Global device manager instance
-pub static DEVICE_MANAGER: Mutex<DeviceManager> = Mutex::new(DeviceManager::new());
+
 
 /// Information about a registered device
 #[derive(Debug, Clone)]
