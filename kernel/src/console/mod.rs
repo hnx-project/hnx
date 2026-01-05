@@ -3,7 +3,7 @@
 use crate::drivers::uart::r#trait::UartDriver;
 use core::fmt;
 use shared::sync::mutex::Mutex;
-use core::sync::atomic::{AtomicBool, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
 
 
 // Re-export the macros from the error module
@@ -12,60 +12,129 @@ use core::sync::atomic::{AtomicBool, Ordering};
 // pub use crate::info;
 // pub use crate::warn;
 
-static CONSOLE_LOCK: Mutex<()> = Mutex::new(());
-static mut LAST_CHAR: u8 = 0;
-static mut REPEAT_COUNT: u32 = 0;
-static mut TOTAL_COUNT: u32 = 0;
-static FALLBACK_ENABLED: AtomicBool = AtomicBool::new(true);
- 
-
-#[inline]
-fn irq_save_disable() -> u64 {
-    0
+/// 控制台管理器
+///
+/// 管理控制台输出状态，包括字符重复检测、回退模式等
+pub struct ConsoleManager {
+    /// 控制台互斥锁
+    console_lock: Mutex<()>,
+    /// 上一个字符
+    last_char: AtomicU8,
+    /// 重复计数
+    repeat_count: AtomicU32,
+    /// 总输出计数
+    total_count: AtomicU32,
+    /// 回退使能标志（true = 使用 arch 控制台，false = 使用 UART 驱动程序）
+    fallback_enabled: AtomicBool,
 }
 
-#[inline]
-fn irq_restore(_saved: u64) {}
+// 全局控制台管理器实例（临时，迁移期间使用）
+static CONSOLE_MANAGER: ConsoleManager = ConsoleManager::new();
 
-/// 初始化控制台
-pub fn init() {
-    crate::arch::console::init();
-    crate::drivers::uart::default().init();
-}
-
-pub fn driver_ready() {
-    FALLBACK_ENABLED.store(false, Ordering::Relaxed);
-}
-
-#[inline]
-fn uart_write_byte_ascii(c: u8) {
-    unsafe {
-        // Increase limit significantly to prevent silent output dropping
-        if TOTAL_COUNT > 1000000 { 
-            // Reset counter instead of stopping output
-            TOTAL_COUNT = 0;
+impl ConsoleManager {
+    /// 创建新的控制台管理器
+    pub const fn new() -> Self {
+        Self {
+            console_lock: Mutex::new(()),
+            last_char: AtomicU8::new(0),
+            repeat_count: AtomicU32::new(0),
+            total_count: AtomicU32::new(0),
+            fallback_enabled: AtomicBool::new(true),
         }
-        if LAST_CHAR == c {
-            REPEAT_COUNT = REPEAT_COUNT.saturating_add(1);
-            if REPEAT_COUNT > 64 {
+    }
+
+    /// 初始化控制台
+    pub fn init(&self) {
+        crate::arch::console::init();
+        crate::drivers::uart::default().init();
+    }
+
+    /// 标记驱动程序就绪（切换到 UART 驱动程序）
+    pub fn driver_ready(&self) {
+        self.fallback_enabled.store(false, Ordering::Relaxed);
+    }
+
+    /// 写入单个字符（内部方法）
+    fn uart_write_byte_ascii(&self, c: u8) {
+        // 增加限制以防止静默输出丢失
+        let total_count = self.total_count.load(Ordering::Relaxed);
+        if total_count > 1000000 {
+            // 重置计数器而不是停止输出
+            self.total_count.store(0, Ordering::Relaxed);
+        }
+        let last_char = self.last_char.load(Ordering::Relaxed);
+        if last_char == c {
+            let repeat_count = self.repeat_count.load(Ordering::Relaxed);
+            let new_repeat_count = repeat_count.saturating_add(1);
+            self.repeat_count.store(new_repeat_count, Ordering::Relaxed);
+            if new_repeat_count > 64 {
                 return;
             }
         } else {
-            LAST_CHAR = c;
-            REPEAT_COUNT = 1;
+            self.last_char.store(c, Ordering::Relaxed);
+            self.repeat_count.store(1, Ordering::Relaxed);
         }
-        TOTAL_COUNT = TOTAL_COUNT.saturating_add(1);
-        if FALLBACK_ENABLED.load(Ordering::Relaxed) {
+        self.total_count.fetch_add(1, Ordering::Relaxed);
+        if self.fallback_enabled.load(Ordering::Relaxed) {
             crate::arch::console::putc(c);
         } else {
             crate::drivers::uart::default().putc(c);
         }
     }
+
+    /// 写入格式化参数
+    pub fn write(&self, args: fmt::Arguments) {
+        use core::fmt::Write;
+        let _lock = self.console_lock.lock();
+        struct ConsoleWriter<'a> {
+            manager: &'a ConsoleManager,
+        }
+        impl<'a> fmt::Write for ConsoleWriter<'a> {
+            fn write_str(&mut self, s: &str) -> fmt::Result {
+                for c in s.bytes() {
+                    self.manager.uart_write_byte_ascii(c);
+                }
+                Ok(())
+            }
+        }
+        let mut writer = ConsoleWriter { manager: self };
+        let _ = writer.write_fmt(args);
+    }
+
+    /// 写入原始字符串
+    pub fn write_raw(&self, s: &str) {
+        let _lock = self.console_lock.lock();
+        for b in s.bytes() {
+            self.uart_write_byte_ascii(b);
+        }
+    }
+
+    /// 记录日志
+    pub fn log(&self, level: &str, module: &str, args: fmt::Arguments) {
+        self.write(format_args!("[{}] <{}> => {}\n", level, module, args));
+    }
+
+    /// 获取一个字符（当前未实现通用输入，返回 None）
+    pub fn getc(&self) -> Option<u8> {
+        crate::drivers::uart::default().getc()
+    }
 }
+
+
+
+/// 初始化控制台
+pub fn init() {
+    CONSOLE_MANAGER.init();
+}
+
+pub fn driver_ready() {
+    CONSOLE_MANAGER.driver_ready();
+}
+
 
 /// 读取一个字符（当前未实现通用输入，返回 None）
 pub fn getc() -> Option<u8> {
-    crate::drivers::uart::default().getc()
+    CONSOLE_MANAGER.getc()
 }
 
 /// 内核打印宏
@@ -88,26 +157,11 @@ macro_rules! println {
 }
 
 pub fn write(args: fmt::Arguments) {
-    use core::fmt::Write;
-    let _lock = CONSOLE_LOCK.lock();
-    struct ConsoleWriter;
-    impl fmt::Write for ConsoleWriter {
-        fn write_str(&mut self, s: &str) -> fmt::Result {
-            for c in s.bytes() {
-                uart_write_byte_ascii(c);
-            }
-            Ok(())
-        }
-    }
-    let mut writer = ConsoleWriter;
-    let _ = writer.write_fmt(args);
+    CONSOLE_MANAGER.write(args);
 }
 
 pub fn write_raw(s: &str) {
-    let _lock = CONSOLE_LOCK.lock();
-    for b in s.bytes() {
-        uart_write_byte_ascii(b);
-    }
+    CONSOLE_MANAGER.write_raw(s);
 }
 
 #[macro_export]
@@ -125,11 +179,7 @@ macro_rules! println_raw {
 }
 
 pub fn log(level: &str, module: &str, args: fmt::Arguments) {
-    // if level == "ERROR" || level == "WARN" {
-    write(format_args!("[{}] <{}> => {}\n", level, module, args));
-        // return;
-    // }
-    // write(format_args!("[{}] => {}\n", level, args));
+    CONSOLE_MANAGER.log(level, module, args);
 }
 
 pub mod loglvl {
