@@ -4,7 +4,8 @@
 //! Full signal handling (signal masks, handlers, etc.) will be implemented in Phase 2.
 
 use crate::process::{self, ProcState};
-use crate::security::{validate_capability, rights};
+use crate::security::{security_rights, CapabilityId};
+use crate::kernel;
 use super::SysResult;
 
 /// Signal numbers (POSIX)
@@ -111,13 +112,18 @@ fn kill_process(sender_pid: u32, target_pid: u32, sig: u32) -> SysResult {
     if sender_pid != target_pid {
         // Check if sender is parent of target
         if let Some(parent_pid) = process::get_parent_pid(target_pid as usize) {
-            if parent_pid != sender_pid {
-                // Not self and not parent - check capabilities
-                // TODO: Implement proper capability check
-                crate::error!("kill: permission denied - not parent of target");
-                return -1; // EPERM
-            }
-        }
+                            if parent_pid != sender_pid {
+                                // Not self and not parent - check capabilities
+                                if !kernel::get_kernel().capability_manager.lock().validate_capability_by_object(
+                                    // For now, assume a generic capability for signaling processes
+                                    CapabilityId(sender_pid),
+                                    target_pid,
+                                    security_rights::MANAGE as u32,
+                                ) {
+                                    crate::error!("kill: permission denied - sender PID {} cannot signal target PID {} without MANAGE rights", sender_pid, target_pid);
+                                    return -1; // EPERM
+                                }
+                            }        }
     }
     
     // Handle different signals

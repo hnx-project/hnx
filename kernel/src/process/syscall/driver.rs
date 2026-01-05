@@ -8,9 +8,10 @@
 extern crate alloc;
 
 use crate::drivers::ipc_protocol::*;
+use crate::kernel;
 
 use crate::process::syscall::{SysResult, user_range_ok};
-use crate::security::capability::CAPABILITY_MANAGER;
+
 use crate::memory::dma::DMA_ALLOCATOR;
 
 /// Driver syscall numbers
@@ -91,7 +92,7 @@ pub fn sys_driver_map_mmio(phys_addr: u64, size: usize) -> SysResult {
             );
             
             // Grant capability to the requesting process
-            if CAPABILITY_MANAGER.lock().grant_capability(current_epid.0, security_capability).is_ok() {
+            if crate::kernel::get_kernel().capability_manager.lock().grant_capability(current_epid.0, security_capability).is_ok() {
                 // Return capability ID to user
                 capability.id as SysResult
             } else {
@@ -128,7 +129,7 @@ pub fn sys_driver_dma_alloc(size: usize, alignment: usize) -> SysResult {
             );
             
             // Grant capability to the requesting process
-            if CAPABILITY_MANAGER.lock().grant_capability(current_epid.0, security_capability).is_ok() {
+            if crate::kernel::get_kernel().capability_manager.lock().grant_capability(current_epid.0, security_capability).is_ok() {
                 // Return physical address to user (in a real implementation, we'd return a handle)
                 phys_addr as SysResult
             } else {

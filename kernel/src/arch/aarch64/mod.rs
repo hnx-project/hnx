@@ -12,7 +12,7 @@ impl Arch for AArch64 {
         interrupt::init();
         mmu::init();
         timer::init();
-        crate::security::init();
+
     }
 
     fn cpu_id() -> u32 {

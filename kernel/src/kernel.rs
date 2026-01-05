@@ -1,6 +1,6 @@
-
 use crate::drivers::device_manager::DeviceManager;
 use crate::memory::mmap_manager::MemoryMapManager;
+use crate::security::capability::CapabilityManager;
 use shared::sync::mutex::Mutex;
 
 /// HNX 内核的顶层结构体
@@ -9,6 +9,8 @@ pub struct Kernel {
     pub memory_manager: Mutex<MemoryMapManager>,
     /// 设备管理器
     pub device_manager: Mutex<DeviceManager>,
+    /// 能力管理器
+    pub capability_manager: Mutex<CapabilityManager>,
 }
 
 impl Kernel {
@@ -18,10 +20,12 @@ impl Kernel {
     pub fn new() -> Self {
         let memory_manager = Mutex::new(MemoryMapManager::new());
         let device_manager = Mutex::new(DeviceManager::new());
+        let capability_manager = Mutex::new(CapabilityManager::new());
 
         Self {
             memory_manager,
             device_manager,
+            capability_manager,
         }
     }
 }

@@ -1,6 +1,7 @@
 use core::ptr;
 use shared::sync::mutex::Mutex;
-use crate::security::{self, validate_capability, rights};
+use crate::security::{self, CapabilityId, security_rights};
+use crate::kernel;
 use crate::console;
 use crate::arch::memory;
 use crate::loader;
@@ -33,7 +34,7 @@ const RIGHT_MANAGE: u8 = 0x4;
 
 fn caps_alloc_handle(pid: usize, ep_id: u32, rights: u8) -> usize {
     // Allocate a new capability for this endpoint
-    let cap_id = if let Some(id) = security::allocate_capability(ep_id, rights as u32) {
+    let cap_id = if let Some(id) = kernel::get_kernel().capability_manager.lock().allocate_capability_by_object(ep_id, rights as u32) {
         id
     } else {
         return usize::MAX;
@@ -44,7 +45,7 @@ fn caps_alloc_handle(pid: usize, ep_id: u32, rights: u8) -> usize {
     let row = &mut tbl[idx];
     for i in 0..row.len() {
         if row[i].is_none() {
-            row[i] = Some(CapEntry { cap_id, ep_id, rights });
+            row[i] = Some(CapEntry { cap_id: cap_id, ep_id, rights });
             return i;
         }
     }
@@ -901,7 +902,7 @@ fn sys_ep_send(handle: usize, op: usize, buf_user: usize, len: usize) -> SysResu
     let pid = crate::core::scheduler::current_pid() as usize;
     if let Some(cap) = caps_lookup(pid, handle) {
         // Validate that the capability grants send rights
-        if !validate_capability(cap.cap_id, cap.ep_id, rights::WRITE) {
+        if !kernel::get_kernel().capability_manager.lock().validate_capability_by_object(CapabilityId(cap.cap_id), cap.ep_id, security_rights::WRITE as u32) {
             return -1;
         }
         
@@ -923,7 +924,7 @@ fn sys_ep_recv(handle: usize, buf_user: usize, len: usize) -> SysResult {
     let pid = crate::core::scheduler::current_pid() as usize;
     if let Some(cap) = caps_lookup(pid, handle) {
         // Validate that the capability grants receive rights
-        if !validate_capability(cap.cap_id, cap.ep_id, rights::READ) {
+        if !kernel::get_kernel().capability_manager.lock().validate_capability_by_object(CapabilityId(cap.cap_id), cap.ep_id, security_rights::READ as u32) {
             return -1;
         }
         
