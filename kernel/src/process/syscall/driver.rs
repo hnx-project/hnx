@@ -12,7 +12,7 @@ use crate::kernel;
 
 use crate::process::syscall::{SysResult, user_range_ok};
 
-use crate::memory::dma::DMA_ALLOCATOR;
+
 
 /// Driver syscall numbers
 pub const HNX_SYS_DRIVER_REGISTER: usize = 2001;
@@ -65,7 +65,6 @@ pub fn sys_driver_request_irq(irq_num: u32) -> SysResult {
     }
 }
 
-/// Map an MMIO region for a driver
 pub fn sys_driver_map_mmio(phys_addr: u64, size: usize) -> SysResult {
     let current_epid = EndpointId(crate::core::scheduler::current_pid());
 
@@ -79,22 +78,11 @@ pub fn sys_driver_map_mmio(phys_addr: u64, size: usize) -> SysResult {
     
     match result {
         Ok(capability) => {
-            // Convert device capability to security capability
-            let security_capability = crate::security::capability::Capability::new_mmio(
-                match &capability.cap_type {
-                    crate::drivers::device_manager::CapabilityType::Mmio { physical_address, size } => *physical_address,
-                    _ => 0,
-                },
-                match &capability.cap_type {
-                    crate::drivers::device_manager::CapabilityType::Mmio { physical_address: _, size } => *size,
-                    _ => 0,
-                }
-            );
-            
+            // The capability is already a security::capability::Capability
             // Grant capability to the requesting process
-            if crate::kernel::get_kernel().capability_manager.lock().grant_capability(current_epid.0, security_capability).is_ok() {
+            if crate::kernel::get_kernel().capability_manager.lock().grant_capability(current_epid.0, capability.clone()).is_ok() {
                 // Return capability ID to user
-                capability.id as SysResult
+                capability.id().0 as SysResult
             } else {
                 -1 // Failed to grant capability
             }
@@ -108,23 +96,26 @@ pub fn sys_driver_dma_alloc(size: usize, alignment: usize) -> SysResult {
     let current_epid = EndpointId(crate::core::scheduler::current_pid());
 
     // Allocate DMA buffer
-    let result = DMA_ALLOCATOR.lock().allocate_dma_buffer(size, alignment);
+    let result = crate::kernel::get_kernel().dma_allocator.lock().allocate_dma_buffer(size, alignment);
     
     match result {
         Ok((phys_addr, capability)) => {
             // Convert DMA capability to security capability
             let security_capability = crate::security::capability::Capability::new_dma_buffer(
-                match &capability.cap_type {
-                    crate::memory::dma::CapabilityType::Mmio { .. } => 0, // Should not happen
-                    crate::memory::dma::CapabilityType::DmaBuffer { physical_address, virtual_address: _, size: _ } => *physical_address,
+                match capability.cap_type() {
+                    crate::security::capability::CapabilityType::Mmio { .. } => 0, // Should not happen
+                    crate::security::capability::CapabilityType::DmaBuffer { physical_address, .. } => *physical_address,
+                    _ => 0, // Should not happen
                 },
-                match &capability.cap_type {
-                    crate::memory::dma::CapabilityType::Mmio { .. } => 0, // Should not happen
-                    crate::memory::dma::CapabilityType::DmaBuffer { physical_address: _, virtual_address, size: _ } => *virtual_address,
+                match capability.cap_type() {
+                    crate::security::capability::CapabilityType::Mmio { .. } => 0, // Should not happen
+                    crate::security::capability::CapabilityType::DmaBuffer { virtual_address, .. } => *virtual_address,
+                    _ => 0, // Should not happen
                 },
-                match &capability.cap_type {
-                    crate::memory::dma::CapabilityType::Mmio { .. } => 0, // Should not happen
-                    crate::memory::dma::CapabilityType::DmaBuffer { physical_address: _, virtual_address: _, size } => *size,
+                match capability.cap_type() {
+                    crate::security::capability::CapabilityType::Mmio { .. } => 0, // Should not happen
+                    crate::security::capability::CapabilityType::DmaBuffer { size, .. } => *size,
+                    _ => 0, // Should not happen
                 }
             );
             

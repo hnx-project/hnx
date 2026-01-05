@@ -16,6 +16,7 @@ use shared::sync::mutex::Mutex;
 use alloc::collections::BTreeMap;
 use core::sync::atomic::{AtomicU64, Ordering};
 use alloc::vec::Vec;
+use crate::security::capability::{Capability, CapabilityId, CapabilityType};
 
 
 
@@ -94,66 +95,6 @@ pub struct MmioRegion {
     pub physical_address: u64,
     pub size: usize,
     pub capability: Capability,
-}
-
-/// Capability for accessing hardware resources
-#[derive(Debug, Clone)]
-pub struct Capability {
-    pub id: u64,
-    pub cap_type: CapabilityType,
-}
-
-/// Types of capabilities
-#[derive(Debug, Clone)]
-pub enum CapabilityType {
-    Mmio {
-        physical_address: u64,
-        size: usize,
-    },
-    DmaBuffer {
-        physical_address: u64,
-        virtual_address: usize,  // Kernel virtual address
-        size: usize,
-    },
-}
-
-impl Capability {
-    /// Create a new MMIO capability
-    pub fn new_mmio(physical_address: u64, size: usize) -> Self {
-        Self {
-            id: generate_capability_id(),
-            cap_type: CapabilityType::Mmio { physical_address, size },
-        }
-    }
-
-    /// Create a new DMA buffer capability
-    pub fn new_dma_buffer(physical_address: u64, virtual_address: usize, size: usize) -> Self {
-        Self {
-            id: generate_capability_id(),
-            cap_type: CapabilityType::DmaBuffer { physical_address, virtual_address, size },
-        }
-    }
-
-    /// Create an invalid capability
-    pub fn invalid() -> Self {
-        Self {
-            id: 0,
-            cap_type: CapabilityType::Mmio { physical_address: 0, size: 0 },
-        }
-    }
-    
-    /// Get the capability ID
-    pub fn id(&self) -> u64 {
-        self.id
-    }
-}
-
-/// Global capability ID generator
-static NEXT_CAPABILITY_ID: AtomicU64 = AtomicU64::new(1);
-
-/// Generate a unique capability ID
-fn generate_capability_id() -> u64 {
-    NEXT_CAPABILITY_ID.fetch_add(1, Ordering::SeqCst)
 }
 
 /// Main device manager structure
