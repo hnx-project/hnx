@@ -6,6 +6,7 @@
 use core::ops::Range;
 
 use shared::sync::mutex::Mutex;
+use super::dma::DmaAllocator;
 
 /// 内存映射类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -111,6 +112,8 @@ impl MemoryMapEntry {
 pub struct MemoryMapManager {
     /// 内存映射区域列表
     entries: heapless::Vec<MemoryMapEntry, 64>, // 最多支持64个映射区域
+    /// DMA 分配器
+    dma_allocator: DmaAllocator,
 }
 
 impl MemoryMapManager {
@@ -118,6 +121,7 @@ impl MemoryMapManager {
     pub const fn new() -> Self {
         Self {
             entries: heapless::Vec::new(),
+            dma_allocator: DmaAllocator::new(),
         }
     }
     
@@ -274,6 +278,38 @@ impl MemoryMapManager {
     /// 清空所有内存映射区域
     pub fn clear(&mut self) {
         self.entries.clear();
+    }
+
+    /// 分配 DMA 缓冲区
+    ///
+    /// # 参数
+    /// * `size`: 缓冲区大小（字节）
+    /// * `alignment`: 对齐要求（字节）
+    ///
+    /// # 返回值
+    /// * `Ok((物理地址, 能力))`: 分配成功
+    /// * `Err(DriverError)`: 分配失败
+    pub fn allocate_dma_buffer(
+        &mut self,
+        size: usize,
+        alignment: usize
+    ) -> Result<(u64, crate::security::capability::Capability), crate::drivers::ipc_protocol::DriverError> {
+        self.dma_allocator.allocate_dma_buffer(size, alignment)
+    }
+
+    /// 释放 DMA 缓冲区
+    ///
+    /// # 参数
+    /// * `phys_addr`: 要释放的缓冲区的物理地址
+    ///
+    /// # 返回值
+    /// * `Ok(())`: 释放成功
+    /// * `Err(DriverError)`: 释放失败
+    pub fn deallocate_dma_buffer(
+        &mut self,
+        phys_addr: u64
+    ) -> Result<(), crate::drivers::ipc_protocol::DriverError> {
+        self.dma_allocator.deallocate_dma_buffer(phys_addr)
     }
 }
 
