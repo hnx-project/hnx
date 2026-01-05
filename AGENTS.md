@@ -319,7 +319,7 @@ meson run -C build run-simple
 ## 关键实现细节
 
 ### 当前状态
-- **版本:** 0.2.0-alpha.1
+- **版本:** 0.3.0-alpha.1
 - **架构:** 支持 AArch64 和 QEMU virt 机器
 - **核心功能:**
   - 具有基本调度的微内核

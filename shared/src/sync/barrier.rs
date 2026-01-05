@@ -3,7 +3,8 @@
 //! This module implements various synchronization primitives that can be used
 //! by processes to coordinate access to shared resources.
 
-use crate::sync::{Mutex, Semaphore, Condvar};
+use crate::sync::mutex::{Condvar, Mutex, Semaphore};
+use core::cell::UnsafeCell;
 use core::ops::{Deref, DerefMut};
 
 /// A barrier for process synchronization
@@ -61,7 +62,7 @@ pub struct RwLock<T: ?Sized> {
     // Writer active flag
     writer_active: Mutex<bool>,
     // Data protected by the lock
-    data: T,
+    data: UnsafeCell<T>,
 }
 
 unsafe impl<T: ?Sized + Send> Send for RwLock<T> {}
@@ -74,7 +75,7 @@ impl<T> RwLock<T> {
             readers: Mutex::new(0),
             writer_sem: Semaphore::new(1),
             writer_active: Mutex::new(false),
-            data,
+            data: UnsafeCell::new(data),
         }
     }
 }
@@ -109,13 +110,13 @@ impl<T: ?Sized> RwLock<T> {
         *writer_active = true;
         
         // Wait for all readers to finish
-        let readers = self.readers.lock();
-        while *readers > 0 {
-            // In a more advanced implementation, we would wait for a condition variable
+        loop {
+            let readers = self.readers.lock();
+            if *readers == 0 {
+                break;
+            }
             drop(readers);
             core::hint::spin_loop();
-            // Reacquire the lock
-            // Note: This is not ideal, but sufficient for a basic implementation
         }
         
         RwLockWriteGuard { lock: self }
@@ -131,7 +132,7 @@ impl<'a, T: ?Sized> Deref for RwLockReadGuard<'a, T> {
     type Target = T;
     
     fn deref(&self) -> &Self::Target {
-        &self.lock.data
+        unsafe { &*self.lock.data.get() }
     }
 }
 
@@ -151,13 +152,13 @@ impl<'a, T: ?Sized> Deref for RwLockWriteGuard<'a, T> {
     type Target = T;
     
     fn deref(&self) -> &Self::Target {
-        &self.lock.data
+        unsafe { &*self.lock.data.get() }
     }
 }
 
 impl<'a, T: ?Sized> DerefMut for RwLockWriteGuard<'a, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.lock.data
+        unsafe { &mut *self.lock.data.get() }
     }
 }
 

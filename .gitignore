@@ -1,5 +1,6 @@
 target
 /build
+/builddir
 /venv
 .DS_Store
 *.old

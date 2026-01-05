@@ -25,7 +25,7 @@ mod memory;         // Memory management
 mod panic;          // Panic handler
 mod process;        // Process/thread management
 mod security;       // Capability-based security
-mod sync;           // Synchronization primitives
+
 mod user;           // User space process support
 mod loader;         // ELF/CPIO loader and service manager
 
