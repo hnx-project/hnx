@@ -29,6 +29,8 @@ mod security;       // Capability-based security
 mod user;           // User space process support
 mod loader;         // ELF/CPIO loader and service manager
 
+mod kernel;         // HNX Kernel Object
+
 // ===== Non-Core Modules (TODO: Move to User Space) =====
 // These modules should eventually be moved to user space services:
 // - fs/        → File System Service
@@ -43,6 +45,9 @@ const ARCH: &str = crate::arch::ARCH_NAME;
 /// HNX Microkernel Rust entry point (called from assembly boot code)
 #[no_mangle]
 pub extern "C" fn rust_main() -> ! {
+    // Initialize the global Kernel object. This must be the first step.
+    kernel::init();
+
     init_phase1_hardware();
     init_phase2_memory();
     init_phase3_processes();

@@ -1158,7 +1158,7 @@ fn sys_mmap(addr: usize, length: usize, prot: usize, flags: usize, fd: usize, of
     }
     
     // Add to memory map manager
-    match crate::memory::mmap_manager::add_memory_map(entry) {
+    match crate::kernel::get_kernel().memory_manager.lock().add_entry(entry) {
         Ok(()) => effective_addr as SysResult,
         Err(()) => -1 // Failed to add mapping (likely due to overlap)
     }
@@ -1184,7 +1184,7 @@ fn sys_munmap(addr: usize, length: usize) -> SysResult {
     // Check if there are any mappings in the specified range
     let range = addr..(addr + aligned_length);
     {
-        let manager = crate::memory::mmap_manager::MEMORY_MAP_MANAGER.lock();
+        let manager = crate::kernel::get_kernel().memory_manager.lock();
         let overlapping_entries = manager.find_overlapping_entries(range.clone());
         if overlapping_entries.is_empty() {
             // No mappings found in the specified range, but this is not an error according to POSIX
@@ -1193,7 +1193,7 @@ fn sys_munmap(addr: usize, length: usize) -> SysResult {
     } // Release the lock
     
     // Remove memory mappings in the specified range
-    let removed_count = crate::memory::mmap_manager::remove_memory_maps_in_range(range);
+    let removed_count = crate::kernel::get_kernel().memory_manager.lock().remove_entries_in_range(range);
     
     // Return success (0)
     0
@@ -1225,7 +1225,7 @@ fn sys_mprotect(addr: usize, length: usize, prot: usize) -> SysResult {
     let range = addr..(addr + aligned_length);
     
     // Lock the memory map manager for the entire operation to ensure atomicity
-    let mut manager = crate::memory::mmap_manager::MEMORY_MAP_MANAGER.lock();
+    let mut manager = crate::kernel::get_kernel().memory_manager.lock();
     
     // Check if there are overlapping entries
     let overlapping_entries = manager.find_overlapping_entries(range.clone());

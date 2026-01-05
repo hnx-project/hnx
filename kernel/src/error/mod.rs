@@ -68,34 +68,3 @@ pub fn panic_handler(
         crate::arch::cpu::wait_for_interrupt();
     }
 }
-
-// These macros are now defined in console.rs to avoid conflicts
-// #[macro_export]
-// macro_rules! error {
-//     ($($arg:tt)*) => ({
-//         $crate::console::log("ERROR", module_path!(), format_args!($($arg)*));
-//     });
-// }
-//
-// #[macro_export]
-// macro_rules! warn {
-//     ($($arg:tt)*) => ({
-//         $crate::console::log("WARN", module_path!(), format_args!($($arg)*));
-//     });
-// }
-//
-// #[macro_export]
-// macro_rules! info {
-//     ($($arg:tt)*) => ({
-//         $crate::console::log("INFO", module_path!(), format_args!($($arg)*));
-//     });
-// }
-//
-// #[macro_export]
-// macro_rules! debug {
-//     ($($arg:tt)*) => ({
-//         // Debug messages are only enabled in debug builds
-//         #[cfg(debug_assertions)]
-//         $crate::console::log("DEBUG", module_path!(), format_args!($($arg)*));
-//     });
-// }

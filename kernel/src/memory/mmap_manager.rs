@@ -277,53 +277,6 @@ impl MemoryMapManager {
     }
 }
 
-// 全局内存映射管理器实例
-pub static MEMORY_MAP_MANAGER: Mutex<MemoryMapManager> = Mutex::new(MemoryMapManager::new());
-
-/// 初始化内存映射管理器
-pub fn init() {
-    // 初始化已经在lazy_static中完成
-    crate::info!("Memory map manager initialized");
-}
-
-/// 添加新的内存映射区域
-///
-/// # 参数
-/// * `entry` - 要添加的内存映射区域
-///
-/// # 返回值
-/// 成功返回Ok(()), 如果与现有区域冲突则返回Err(())
-pub fn add_memory_map(entry: MemoryMapEntry) -> Result<(), ()> {
-    MEMORY_MAP_MANAGER.lock().add_entry(entry)
-}
-
-/// 删除指定范围的内存映射区域
-///
-/// # 参数
-/// * `range` - 要删除的地址范围
-///
-/// # 返回值
-/// 返回被删除的区域数量
-pub fn remove_memory_maps_in_range(range: Range<usize>) -> usize {
-    MEMORY_MAP_MANAGER.lock().remove_entries_in_range(range)
-}
-
-/// 查找包含指定地址的内存映射区域
-///
-/// # 参数
-/// * `addr` - 要查找的地址
-///
-/// # 返回值
-/// 如果找到返回对应的区域，否则返回None
-pub fn find_memory_map(addr: usize) -> Option<MemoryMapEntry> {
-    MEMORY_MAP_MANAGER.lock().find_entry(addr).cloned()
-}
-
-/// 获取所有内存映射区域
-pub fn get_all_memory_maps() -> heapless::Vec<MemoryMapEntry, 64> {
-    MEMORY_MAP_MANAGER.lock().entries.clone()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

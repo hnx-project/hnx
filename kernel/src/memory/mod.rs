@@ -72,7 +72,7 @@ pub fn init(boot_info: BootInfo) {
     
     // Initialize memory mapping manager
     crate::info!("memory: initializing memory map manager");
-    mmap_manager::init();
+    
     
     crate::info!("memory: initialization complete");
 }
