@@ -69,3 +69,7 @@ hnx/                              # 项目根目录
 └── README.md                     # 项目说明
 ```
 
+## Documentation
+
+- Boot Process (AArch64 + Rust):
+  https://tinchy.site/hnx/a001-booting-hnx-kernel
