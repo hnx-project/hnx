@@ -1,13 +1,4 @@
 //! HNX Microkernel - Main Entry Point
-//!
-//! The HNX microkernel provides only the essential functionality:
-//! 1. **Process & Thread Management**: Scheduling, context switching
-//! 2. **Memory Management**: Virtual memory, physical page allocation
-//! 3. **Inter-Process Communication (IPC)**: Message passing, shared memory
-//! 4. **Interrupt & Exception Handling**: Hardware interrupt routing
-//! 5. **Minimal Device Abstractions**: UART, GIC, timer
-//! 6. **Security & Capabilities**: Fine-grained access control
-//!
 //! All other functionality (filesystem, networking, device drivers) runs in user space.
 
 #![no_std]

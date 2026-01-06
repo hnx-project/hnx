@@ -149,7 +149,7 @@ pub struct MemoryManager {
 
 impl MemoryManager {
     /// 创建新的内存映射管理器
-    pub const fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self {
             entries: heapless::Vec::new(),
             dma_allocator: DmaAllocator::new(),
@@ -388,4 +388,57 @@ impl MemoryManager {
     ) -> Result<(), crate::drivers::ipc_protocol::DriverError> {
         self.dma_allocator.deallocate_dma_buffer(phys_addr)
     }
+}
+
+/// 全局内存管理器实例
+///
+/// # 安全性
+///
+/// `static mut` 是不安全的，但我们在内存初始化时只对其进行一次写操作，
+/// 并且之后的所有访问都通过安全的 `get_memory_manager()` 函数进行，因此这种用法是可控的。
+#[used]
+static mut MEMORY_MANAGER: Option<Mutex<MemoryManager>> = None;
+
+/// 初始化全局内存管理器实例
+pub fn init_manager() {
+    crate::info!("memory: initializing global memory manager");
+    let manager = Mutex::new(MemoryManager::new());
+    unsafe {
+        MEMORY_MANAGER = Some(manager);
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    }
+    crate::info!("memory: global memory manager initialized");
+}
+
+/// 获取对全局内存管理器实例的安全引用
+pub fn get_memory_manager() -> &'static Mutex<MemoryManager> {
+    unsafe {
+        MEMORY_MANAGER.as_ref().expect("Memory manager has not been initialized")
+    }
+}
+
+/// 初始化内存管理子系统
+///
+/// 这个函数初始化所有内存管理组件，正确的顺序为：
+/// 1. 物理内存分配器（伙伴分配器）
+/// 2. 虚拟内存管理
+/// 3. 用于小对象分配的 slab 分配器
+/// 4. 用户空间的内存映射管理器
+///
+/// 注意：在当前架构中，内存初始化是通过 MemoryManager 的 init 方法执行的。
+/// 这个函数获取全局内存管理器实例并初始化它。
+pub fn init() {
+    crate::info!("memory: initializing subsystem via global memory manager");
+
+    // 确保全局管理器已初始化
+    unsafe {
+        if MEMORY_MANAGER.is_none() {
+            init_manager();
+        }
+    }
+
+    let mut manager = get_memory_manager().lock();
+    manager.init();
+
+    crate::info!("memory: initialization complete");
 }

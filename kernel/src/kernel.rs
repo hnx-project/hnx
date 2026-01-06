@@ -8,8 +8,8 @@ use shared::sync::mutex::Mutex;
 
 /// HNX 内核的顶层结构体
 pub struct Kernel {
-    /// 内存映射管理器
-    pub memory_manager: Mutex<MemoryManager>,
+    /// 内存映射管理器（全局单例引用）
+    pub memory_manager: &'static Mutex<MemoryManager>,
     /// 设备管理器
     pub device_manager: Mutex<DeviceManager>,
     /// 能力管理器
@@ -26,8 +26,9 @@ impl Kernel {
     /// 创建一个新的 Kernel 实例
     ///
     /// 这个函数会在内核初始化时被调用，按顺序创建所有内核管理器。
+    /// 注意：内存管理器使用全局单例，必须在调用此函数之前初始化。
     pub fn new() -> Self {
-        let memory_manager = Mutex::new(MemoryManager::new());
+        let memory_manager = crate::memory::get_memory_manager();
         let device_manager = Mutex::new(DeviceManager::new());
         let capability_manager = Mutex::new(CapabilityManager::new());
         let process_manager = Mutex::new(ProcessManager::new());
@@ -56,6 +57,14 @@ static mut KERNEL: Option<Kernel> = None;
 /// 初始化全局内核实例
 pub fn init() {
     crate::info!("Creating kernel object...");
+
+    // ======== 内存管理器单例实例化 ========
+    // 创建全局内存管理器单例实例（但尚未初始化内存子系统）
+    crate::info!("Creating memory manager singleton instance...");
+    crate::memory::init_manager();
+
+    // ======== 创建内核对象 ========
+    // 注意：Kernel::new() 需要引用已创建的内存管理器单例
     let kernel = Kernel::new();
     unsafe {
         KERNEL = Some(kernel);
@@ -74,10 +83,11 @@ pub fn init() {
     crate::arch::init();
     crate::info!("Architecture initialized");
 
-    // 内存管理器初始化
-    unsafe { KERNEL.as_mut().unwrap().memory_manager.lock().init() };
-    
+    // 内存管理器初始化（内存子系统）
+    crate::info!("Initializing memory subsystem...");
+    crate::memory::init();
 
+    crate::info!("Kernel initialization complete");
 }
 
 /// 获取对全局内核实例的安全引用
