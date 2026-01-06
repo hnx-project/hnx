@@ -262,3 +262,8 @@ unsafe impl Sync for BuddyAllocator {}
 
 #[global_allocator]
 pub static ALLOCATOR: BuddyAllocator = BuddyAllocator::new();
+
+/// 获取全局伙伴分配器单例实例的引用
+pub fn get_buddy_allocator() -> &'static BuddyAllocator {
+    &ALLOCATOR
+}

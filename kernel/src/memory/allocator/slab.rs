@@ -743,10 +743,15 @@ impl SlabAllocator {
 /// Global slab allocator instance
 pub static SLAB_ALLOCATOR: SlabAllocator = SlabAllocator::new();
 
+/// 获取全局slab分配器单例实例的引用
+pub fn get_slab_allocator() -> &'static SlabAllocator {
+    &SLAB_ALLOCATOR
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_slab_creation() {
         // Tests would go here

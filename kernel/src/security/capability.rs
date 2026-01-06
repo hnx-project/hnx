@@ -198,6 +198,12 @@ impl CapabilityManager {
     pub fn revoke_capability_by_object(&mut self, cap_id: CapabilityId) -> bool {
         self.capabilities.remove(&cap_id).is_some()
     }
+
+    /// Initialize the capability manager
+    pub fn init(&mut self) {
+        // Currently nothing to initialize, but kept for consistency
+        // with other manager singletons.
+    }
 }
 
 impl CapabilityManager {
@@ -214,6 +220,33 @@ impl CapabilityManager {
         } else {
             false
         }
+    }
+}
+
+/// 全局能力管理器单例实例
+///
+/// # 安全性
+///
+/// `static mut` 是不安全的，但我们在初始化时只对其进行一次写操作，
+/// 并且之后的所有访问都通过安全的 `get_capability_manager()` 函数进行，因此这种用法是可控的。
+#[used]
+static mut CAPABILITY_MANAGER: Option<Mutex<CapabilityManager>> = None;
+
+/// 初始化全局能力管理器单例实例
+pub fn init_capability_manager() {
+    crate::info!("capability: initializing global capability manager singleton");
+    let manager = Mutex::new(CapabilityManager::new());
+    unsafe {
+        CAPABILITY_MANAGER = Some(manager);
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    }
+    crate::info!("capability: global capability manager singleton initialized");
+}
+
+/// 获取对全局能力管理器单例实例的安全引用
+pub fn get_capability_manager() -> &'static Mutex<CapabilityManager> {
+    unsafe {
+        CAPABILITY_MANAGER.as_ref().expect("Capability manager has not been initialized")
     }
 }
 

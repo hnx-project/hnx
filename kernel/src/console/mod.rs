@@ -29,7 +29,12 @@ pub struct ConsoleManager {
 }
 
 // 全局控制台管理器实例（临时，迁移期间使用）
-static CONSOLE_MANAGER: ConsoleManager = ConsoleManager::new();
+static CONSOLE_MANAGER: Mutex<ConsoleManager> = Mutex::new(ConsoleManager::new());
+
+/// 获取对全局控制台管理器单例实例的安全引用
+pub fn get_console_manager() -> &'static Mutex<ConsoleManager> {
+    &CONSOLE_MANAGER
+}
 
 impl ConsoleManager {
     /// 创建新的控制台管理器
@@ -129,17 +134,17 @@ impl ConsoleManager {
 
 /// 初始化控制台
 pub fn init() {
-    CONSOLE_MANAGER.init();
+    CONSOLE_MANAGER.lock().init();
 }
 
 pub fn driver_ready() {
-    CONSOLE_MANAGER.driver_ready();
+    CONSOLE_MANAGER.lock().driver_ready();
 }
 
 
 /// 读取一个字符（当前未实现通用输入，返回 None）
 pub fn getc() -> Option<u8> {
-    CONSOLE_MANAGER.getc()
+    CONSOLE_MANAGER.lock().getc()
 }
 
 /// 内核打印宏
@@ -162,11 +167,11 @@ macro_rules! println {
 }
 
 pub fn write(args: fmt::Arguments) {
-    CONSOLE_MANAGER.write(args);
+    CONSOLE_MANAGER.lock().write(args);
 }
 
 pub fn write_raw(s: &str) {
-    CONSOLE_MANAGER.write_raw(s);
+    CONSOLE_MANAGER.lock().write_raw(s);
 }
 
 #[macro_export]
@@ -184,7 +189,7 @@ macro_rules! println_raw {
 }
 
 pub fn log(level: &str, module: &str, args: fmt::Arguments) {
-    CONSOLE_MANAGER.log(level, module, args);
+    CONSOLE_MANAGER.lock().log(level, module, args);
 }
 
 pub mod loglvl {

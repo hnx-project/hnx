@@ -11,6 +11,7 @@ use alloc::vec::Vec;
 use crate::drivers::ipc_protocol::DriverError;
 use crate::memory::physical::alloc_pages;
 use crate::security::capability::Capability;
+use shared::sync::mutex::Mutex;
 
 /// Information about a DMA region
 #[derive(Debug, Clone)]
@@ -34,6 +35,13 @@ impl DmaAllocator {
             allocated_regions: BTreeMap::new(),
             free_regions: Vec::new(),
         }
+    }
+
+    /// Initialize the DMA allocator
+    /// This method prepares the allocator for use, setting up any necessary structures.
+    pub fn init(&mut self) {
+        // Currently nothing to initialize, but kept for consistency
+        // with other manager singletons.
     }
 
     /// Allocate a DMA buffer
@@ -82,5 +90,32 @@ impl DmaAllocator {
         } else {
             Err(DriverError::InvalidArgument)
         }
+    }
+}
+
+/// 全局DMA分配器单例实例
+///
+/// # 安全性
+///
+/// `static mut` 是不安全的，但我们在初始化时只对其进行一次写操作，
+/// 并且之后的所有访问都通过安全的 `get_dma_allocator()` 函数进行，因此这种用法是可控的。
+#[used]
+static mut DMA_ALLOCATOR: Option<Mutex<DmaAllocator>> = None;
+
+/// 初始化全局DMA分配器单例实例
+pub fn init_dma_allocator() {
+    crate::info!("dma: initializing global DMA allocator singleton");
+    let allocator = Mutex::new(DmaAllocator::new());
+    unsafe {
+        DMA_ALLOCATOR = Some(allocator);
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    }
+    crate::info!("dma: global DMA allocator singleton initialized");
+}
+
+/// 获取对全局DMA分配器单例实例的安全引用
+pub fn get_dma_allocator() -> &'static Mutex<DmaAllocator> {
+    unsafe {
+        DMA_ALLOCATOR.as_ref().expect("DMA allocator has not been initialized")
     }
 }

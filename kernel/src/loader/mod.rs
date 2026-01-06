@@ -32,6 +32,7 @@ pub mod bootstrap_elf;
 pub use initrd::{get_initrd_base, get_initrd_size, find_file_in_initrd};
 
 use core::sync::atomic::{AtomicUsize, Ordering};
+use shared::sync::mutex::Mutex;
 
 /// 加载器管理器
 ///
@@ -48,14 +49,9 @@ pub struct LoaderManager {
 
 /// 初始化加载器管理器
 pub fn init(dtb_ptr: usize) {
-    // 确保全局内核实例已初始化
-    crate::println!("[loader::init] Calling get_kernel()...");
-    crate::kernel::get_kernel().loader_manager.lock().init(dtb_ptr);
-    //（临时，迁移期间使用）
-    // crate::println!("[loader::init] Initializing static loader manager...");
-    // unsafe {
-    //     LOADER_MANAGER.init(dtb_ptr);
-    // }
+    // 使用全局加载器管理器单例
+    crate::println!("[loader::init] Calling get_loader_manager()...");
+    get_loader_manager().lock().init(dtb_ptr);
     crate::println!("[loader::init] Done");
 }
 
@@ -375,4 +371,31 @@ fn read_hex(data: &[u8], offset: usize, len: usize) -> Result<u32, ()> {
 
     // 所有尝试都失败
     Err(())
+}
+
+/// 全局加载器管理器单例实例
+///
+/// # 安全性
+///
+/// `static mut` 是不安全的，但我们在初始化时只对其进行一次写操作，
+/// 并且之后的所有访问都通过安全的 `get_loader_manager()` 函数进行，因此这种用法是可控的。
+#[used]
+static mut LOADER_MANAGER: Option<Mutex<LoaderManager>> = None;
+
+/// 初始化全局加载器管理器单例实例
+pub fn init_loader_manager() {
+    crate::info!("loader: initializing global loader manager singleton");
+    let manager = Mutex::new(LoaderManager::new());
+    unsafe {
+        LOADER_MANAGER = Some(manager);
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    }
+    crate::info!("loader: global loader manager singleton initialized");
+}
+
+/// 获取对全局加载器管理器单例实例的安全引用
+pub fn get_loader_manager() -> &'static Mutex<LoaderManager> {
+    unsafe {
+        LOADER_MANAGER.as_ref().expect("Loader manager has not been initialized")
+    }
 }

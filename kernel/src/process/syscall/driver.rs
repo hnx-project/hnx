@@ -42,7 +42,7 @@ pub fn sys_driver_register(reg_ptr: usize, reg_size: usize) -> SysResult {
     };
 
     // Register with device manager
-    let result = crate::kernel::get_kernel().device_manager.lock().register_driver(registration, current_epid);
+    let result = crate::drivers::device_manager::get_device_manager().lock().register_driver(registration, current_epid);
     
     match result {
         Ok(driver_id) => driver_id.0 as SysResult,
@@ -59,7 +59,7 @@ pub fn sys_driver_request_irq(irq_num: u32) -> SysResult {
         driver_epid: current_epid,
     };
 
-    match crate::kernel::get_kernel().device_manager.lock().request_irq(req) {
+    match crate::drivers::device_manager::get_device_manager().lock().request_irq(req) {
         Ok(()) => 0,
         Err(_) => -1, // Request failed
     }
@@ -74,13 +74,13 @@ pub fn sys_driver_map_mmio(phys_addr: u64, size: usize) -> SysResult {
         driver_epid: current_epid,
     };
 
-    let result = crate::kernel::get_kernel().device_manager.lock().request_mmio_mapping(req);
+    let result = crate::drivers::device_manager::get_device_manager().lock().request_mmio_mapping(req);
     
     match result {
         Ok(capability) => {
             // The capability is already a security::capability::Capability
             // Grant capability to the requesting process
-            if crate::kernel::get_kernel().capability_manager.lock().grant_capability(current_epid.0, capability.clone()).is_ok() {
+            if crate::security::capability::get_capability_manager().lock().grant_capability(current_epid.0, capability.clone()).is_ok() {
                 // Return capability ID to user
                 capability.id().0 as SysResult
             } else {
@@ -96,7 +96,7 @@ pub fn sys_driver_dma_alloc(size: usize, alignment: usize) -> SysResult {
     let current_epid = EndpointId(crate::core::scheduler::current_pid());
 
     // Allocate DMA buffer
-    let result = crate::kernel::get_kernel().memory_manager.lock().dma_allocator.allocate_dma_buffer(size, alignment);
+    let result = crate::memory::allocator::get_dma_allocator().lock().allocate_dma_buffer(size, alignment);
     
     match result {
         Ok((phys_addr, capability)) => {
@@ -120,7 +120,7 @@ pub fn sys_driver_dma_alloc(size: usize, alignment: usize) -> SysResult {
             );
             
             // Grant capability to the requesting process
-            if crate::kernel::get_kernel().capability_manager.lock().grant_capability(current_epid.0, security_capability).is_ok() {
+            if crate::security::capability::get_capability_manager().lock().grant_capability(current_epid.0, security_capability).is_ok() {
                 // Return physical address to user (in a real implementation, we'd return a handle)
                 phys_addr as SysResult
             } else {

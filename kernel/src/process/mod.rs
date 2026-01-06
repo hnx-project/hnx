@@ -494,6 +494,33 @@ impl ProcessManager {
     }
 }
 
+/// 全局进程管理器单例实例
+///
+/// # 安全性
+///
+/// `static mut` 是不安全的，但我们在初始化时只对其进行一次写操作，
+/// 并且之后的所有访问都通过安全的 `get_process_manager()` 函数进行，因此这种用法是可控的。
+#[used]
+static mut PROCESS_MANAGER: Option<Mutex<ProcessManager>> = None;
+
+/// 初始化全局进程管理器单例实例
+pub fn init_process_manager() {
+    crate::info!("process: initializing global process manager singleton");
+    let manager = Mutex::new(ProcessManager::new());
+    unsafe {
+        PROCESS_MANAGER = Some(manager);
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    }
+    crate::info!("process: global process manager singleton initialized");
+}
+
+/// 获取对全局进程管理器单例实例的安全引用
+pub fn get_process_manager() -> &'static Mutex<ProcessManager> {
+    unsafe {
+        PROCESS_MANAGER.as_ref().expect("Process manager has not been initialized")
+    }
+}
+
 // Re-export commonly used types
 pub use task::{Task, TaskState, TaskContext, TaskId, Asid, allocate_asid};
 
@@ -512,150 +539,150 @@ pub fn ipc_handler(msg: &crate::core::ipc::IpcMessage) -> crate::core::ipc::IpcR
 // ===== Ready Queue Management =====
 
 pub fn ready_queue_push(pid: u32) {
-    crate::kernel::get_kernel().process_manager.lock().ready_queue_push(pid);
+    crate::process::get_process_manager().lock().ready_queue_push(pid);
 }
 
 pub fn ready_queue_pop() -> Option<u32> {
-    crate::kernel::get_kernel().process_manager.lock().ready_queue_pop()
+    crate::process::get_process_manager().lock().ready_queue_pop()
 }
 
 // ===== Process Creation =====
 
 /// Create a new process with specified priority
 pub fn create_process(priority: u8) -> Option<u32> {
-    crate::kernel::get_kernel().process_manager.lock().create_process(priority)
+    crate::process::get_process_manager().lock().create_process(priority)
 }
 
 /// Create a child process (for fork)
 pub fn create_child_process(parent_pid: u32, priority: u8, ttbr0_base: usize, asid: u16) -> Option<u32> {
-    crate::kernel::get_kernel().process_manager.lock().create_child_process(parent_pid, priority, ttbr0_base, asid)
+    crate::process::get_process_manager().lock().create_child_process(parent_pid, priority, ttbr0_base, asid)
 }
 
 /// Spawn a kernel task (no user space)
 pub fn spawn_kernel_task(_entry: fn() -> !) -> u32 {
-    crate::kernel::get_kernel().process_manager.lock().spawn_kernel_task(_entry)
+    crate::process::get_process_manager().lock().spawn_kernel_task(_entry)
 }
 
 // ===== Process State Management =====
 
 /// Wake a blocked process
 pub fn wake_process(pid: usize) -> bool {
-    crate::kernel::get_kernel().process_manager.lock().wake_process(pid)
+    crate::process::get_process_manager().lock().wake_process(pid)
 }
 
 /// Block a running process with optional timeout (0 = no timeout)
 pub fn block_process_timeout(pid: usize, timeout_ticks: u64) -> bool {
-    crate::kernel::get_kernel().process_manager.lock().block_process_timeout(pid, timeout_ticks)
+    crate::process::get_process_manager().lock().block_process_timeout(pid, timeout_ticks)
 }
 
 /// Block a running process indefinitely
 pub fn block_process(pid: usize) -> bool {
-    crate::kernel::get_kernel().process_manager.lock().block_process(pid)
+    crate::process::get_process_manager().lock().block_process(pid)
 }
 
 /// Get process state
 pub fn get_process_state(pid: usize) -> Option<ProcState> {
-    crate::kernel::get_kernel().process_manager.lock().get_process_state(pid)
+    crate::process::get_process_manager().lock().get_process_state(pid)
 }
 
 /// Set process state
 pub fn set_process_state(pid: usize, state: ProcState) -> bool {
-    crate::kernel::get_kernel().process_manager.lock().set_process_state(pid, state)
+    crate::process::get_process_manager().lock().set_process_state(pid, state)
 }
 
 // ===== Process Lifecycle Management =====
 
 /// Get parent PID
 pub fn get_parent_pid(pid: usize) -> Option<u32> {
-    crate::kernel::get_kernel().process_manager.lock().get_parent_pid(pid)
+    crate::process::get_process_manager().lock().get_parent_pid(pid)
 }
 
 /// Set exit status and transition to zombie state
 pub fn set_exit_status(pid: usize, status: i32) -> bool {
-    crate::kernel::get_kernel().process_manager.lock().set_exit_status(pid, status)
+    crate::process::get_process_manager().lock().set_exit_status(pid, status)
 }
 
 /// Get exit status (for wait)
 pub fn get_exit_status(pid: usize) -> Option<i32> {
-    crate::kernel::get_kernel().process_manager.lock().get_exit_status(pid)
+    crate::process::get_process_manager().lock().get_exit_status(pid)
 }
 
 /// Reap zombie process - fully free PCB
 pub fn reap_zombie(pid: usize) -> bool {
-    crate::kernel::get_kernel().process_manager.lock().reap_zombie(pid)
+    crate::process::get_process_manager().lock().reap_zombie(pid)
 }
 
 /// Find any zombie child of a parent
 pub fn find_zombie_child(parent_pid: u32) -> Option<(u32, i32)> {
-    crate::kernel::get_kernel().process_manager.lock().find_zombie_child(parent_pid)
+    crate::process::get_process_manager().lock().find_zombie_child(parent_pid)
 }
 
 /// Check if process has any children
 pub fn has_children(parent_pid: u32) -> bool {
-    crate::kernel::get_kernel().process_manager.lock().has_children(parent_pid)
+    crate::process::get_process_manager().lock().has_children(parent_pid)
 }
 
 // ===== Process Group Management =====
 
 /// Get process group ID
 pub fn get_pgid(pid: usize) -> Option<u32> {
-    crate::kernel::get_kernel().process_manager.lock().get_pgid(pid)
+    crate::process::get_process_manager().lock().get_pgid(pid)
 }
 
 /// Set process group ID
 pub fn set_pgid(pid: usize, pgid: u32) -> bool {
-    crate::kernel::get_kernel().process_manager.lock().set_pgid(pid, pgid)
+    crate::process::get_process_manager().lock().set_pgid(pid, pgid)
 }
 
 // ===== Process Memory Management =====
 
 /// Update PCB with TTBR0 and ASID (for fork)
 pub fn update_process_memory(pid: usize, ttbr0_base: usize, asid: u16) -> bool {
-    crate::kernel::get_kernel().process_manager.lock().update_process_memory(pid, ttbr0_base, asid)
+    crate::process::get_process_manager().lock().update_process_memory(pid, ttbr0_base, asid)
 }
 
 // ===== Timeout Management =====
 
 /// Get current system ticks
 pub fn get_current_ticks() -> u64 {
-    crate::kernel::get_kernel().process_manager.lock().get_current_ticks()
+    crate::process::get_process_manager().lock().get_current_ticks()
 }
 
 /// Increment system ticks (called from timer interrupt)
 pub fn increment_ticks() {
-    crate::kernel::get_kernel().process_manager.lock().increment_ticks()
+    crate::process::get_process_manager().lock().increment_ticks()
 }
 
 /// Check for timed-out processes and wake them
 pub fn check_timeouts() {
-    crate::kernel::get_kernel().process_manager.lock().check_timeouts()
+    crate::process::get_process_manager().lock().check_timeouts()
 }
 
 /// Timer tick handler (call from timer interrupt)
 pub fn timer_tick() {
-    crate::kernel::get_kernel().process_manager.lock().timer_tick()
+    crate::process::get_process_manager().lock().timer_tick()
 }
 
 // ===== Scheduling Support =====
 
 /// Update process priority
 pub fn set_process_priority(pid: usize, priority: u8) -> bool {
-    crate::kernel::get_kernel().process_manager.lock().set_process_priority(pid, priority)
+    crate::process::get_process_manager().lock().set_process_priority(pid, priority)
 }
 
 /// Increment process tick count
 pub fn increment_process_ticks(pid: usize) -> bool {
-    crate::kernel::get_kernel().process_manager.lock().increment_process_ticks(pid)
+    crate::process::get_process_manager().lock().increment_process_ticks(pid)
 }
 
 /// Round-robin tick handler
 pub fn on_rr_tick() {
-    crate::kernel::get_kernel().process_manager.lock().on_rr_tick()
+    crate::process::get_process_manager().lock().on_rr_tick()
 }
 
 /// Get process information for scheduling
 pub fn get_process_for_scheduling(pid: u32) -> Option<(usize, usize, usize, u16)> {
-    crate::kernel::get_kernel().process_manager.lock().get_process_for_scheduling(pid)
+    crate::process::get_process_manager().lock().get_process_for_scheduling(pid)
 }
 
 /// Update process context (PC and SP)
@@ -663,10 +690,10 @@ pub fn get_process_for_scheduling(pid: u32) -> Option<(usize, usize, usize, u16)
 /// This should be called during context switching to save the current
 /// execution point before switching away.
 pub fn update_process_context(pid: u32, pc: usize, sp: usize) -> bool {
-    crate::kernel::get_kernel().process_manager.lock().update_process_context(pid, pc, sp)
+    crate::process::get_process_manager().lock().update_process_context(pid, pc, sp)
 }
 
 /// Debug function to print ready queue state
 pub fn debug_print_ready_queue() {
-    crate::kernel::get_kernel().process_manager.lock().debug_print_ready_queue()
+    crate::process::get_process_manager().lock().debug_print_ready_queue()
 }

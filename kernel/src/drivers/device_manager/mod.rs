@@ -267,6 +267,12 @@ impl DeviceManager {
             false
         }
     }
+
+    /// Initialize the device manager
+    pub fn init(&mut self) {
+        // Currently nothing to initialize, but kept for consistency
+        // with other manager singletons.
+    }
 }
 
 /// Get current timestamp in microseconds
@@ -274,4 +280,31 @@ fn get_timestamp() -> u64 {
     // TODO: Implement proper timestamp retrieval
     // For now, we'll just return a dummy value
     0
+}
+
+/// 全局设备管理器单例实例
+///
+/// # 安全性
+///
+/// `static mut` 是不安全的，但我们在初始化时只对其进行一次写操作，
+/// 并且之后的所有访问都通过安全的 `get_device_manager()` 函数进行，因此这种用法是可控的。
+#[used]
+static mut DEVICE_MANAGER: Option<Mutex<DeviceManager>> = None;
+
+/// 初始化全局设备管理器单例实例
+pub fn init_device_manager() {
+    crate::info!("device_manager: initializing global device manager singleton");
+    let manager = Mutex::new(DeviceManager::new());
+    unsafe {
+        DEVICE_MANAGER = Some(manager);
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    }
+    crate::info!("device_manager: global device manager singleton initialized");
+}
+
+/// 获取对全局设备管理器单例实例的安全引用
+pub fn get_device_manager() -> &'static Mutex<DeviceManager> {
+    unsafe {
+        DEVICE_MANAGER.as_ref().expect("Device manager has not been initialized")
+    }
 }
