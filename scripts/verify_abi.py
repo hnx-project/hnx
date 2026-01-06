@@ -68,7 +68,7 @@ def extract_constants_from_c(filepath):
 
 def main():
     # Define paths
-    kernel_abi = Path("src/kernel/src/abi/mod.rs")
+    kernel_abi = Path("kernel/src/abi/mod.rs")
     include_abi = Path("include/hnx/abi")
     
     # Extract constants

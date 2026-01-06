@@ -19,7 +19,46 @@ def load_board_config(board_name, config_dir="configs"):
     
     return config
 
-def generate_qemu_config(board_config, arch, output_dir):
+def process_dtb_config(board_config, board_name, output_dir):
+    """处理 DTB 配置：复制 DTB 文件到输出目录"""
+    dtb_config = board_config.get("dtb", {})
+
+    # 向后兼容：如果 dtb 是布尔值，使用默认文件名
+    if isinstance(dtb_config, bool):
+        if dtb_config:
+            dtb_config = {"filename": f"{board_name}.dtb", "required": True}
+        else:
+            dtb_config = {"filename": None, "required": False}
+    elif isinstance(dtb_config, str):
+        # 如果 dtb 是字符串，视为文件名
+        dtb_config = {"filename": dtb_config, "required": True}
+
+    # 确保 dtb_config 是字典
+    if not isinstance(dtb_config, dict):
+        dtb_config = {}
+
+    filename = dtb_config.get("filename")
+    required = dtb_config.get("required", False)
+
+    dtb_path = None
+    if filename and required:
+        # 在 configs/dtbs 目录中查找 DTB 文件
+        source_dtb = Path("configs/dtbs") / filename
+        if source_dtb.exists():
+            # 复制到输出目录
+            dest_dtb = output_dir / filename
+            import shutil
+            shutil.copy2(source_dtb, dest_dtb)
+            dtb_path = dest_dtb
+            print(f"  DTB file: {filename} (copied from {source_dtb})")
+        elif required:
+            raise FileNotFoundError(f"Required DTB file not found: {source_dtb}")
+        else:
+            print(f"  DTB file: {filename} (not found, optional)")
+
+    return dtb_path
+
+def generate_qemu_config(board_config, arch, output_dir, board_name):
     """从 board 配置生成 QEMU 运行配置"""
     qemu_config = {
         "machine": board_config.get("machine", "virt"),
@@ -29,16 +68,22 @@ def generate_qemu_config(board_config, arch, output_dir):
         "kernel_args": board_config.get("kernel_args", ""),
         "description": board_config.get("description", ""),
     }
-    
+
     # 根据架构调整
     if arch == "x86_64":
         qemu_config["cpu"] = board_config.get("cpu", "qemu64")
-    
+
+    # 处理 DTB 配置
+    dtb_path = process_dtb_config(board_config, board_name, output_dir)
+    if dtb_path:
+        qemu_config["dtb"] = str(dtb_path)
+        qemu_config["dtb_filename"] = dtb_path.name
+
     # 保存为 JSON（供 Python 脚本使用）
     config_file = Path(output_dir) / "qemu_config.json"
     with open(config_file, 'w') as f:
         json.dump(qemu_config, f, indent=2)
-    
+
     return qemu_config
 
 def main():
@@ -94,7 +139,7 @@ def main():
     }
     
     # 5. 生成 QEMU 运行配置
-    qemu_config = generate_qemu_config(board_config, args.arch, output_dir)
+    qemu_config = generate_qemu_config(board_config, args.arch, output_dir, args.board)
     merged_config["qemu"] = qemu_config
     
     # 6. 保存完整配置
@@ -112,6 +157,9 @@ def main():
         f.write(f"export SPACE_TARGET={args.arch}-unknown-hnx\n")
         f.write(f"export QEMU_MACHINE={qemu_config['machine']}\n")
         f.write(f"export QEMU_CPU={qemu_config['cpu']}\n")
+        if 'dtb' in qemu_config:
+            f.write(f"export QEMU_DTB={qemu_config['dtb']}\n")
+            f.write(f"export QEMU_DTB_FILENAME={qemu_config['dtb_filename']}\n")
     
     # 8. 生成 Makefile 片段
     makefile_fragment = output_dir / "Makefile.inc"
@@ -122,6 +170,9 @@ def main():
         f.write(f"QEMU_MEMORY := {qemu_config['memory']}\n")
         if qemu_config['kernel_args']:
             f.write(f"QEMU_KERNEL_ARGS := {qemu_config['kernel_args']}\n")
+        if 'dtb' in qemu_config:
+            f.write(f"QEMU_DTB := {qemu_config['dtb']}\n")
+            f.write(f"QEMU_DTB_FILENAME := {qemu_config['dtb_filename']}\n")
     
     print(f"\nConfiguration files generated:")
     print(f"  {config_file}")
@@ -133,6 +184,8 @@ def main():
     print(f"  Machine: {qemu_config['machine']}")
     print(f"  CPU: {qemu_config['cpu']}")
     print(f"  Memory: {qemu_config['memory']}")
+    if 'dtb' in qemu_config:
+        print(f"  DTB: {qemu_config['dtb_filename']} ({qemu_config['dtb']})")
     if qemu_config['description']:
         print(f"  Description: {qemu_config['description']}")
 

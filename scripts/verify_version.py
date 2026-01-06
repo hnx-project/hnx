@@ -20,20 +20,20 @@ def verify_version_consistency():
     issues = []
     
     # 检查内核Cargo.toml
-    kernel_toml = Path("src/kernel/Cargo.toml")
+    kernel_toml = Path("kernel/Cargo.toml")
     if kernel_toml.exists():
         content = kernel_toml.read_text()
         match = re.search(r'version\s*=\s*"([^"]+)"', content)
         if match and match.group(1) != expected_version:
-            issues.append(f"src/kernel/Cargo.toml: version mismatch ({match.group(1)} != {expected_version})")
+            issues.append(f"kernel/Cargo.toml: version mismatch ({match.group(1)} != {expected_version})")
     
     # 检查用户空间Cargo.toml
-    space_toml = Path("src/space/Cargo.toml")
+    space_toml = Path("space/Cargo.toml")
     if space_toml.exists():
         content = space_toml.read_text()
         match = re.search(r'version\s*=\s*"([^"]+)"', content)
         if match and match.group(1) != expected_version:
-            issues.append(f"src/space/Cargo.toml: version mismatch ({match.group(1)} != {expected_version})")
+            issues.append(f"space/Cargo.toml: version mismatch ({match.group(1)} != {expected_version})")
     
     # 检查版本头文件
     version_h = Path("include/hnx/abi/version.h")
@@ -43,11 +43,11 @@ def verify_version_consistency():
             issues.append("include/hnx/abi/version.h: version mismatch")
     
     # 检查Rust版本文件
-    version_rs = Path("src/kernel/src/version.rs")
+    version_rs = Path("kernel/src/version.rs")
     if version_rs.exists():
         content = version_rs.read_text()
         if f'"{expected_full}"' not in content:
-            issues.append("src/kernel/src/version.rs: version mismatch")
+            issues.append("kernel/src/version.rs: version mismatch")
     
     if issues:
         print("❌ Version inconsistencies found:")

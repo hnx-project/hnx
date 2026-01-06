@@ -31,6 +31,10 @@ acceleration = "kvm"  # 如果可用
 enabled = true
 netdev = "user,id=net0,hostfwd=tcp::2222-:22"
 
+[dtb]
+filename = "qemu-virt.dtb"
+required = false
+
 [kernel]
 # 内核启动参数
 args = "console=ttyAMA0 root=/dev/ram0 init=/init quiet"

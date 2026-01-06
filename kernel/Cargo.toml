@@ -1,0 +1,27 @@
+[package]
+name = "hnx-kernel"
+version = "0.3.0-alpha.1"
+edition = "2021"
+authors = ["HNX Developer"]
+
+[dependencies]
+log = { version = "0.4", default-features = false }
+bitflags = { version = "2.0", default-features = false }
+tock-registers = "0.10.1"
+heapless = "0.9.2"
+shared = { path = "../shared" }
+
+[target.'cfg(target_arch = "aarch64")'.dependencies]
+aarch64-cpu = { version = "11.2.0" }
+smccc = "0.2.0"
+
+[dev-dependencies]
+
+[build-dependencies]
+quote = "1.0"
+proc-macro2 = "1.0"
+toml = "0.9.10+spec-1.1.0"
+
+[features]
+default = []
+version = []  # 添加版本特性

@@ -1,0 +1,3 @@
+option('ARCH', type : 'combo', choices : ['aarch64', 'x86_64', 'riscv64'], value : 'aarch64', description : 'Target architecture')
+option('BOARD', type : 'combo', choices : ['qemu-virt', 'raspberry-pi4'], value : 'qemu-virt', description : 'Board name')
+option('PROFILE', type : 'combo', choices : ['debug', 'release'], value : 'debug', description : 'Build profile')

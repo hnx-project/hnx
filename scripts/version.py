@@ -138,11 +138,11 @@ class VersionManager:
         print(f"Syncing version {version_str} to all subprojects...")
         
         # 1. 更新内核 Cargo.toml
-        kernel_toml = os.path.join(self.project_root, "src", "kernel", "Cargo.toml")
+        kernel_toml = os.path.join(self.project_root, "kernel", "Cargo.toml")
         self._update_toml_version(kernel_toml, version_str)
         
         # 2. 更新用户空间 Cargo.toml
-        space_toml = os.path.join(self.project_root, "src", "space", "Cargo.toml")
+        space_toml = os.path.join(self.project_root, "space", "Cargo.toml")
         self._update_toml_version(space_toml, version_str)
         
         # 3. 生成版本头文件
@@ -200,7 +200,7 @@ class VersionManager:
     
     def _generate_rust_version_file(self, full_version: str, version: Dict):
         """生成Rust版本文件"""
-        version_rs = os.path.join(self.project_root, "src", "kernel", "src", "version.rs")
+        version_rs = os.path.join(self.project_root, "kernel", "src", "version.rs")
         os.makedirs(os.path.dirname(version_rs), exist_ok=True)
         
         prerelease_str = f'"{version["prerelease"]}"' if version["prerelease"] else '""'

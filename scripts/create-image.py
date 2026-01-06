@@ -427,7 +427,8 @@ devtmpfs        /dev            devtmpfs defaults       0       0
             
             # 复制 initrd.cpio 到 build/ 目录（供 run-qemu.py 使用）
             if initrd_path.suffix == ".cpio":
-                build_initrd = Path("build") / "initrd.cpio"
+                build_initrd = "initrd.cpio"
+                # pwd
                 print(f"Copying initrd to {build_initrd} for QEMU...")
                 shutil.copy2(initrd_path, build_initrd)
             

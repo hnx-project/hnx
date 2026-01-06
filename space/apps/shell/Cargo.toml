@@ -1,0 +1,17 @@
+[package]
+name = "hnx-shell"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+shared = { path = "../../../shared" }
+hnxlib = { path = "../../hnxlib" }
+libc = { path = "../../libc" }
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+opt-level = "z"
+lto = true

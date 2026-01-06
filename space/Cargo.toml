@@ -1,0 +1,42 @@
+# space/Cargo.toml
+# 空间组件工作区
+[workspace]
+members = [
+    "libc",
+    "hnxlib",
+    "services/vfs-service",
+    "services/init",
+    "services/loader-service",
+    # 核心服务
+    "services/procmgr-service",
+    "services/ipcrouter-service",
+    "services/echo-service",
+    "apps/shell",
+]
+
+resolver = "2"
+
+[workspace.dependencies]
+# 共享依赖
+log = "0.4"
+anyhow = "1.0"
+thiserror = "1.0"
+
+# 内部 crate
+hnx-libc = { path = "libc" }
+hnx-lib = { path = "hnxlib" }
+
+[workspace.package]
+version = "0.3.0-alpha.1"
+edition = "2021"
+authors = ["HNX Developers"]
+license = "MIT"
+
+[profile.dev]
+opt-level = 0
+debug = true
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
