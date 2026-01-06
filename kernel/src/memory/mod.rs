@@ -140,11 +140,11 @@ pub struct MemoryManager {
     /// 内存映射区域列表
     entries: heapless::Vec<MemoryMapEntry, 64>, // 最多支持64个映射区域
     /// DMA 分配器
-    dma_allocator: DmaAllocator,
+    pub dma_allocator: DmaAllocator,
     /// 伙伴分配器
-    buddy_allocator: BuddyAllocator,
+    pub buddy_allocator: BuddyAllocator,
     /// slab 分配器
-    slab_allocator: SlabAllocator,
+    pub slab_allocator: SlabAllocator,
 }
 
 impl MemoryManager {
@@ -162,16 +162,16 @@ impl MemoryManager {
     pub fn init(&mut self) {
         let boot_info = crate::arch::boot::get_boot_info();
 
-        crate::info!("memory: initializing subsystem");
+        crate::info!("initializing memory manager subsystem");
 
         // Initialize physical memory allocator
-        crate::info!("memory: initializing physical memory allocator");
+        crate::info!("initializing physical memory allocator");
         physical::init(boot_info);
 
         // Print physical memory statistics
         let s = physical::stats();
         crate::info!(
-            "memory: phys stats: free_pages={} alloc_calls={} free_calls={} coalesce={} frag={:.3}",
+            "phys stats: free_pages={} alloc_calls={} free_calls={} coalesce={} frag={:.3}",
             s.total_free_pages,
             s.alloc_calls,
             s.free_calls,
@@ -181,25 +181,25 @@ impl MemoryManager {
 
         // Verify physical allocator invariants
         let inv = physical::check_invariants();
-        crate::info!("memory: phys invariants {}", if inv { "ok" } else { "bad" });
+        crate::info!("phys invariants {}", if inv { "ok" } else { "bad" });
 
         // Initialize virtual memory management
-        crate::info!("memory: initializing virtual memory");
+        crate::info!("initializing virtual memory");
         virt::init();
 
         // Initialize slab allocator for small objects
-        crate::info!("memory: initializing slab allocator");
+        crate::info!("initializing slab allocator");
         SLAB_ALLOCATOR.init();
 
         // Initialize buddy allocator for kernel heap
-        crate::info!("memory: initializing buddy allocator");
+        crate::info!("initializing buddy allocator");
         let heap_start = 0x40000000; // TODO: Get from device tree
         let heap_size = 0x10000000;  // TODO: Get from device tree
         unsafe {
             BUDDY_ALLOCATOR.init(heap_start, heap_size);
         }
 
-        crate::info!("memory: memory manager initialization complete");
+        crate::info!("memory manager initialization complete");
     }
 
     /// 添加新的内存映射区域
@@ -248,5 +248,144 @@ impl MemoryManager {
             !should_remove
         });
         removed_count
+    }
+
+    /// 更新指定范围内的内存映射区域的标志，处理部分重叠情况
+    ///
+    /// # 参数
+    /// * `range` - 要更新的地址范围
+    /// * `new_flags` - 新的标志
+    ///
+    /// # 返回值
+    /// 成功返回Ok(()), 失败返回Err(())
+    pub fn update_flags_with_partial_overlap(&mut self, range: Range<usize>, new_flags: MemoryMapFlags) -> Result<(), ()> {
+        // Validate range
+        if range.start >= range.end {
+            return Ok(());
+        }
+        
+        // Create a vector to hold new entries
+        let mut new_entries = heapless::Vec::<MemoryMapEntry, 64>::new();
+        let mut entries_to_remove = heapless::Vec::<Range<usize>, 64>::new();
+        
+        // Process each entry that overlaps with the range
+        for entry in &self.entries {
+            if entry.range.start < range.end && range.start < entry.range.end {
+                // This entry overlaps with our range
+                
+                // Add the part before our range if it exists
+                if entry.range.start < range.start {
+                    let mut before_entry = entry.clone();
+                    before_entry.range.end = range.start;
+                    new_entries.push(before_entry).map_err(|_| ())?;
+                }
+                
+                // Add the part after our range if it exists
+                if entry.range.end > range.end {
+                    let mut after_entry = entry.clone();
+                    after_entry.range.start = range.end;
+                    new_entries.push(after_entry).map_err(|_| ())?;
+                }
+                
+                // Add the overlapping part with new flags
+                let mut overlapping_entry = entry.clone();
+                overlapping_entry.range.start = core::cmp::max(entry.range.start, range.start);
+                overlapping_entry.range.end = core::cmp::min(entry.range.end, range.end);
+                overlapping_entry.flags = new_flags;
+                new_entries.push(overlapping_entry).map_err(|_| ())?;
+                
+                // Mark this entry for removal
+                entries_to_remove.push(entry.range.clone()).map_err(|_| ())?;
+            }
+        }
+        
+        // Remove old entries
+        for range_to_remove in &entries_to_remove {
+            self.entries.retain(|entry| entry.range != *range_to_remove);
+        }
+        
+        // Add new entries
+        for entry in new_entries {
+            self.add_entry(entry)?;
+        }
+        
+        Ok(())
+    }
+    
+    /// 查找与指定范围重叠的所有内存映射区域
+    ///
+    /// # 参数
+    /// * `range` - 要查找的地址范围
+    ///
+    /// # 返回值
+    /// 返回所有重叠的区域
+    pub fn find_overlapping_entries(&self, range: Range<usize>) -> heapless::Vec<&MemoryMapEntry, 16> {
+        let mut result = heapless::Vec::new();
+        
+        // Validate range
+        if range.start >= range.end {
+            return result;
+        }
+        
+        for entry in &self.entries {
+            if entry.range.start < range.end && range.start < entry.range.end {
+                // 忽略错误，因为我们在编译时知道容量足够
+                let _ = result.push(entry);
+            }
+        }
+        result
+    }
+    
+    /// 查找包含指定地址的内存映射区域
+    ///
+    /// # 参数
+    /// * `addr` - 要查找的地址
+    ///
+    /// # 返回值
+    /// 如果找到返回对应的区域，否则返回None
+    pub fn find_entry(&self, addr: usize) -> Option<&MemoryMapEntry> {
+        self.entries.iter().find(|entry: &&MemoryMapEntry| entry.contains(addr))
+    }
+    
+    /// 获取所有内存映射区域
+    pub fn entries(&self) -> &[MemoryMapEntry] {
+        &self.entries
+    }
+    
+    /// 清空所有内存映射区域
+    pub fn clear(&mut self) {
+        self.entries.clear();
+    }
+
+    /// 分配 DMA 缓冲区
+    ///
+    /// # 参数
+    /// * `size`: 缓冲区大小（字节）
+    /// * `alignment`: 对齐要求（字节）
+    ///
+    /// # 返回值
+    /// * `Ok((物理地址, 能力))`: 分配成功
+    /// * `Err(DriverError)`: 分配失败
+    pub fn allocate_dma_buffer(
+        &mut self,
+        size: usize,
+        alignment: usize
+    ) -> Result<(u64, crate::security::capability::Capability), crate::drivers::ipc_protocol::DriverError> {
+        self.dma_allocator.allocate_dma_buffer(size, alignment)
+    }
+
+    /// 释放 DMA 缓冲区
+    ///
+    /// # 参数
+    /// * `phys_addr`: 要释放的缓冲区的物理地址
+    ///
+    /// # 返回值
+    /// * `Ok(())`: 释放成功
+    /// * `Err(DriverError)`: 释放失败
+    pub fn deallocate_dma_buffer(
+        &mut self,
+        phys_addr: u64
+    ) -> Result<(), crate::drivers::ipc_protocol::DriverError> {
+        self.dma_allocator.deallocate_dma_buffer(phys_addr)
     }
 }

@@ -92,17 +92,6 @@ pub fn init(boot: BootInfo) {
         let end = (boot.phys_mem_start as usize).saturating_add(boot.phys_mem_size as usize);
         REGION_START = (start + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
         REGION_END = end & !(PAGE_SIZE - 1);
-        
-        crate::debug!("PHYS ALLOC INIT: phys_mem_start=0x{:X}, phys_mem_size=0x{:X}",
-                     boot.phys_mem_start, boot.phys_mem_size);
-        crate::debug!("PHYS ALLOC INIT: k_end=0x{:X}, pt_end=0x{:X}, reserved_end=0x{:X}",
-                     k_end, BOOT_PAGE_TABLES_END, reserved_end);
-        crate::debug!("PHYS ALLOC INIT: start=0x{:X}, end=0x{:X}",
-                     start, end);
-        crate::debug!("PHYS ALLOC INIT: REGION_START=0x{:X}, REGION_END=0x{:X}",
-                     REGION_START, REGION_END);
-        crate::debug!("PHYS ALLOC INIT: REGION_SIZE=0x{:X} pages",
-                     (REGION_END - REGION_START) / PAGE_SIZE);
         for o in 0..=MAX_ORDER {
             FREE_COUNT[o] = 0;
         }

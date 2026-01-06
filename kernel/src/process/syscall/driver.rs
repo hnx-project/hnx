@@ -96,7 +96,7 @@ pub fn sys_driver_dma_alloc(size: usize, alignment: usize) -> SysResult {
     let current_epid = EndpointId(crate::core::scheduler::current_pid());
 
     // Allocate DMA buffer
-    let result = crate::kernel::get_kernel().memory_manager.lock().allocate_dma_buffer(size, alignment);
+    let result = crate::kernel::get_kernel().memory_manager.lock().dma_allocator.allocate_dma_buffer(size, alignment);
     
     match result {
         Ok((phys_addr, capability)) => {
