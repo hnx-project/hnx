@@ -14,6 +14,14 @@ impl core::fmt::Debug for MmuFlags {
     }
 }
 
+impl core::ops::BitOr for MmuFlags {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self(self.0 | rhs.0)
+    }
+}
+
 impl MmuFlags {
     pub const READ: Self = Self(1 << 0);
     pub const WRITE: Self = Self(1 << 1);

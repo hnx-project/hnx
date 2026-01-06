@@ -159,6 +159,7 @@ static PENDING_RESPONSES: Mutex<[Option<PendingResponse>; MAX_PENDING_RESPONSES]
 /// Initialize the IPC system
 pub fn init() {
     // Initialization is handled by static initialization
+    // No explicit initialization needed
 }
 
 /// Helper function to create an empty endpoint

@@ -85,6 +85,11 @@ impl ProcessManager {
         }
     }
 
+    pub fn init(&self) {
+        crate::info!("Initializing process manager...");
+
+    }
+
     /// 将进程ID推入就绪队列
     pub fn ready_queue_push(&self, pid: u32) {
         let t = self.ready_tail.load(Ordering::Relaxed);
@@ -492,14 +497,6 @@ impl ProcessManager {
 // Re-export commonly used types
 pub use task::{Task, TaskState, TaskContext, TaskId, Asid, allocate_asid};
 
-/// Initialize process management subsystem
-pub fn init() {
-    crate::info!("process: initializing subsystem");
-    
-    // Initialize IPC system (used for process communication)
-    crate::core::ipc::init();
-    crate::info!("process: IPC system initialized");
-}
 
 /// IPC message handler (backward compatibility)
 pub fn ipc_handler(msg: &crate::core::ipc::IpcMessage) -> crate::core::ipc::IpcResponse {

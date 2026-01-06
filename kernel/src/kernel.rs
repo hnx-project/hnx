@@ -74,8 +74,9 @@ pub fn init() {
     crate::arch::init();
     crate::info!("Architecture initialized");
 
-    // 内存映射管理器初始化
+    // 内存管理器初始化
     unsafe { KERNEL.as_mut().unwrap().memory_manager.lock().init() };
+    
 
 }
 

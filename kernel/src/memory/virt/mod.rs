@@ -30,7 +30,38 @@ extern "C" {
 }
 
 pub fn init() {
-    crate::info!("mm/vmm basic init");
+    crate::info!("[VMM] Initializing virtual memory subsystem...");
+
+    extern "C" {
+        fn __text_vma_start();
+        fn __text_vma_end();
+        fn __rodata_vma_start();
+        fn __rodata_vma_end();
+        fn __data_vma_start();
+        fn __data_vma_end();
+        fn __bss_vma_start();
+        fn __bss_vma_end();
+    }
+
+    let text_start = __text_vma_start as usize;
+    let text_end = __text_vma_end as usize;
+    let rodata_start = __rodata_vma_start as usize;
+    let rodata_end = __rodata_vma_end as usize;
+    let data_start = __data_vma_start as usize;
+    let data_end = __data_vma_end as usize;
+    let bss_start = __bss_vma_start as usize;
+    let bss_end = __bss_vma_end as usize;
+
+    // Use a sentinel value (0) for the kernel's page table base to register its VMAs.
+    const KERNEL_PT_BASE: usize = 0;
+
+    crate::info!("[VMM] Registering kernel memory regions...");
+    vma_add(KERNEL_PT_BASE, text_start, text_end - text_start, MmuFlags::READ | MmuFlags::EXECUTE);
+    vma_add(KERNEL_PT_BASE, rodata_start, rodata_end - rodata_start, MmuFlags::READ);
+    vma_add(KERNEL_PT_BASE, data_start, data_end - data_start, MmuFlags::READ | MmuFlags::WRITE);
+    vma_add(KERNEL_PT_BASE, bss_start, bss_end - bss_start, MmuFlags::READ | MmuFlags::WRITE);
+
+    crate::info!("[VMM] Kernel regions registered. Virtual memory subsystem is ready.");
 }
 
 pub fn create_user_l1() -> Option<usize> {

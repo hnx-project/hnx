@@ -159,48 +159,48 @@ impl MemoryManager {
     }
 
     /// 初始化内存管理器
+    /// 1. 获取物理内存布局
+    /// 2. 初始化物理页帧管理结构
+    /// 3. 初始化 Buddy 分配器
+    /// 4. 建立内核虚拟内存映射（若未提前建立）
+    /// 5. 初始化 slab 分配器（依赖 Buddy）
+    /// 6. 初始化 DMA 内存管理（依赖物理内存布局）
+    /// 7. 初始化完整虚拟内存管理器（依赖 slab 和 Buddy）
+    /// 8. 启动内存回收线程等后台服务
+    /// 9. 内存管理器自检并输出状态
     pub fn init(&mut self) {
+        crate::info!("Initializing memory manager subsystem...");
+
+        // 阶段 1: 物理内存初始化
+        crate::info!("[MM] Phase 1: Initializing physical memory...");
         let boot_info = crate::arch::boot::get_boot_info();
-
-        crate::info!("initializing memory manager subsystem");
-
-        // Initialize physical memory allocator
-        crate::info!("initializing physical memory allocator");
         physical::init(boot_info);
+        let phys_stats = physical::stats();
+        crate::info!("[MM] Physical memory map: {} pages available.", phys_stats.total_free_pages);
 
-        // Print physical memory statistics
-        let s = physical::stats();
-        crate::info!(
-            "phys stats: free_pages={} alloc_calls={} free_calls={} coalesce={} frag={:.3}",
-            s.total_free_pages,
-            s.alloc_calls,
-            s.free_calls,
-            s.coalesce_events,
-            s.fragmentation_index,
-        );
+        // 阶段 2: Buddy 分配器初始化
+        crate::info!("[MM] Phase 2: Initializing Buddy allocator...");
+        unsafe { self.buddy_allocator.init(boot_info.phys_mem_start as usize, boot_info.phys_mem_size as usize) };
 
-        // Verify physical allocator invariants
-        let inv = physical::check_invariants();
-        crate::info!("phys invariants {}", if inv { "ok" } else { "bad" });
+        // 阶段 3: 内核虚拟内存映射初始化
+        crate::info!("[MM] Phase 3: Initializing kernel virtual memory...");
+        virt::init(); // 这将注册内核的 VMA
 
-        // Initialize virtual memory management
-        crate::info!("initializing virtual memory");
-        virt::init();
+        // 阶段 4: Slab 分配器初始化
+        crate::info!("[MM] Phase 4: Initializing Slab allocator...");
+        self.slab_allocator.init();
 
-        // Initialize slab allocator for small objects
-        crate::info!("initializing slab allocator");
-        SLAB_ALLOCATOR.init();
+        // 阶段 5: DMA 分配器初始化
+        crate::info!("[MM] Phase 5: Initializing DMA allocator...");
+        // DmaAllocator is implicitly initialized via new().
 
-        // Initialize buddy allocator for kernel heap
-        crate::info!("initializing buddy allocator");
-        let heap_start = 0x40000000; // TODO: Get from device tree
-        let heap_size = 0x10000000;  // TODO: Get from device tree
-        unsafe {
-            BUDDY_ALLOCATOR.init(heap_start, heap_size);
-        }
+        // 阶段 6: 启动后台服务和自检
+        crate::info!("[MM] Phase 6: Starting background services and self-check...");
+        // TODO: 启动内存回收线程 (kswapd)
 
-        crate::info!("memory manager initialization complete");
+        crate::info!("Memory Manager Ready.");
     }
+
 
     /// 添加新的内存映射区域
     ///

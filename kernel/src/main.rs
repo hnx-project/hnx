@@ -47,9 +47,6 @@ const ARCH: &str = crate::arch::ARCH_NAME;
 pub extern "C" fn rust_main() -> ! {
     // Initialize the global Kernel object. This must be the first step.
     kernel::init();
-
-    // init_phase1_hardware();
-    // init_phase2_memory();
     // init_phase3_processes();
     // init_phase4_scheduler();
     loop {
@@ -57,40 +54,6 @@ pub extern "C" fn rust_main() -> ! {
     }
 }
 
-// deprecated
-fn init_phase1_hardware() {
-    
-    // Print kernel boot banner
-    println!("======= HNX Microkernel Booting =======");
-    println!("Kernel: {} {} ({})", KERNEL_NAME, VERSION, ARCH);
-    
-    // Initialize architecture-specific components (interrupts, timer, MMU)
-    println!("Initializing architecture...");
-    arch::init();
-    println!("Architecture initialized");
-}
-
-/// Phase 2: Memory Management Initialization
-///
-/// Initializes the memory management subsystem:
-/// - Physical memory allocator (buddy allocator)
-/// - Virtual memory management (page tables)
-/// - Slab allocator for small objects
-/// - Memory mapping manager
-fn init_phase2_memory() {
-    
-    println!("Initializing memory subsystem...");
-    // memory::init();
-    
-    // Initialize kernel heap allocator
-    println!("Initializing buddy allocator...");
-    let heap_start = 0x40000000; // TODO: Get from device tree
-    let heap_size = 0x10000000;  // TODO: Get from device tree
-    unsafe {
-        // crate::memory::BUDDY_ALLOCATOR.init(heap_start, heap_size);
-    }
-    println!("Memory subsystem ready");
-}
 
 /// Phase 3: Process Management and IPC Initialization
 ///
