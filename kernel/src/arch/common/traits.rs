@@ -1,185 +1,321 @@
-// 架构必须实现的 trait
-use crate::arch::common::mmu::MmuFlags;
-pub type Result<T> = core::result::Result<T, ()>;
-pub trait Arch {
-    /// 架构名称
-    const NAME: &'static str;
+//! 内核架构抽象接口定义
+//!
+//! 这些trait定义了内核需要处理的架构差异：
+//! 1. CPU控制和状态管理
+//! 2. 内存管理单元（MMU）和页表
+//! 3. 中断控制器（GIC）管理
+//! 4. 定时器和时钟源
+//! 5. 平台特定功能（PSCI、SMC调用等）
 
-    /// 初始化架构特定部分
-    fn init();
+use crate::arch::common::ArchError;
 
-    /// 获取当前 CPU ID
-    fn cpu_id() -> u32;
-
-    /// 停止 CPU
-    fn halt() -> !;
-}
-
-// MMU trait
-pub trait Mmu {
-    /// 初始化页表
-    fn init_page_table();
-
-    /// 映射虚拟地址到物理地址
-    fn map(vaddr: usize, paddr: usize, flags: MmuFlags) -> Result<()>;
-
-    /// 取消映射
-    fn unmap(vaddr: usize) -> Result<()>;
-
-    /// 获取物理地址
-    fn virt_to_phys(vaddr: usize) -> Option<usize>;
-}
-
-// 内存操作 trait (屏障、TLB、缓存)
-pub trait Memory {
-    /// 数据同步屏障 (Data Synchronization Barrier)
-    fn data_sync_barrier();
-
-    /// 指令同步屏障 (Instruction Synchronization Barrier)
-    fn instruction_barrier();
-
-    /// 数据内存屏障 (Data Memory Barrier)
-    fn data_memory_barrier();
-
-    /// 刷新整个 TLB (所有条目)
-    fn tlb_flush_all();
-
-    /// 按虚拟地址使 TLB 条目无效 (可选的 ASID)
-    fn tlb_invalidate(vaddr: usize, asid: Option<u16>);
-
-    /// 获取当前 ASID (地址空间标识符)
-    fn get_current_asid() -> u16;
-
-    /// 清理数据缓存范围
-    fn clean_dcache_range(addr: usize, size: usize);
-
-    /// 刷新指令缓存全部
-    fn flush_icache_all();
-
-    /// 让出 CPU 执行权 (用于自旋等待)
-    fn yield_cpu();
-
-    /// 获取当前页表基址 (TTBR0)
-    fn get_current_page_table_base() -> usize;
-
-    /// 设置当前页表基址 (TTBR0)
-    ///
-    /// # 参数
-    /// - `base`: 页表物理基址
-    /// - `asid`: 可选的地址空间标识符 (ASID)
-    fn set_current_page_table_base(base: usize, asid: Option<u16>);
-}
-
-// CPU 操作 trait
+/// CPU控制和状态管理
 pub trait Cpu {
-    /// 获取当前 CPU 核心 ID
-    fn id() -> u32;
-
-    /// 让出 CPU 执行权 (用于自旋等待)
-    fn yield_cpu();
-
-    /// 内存屏障 (全功能屏障)
-    fn barrier();
-
-    /// 读内存屏障 (Load-Load 和 Load-Store)
-    fn read_barrier();
-
-    /// 写内存屏障 (Store-Store)
-    fn write_barrier();
-
-    /// 等待中断 (Wait For Interrupt)
-    ///
-    /// # 安全
-    /// 此函数会暂停 CPU 执行直到中断发生
-    /// 只能在中断使能的情况下调用
-    fn wait_for_interrupt();
-
-    /// 全局使能中断
-    ///
-    /// # 安全
-    /// 此函数允许 CPU 响应外部中断
-    fn enable_interrupts();
-
-    /// 全局禁用中断
-    ///
-    /// # 安全
-    /// 此函数阻止 CPU 响应外部中断
-    fn disable_interrupts();
-
-    /// 检查中断是否启用
-    ///
-    /// # 返回值
-    /// 如果中断启用返回 `true`，否则返回 `false`
-    fn interrupts_enabled() -> bool;
+    /// 获取当前CPU ID
+    fn cpu_id() -> u32;
+    
+    /// 暂停CPU直到中断发生
+    fn cpu_wait_for_interrupt();
+    
+    /// 使能中断
+    fn cpu_enable_interrupts();
+    
+    /// 禁用中断
+    fn cpu_disable_interrupts();
+    
+    /// 判断中断是否使能
+    fn cpu_interrupts_enabled() -> bool;
+    
+    /// 内存屏障（确保所有内存访问完成）
+    fn memory_barrier();
+    
+    /// 指令同步屏障（确保所有指令完成）
+    fn instruction_barrier();
+    
+    /// 数据同步屏障（确保所有数据访问完成）
+    fn data_barrier();
 }
 
-// 中断控制器 trait
+/// 内存管理单元（MMU）和页表
+pub trait Mmu {
+    /// 初始化MMU
+    fn mmu_init();
+    
+    /// 启用MMU
+    fn mmu_enable();
+    
+    /// 禁用MMU
+    fn mmu_disable();
+    
+    /// 创建内核页表
+    fn mmu_create_kernel_page_table() -> crate::memory::PageTable;
+    
+    /// 映射虚拟地址到物理地址
+    fn mmu_map(
+        page_table: &mut crate::memory::PageTable,
+        vaddr: usize,
+        paddr: usize,
+        size: usize,
+        flags: crate::memory::MapFlags,
+    ) -> Result<(), ArchError>;
+    
+    /// 取消虚拟地址映射
+    fn mmu_unmap(
+        page_table: &mut crate::memory::PageTable,
+        vaddr: usize,
+        size: usize,
+    ) -> Result<(), ArchError>;
+}
+
+/// 中断控制器管理
 pub trait InterruptController {
-    fn init();
-    fn enable_irq(irq: u32);
-    fn disable_irq(irq: u32);
-    fn ack_irq(irq: u32);
+    /// 初始化中断控制器
+    fn interrupt_init();
+    
+    /// 使能特定中断
+    fn interrupt_enable(irq: u32);
+    
+    /// 禁用特定中断
+    fn interrupt_disable(irq: u32);
+    
+    /// 处理中断
+    fn interrupt_handle(irq: u32);
+    
+    /// 发送EOI（中断结束）
+    fn interrupt_send_eoi(irq: u32);
+    
+    /// 设置中断优先级
+    fn interrupt_set_priority(irq: u32, priority: u8);
+    
+    /// 设置中断目标CPU
+    fn interrupt_set_target(irq: u32, cpu_mask: u8);
 }
 
-// 定时器 trait
+/// 定时器和时钟源
 pub trait Timer {
-    fn init(frequency: u64);
-    fn set_timeout(ms: u64, callback: fn());
-    fn get_ticks() -> u64;
+    /// 初始化定时器
+    fn timer_init();
+    
+    /// 获取当前时间（纳秒）
+    fn timer_now() -> u64;
+    
+    /// 设置定时器中断（相对时间，纳秒）
+    fn timer_set_interval(ns: u64);
+    
+    /// 使能定时器中断
+    fn timer_enable();
+    
+    /// 禁用定时器中断
+    fn timer_disable();
+    
+    /// 获取定时器频率（Hz）
+    fn timer_frequency() -> u64;
 }
 
-// 上下文切换 trait
-pub trait Context {
-    /// 执行用户空间上下文切换
-    ///
-    /// # 参数
-    /// - `entry_point`: 用户空间程序入口点
-    /// - `stack_pointer`: 用户空间栈指针
-    /// - `page_table_base`: 页表物理基址
-    /// - `asid`: 地址空间标识符
-    /// - `args`: 系统调用参数 (a0, a1, a2, a8)
-    ///
-    /// # 安全
-    /// 此函数从不返回，会直接切换到用户空间执行
-    fn exec_user(
-        entry_point: usize,
-        stack_pointer: usize,
-        page_table_base: usize,
-        asid: u16,
-        args: (usize, usize, usize, usize),
-    ) -> !;
+/// 平台特定功能
+pub trait Platform {
+    /// 初始化平台
+    fn platform_init();
+    
+    /// 获取平台名称
+    fn platform_name() -> &'static str;
+    
+    /// 关机系统
+    fn platform_shutdown() -> !;
+    
+    /// 重启系统
+    fn platform_reboot() -> !;
+    
+    /// 获取内存布局
+    fn platform_memory_layout() -> &'static [crate::memory::MemoryRegion];
+    
+    /// 获取设备树地址（如果可用）
+    fn platform_device_tree() -> Option<usize>;
+}
 
-    /// 获取当前异常链接寄存器 (ELR)
-    fn get_elr() -> usize;
+/// 聚合所有架构相关操作
+pub trait Arch: Cpu + Mmu + InterruptController + Timer + Platform {
+    /// 架构名称
+    const ARCH_NAME: &'static str;
+    
+    /// 页大小（字节）
+    const PAGE_SIZE: usize;
+    
+    /// 页大小位宽（log2(PAGE_SIZE)）
+    const PAGE_SIZE_BITS: usize;
+    
+    /// 虚拟地址位宽
+    const VADDR_BITS: usize;
+    
+    /// 物理地址位宽
+    const PADDR_BITS: usize;
+    
+    /// 最大支持CPU数量
+    const MAX_CPUS: u32;
+}
 
-    /// 获取当前栈指针 (SP)
-    fn get_sp() -> usize;
+/// 默认实现占位符
+///
+/// 用于在没有特定架构实现时提供编译时错误
+pub struct UnimplementedArch;
 
-    /// 获取向量基址寄存器 (VBAR)
-    fn get_vbar() -> usize;
+impl Cpu for UnimplementedArch {
+    fn cpu_id() -> u32 {
+        unimplemented!("Cpu not implemented for this architecture")
+    }
+    
+    fn cpu_wait_for_interrupt() {
+        unimplemented!("Cpu not implemented for this architecture")
+    }
+    
+    fn cpu_enable_interrupts() {
+        unimplemented!("Cpu not implemented for this architecture")
+    }
+    
+    fn cpu_disable_interrupts() {
+        unimplemented!("Cpu not implemented for this architecture")
+    }
+    
+    fn cpu_interrupts_enabled() -> bool {
+        unimplemented!("Cpu not implemented for this architecture")
+    }
+    
+    fn memory_barrier() {
+        unimplemented!("Cpu not implemented for this architecture")
+    }
+    
+    fn instruction_barrier() {
+        unimplemented!("Cpu not implemented for this architecture")
+    }
+    
+    fn data_barrier() {
+        unimplemented!("Cpu not implemented for this architecture")
+    }
+}
 
-    /// 获取当前异常级别 (CurrentEL)
-    fn get_current_el() -> u32;
+impl Mmu for UnimplementedArch {
+    fn mmu_init() {
+        unimplemented!("Mmu not implemented for this architecture")
+    }
+    
+    fn mmu_enable() {
+        unimplemented!("Mmu not implemented for this architecture")
+    }
+    
+    fn mmu_disable() {
+        unimplemented!("Mmu not implemented for this architecture")
+    }
+    
+    fn mmu_create_kernel_page_table() -> crate::memory::PageTable {
+        unimplemented!("Mmu not implemented for this architecture")
+    }
+    
+    fn mmu_map(
+        _page_table: &mut crate::memory::PageTable,
+        _vaddr: usize,
+        _paddr: usize,
+        _size: usize,
+        _flags: crate::memory::MapFlags,
+    ) -> Result<(), ArchError> {
+        unimplemented!("Mmu not implemented for this architecture")
+    }
+    
+    fn mmu_unmap(
+        _page_table: &mut crate::memory::PageTable,
+        _vaddr: usize,
+        _size: usize,
+    ) -> Result<(), ArchError> {
+        unimplemented!("Mmu not implemented for this architecture")
+    }
+}
 
-    /// 获取当前保存的程序状态寄存器 (SPSR)
-    fn get_spsr() -> usize;
+impl InterruptController for UnimplementedArch {
+    fn interrupt_init() {
+        unimplemented!("InterruptController not implemented for this architecture")
+    }
+    
+    fn interrupt_enable(_irq: u32) {
+        unimplemented!("InterruptController not implemented for this architecture")
+    }
+    
+    fn interrupt_disable(_irq: u32) {
+        unimplemented!("InterruptController not implemented for this architecture")
+    }
+    
+    fn interrupt_handle(_irq: u32) {
+        unimplemented!("InterruptController not implemented for this architecture")
+    }
+    
+    fn interrupt_send_eoi(_irq: u32) {
+        unimplemented!("InterruptController not implemented for this architecture")
+    }
+    
+    fn interrupt_set_priority(_irq: u32, _priority: u8) {
+        unimplemented!("InterruptController not implemented for this architecture")
+    }
+    
+    fn interrupt_set_target(_irq: u32, _cpu_mask: u8) {
+        unimplemented!("InterruptController not implemented for this architecture")
+    }
+}
 
-    /// 获取当前转换表基址寄存器 0 (TTBR0)
-    fn get_ttbr0() -> usize;
+impl Timer for UnimplementedArch {
+    fn timer_init() {
+        unimplemented!("Timer not implemented for this architecture")
+    }
+    
+    fn timer_now() -> u64 {
+        unimplemented!("Timer not implemented for this architecture")
+    }
+    
+    fn timer_set_interval(_ns: u64) {
+        unimplemented!("Timer not implemented for this architecture")
+    }
+    
+    fn timer_enable() {
+        unimplemented!("Timer not implemented for this architecture")
+    }
+    
+    fn timer_disable() {
+        unimplemented!("Timer not implemented for this architecture")
+    }
+    
+    fn timer_frequency() -> u64 {
+        unimplemented!("Timer not implemented for this architecture")
+    }
+}
 
-    /// 获取当前转换表基址寄存器 1 (TTBR1)
-    fn get_ttbr1() -> usize;
+impl Platform for UnimplementedArch {
+    fn platform_init() {
+        unimplemented!("Platform not implemented for this architecture")
+    }
+    
+    fn platform_name() -> &'static str {
+        unimplemented!("Platform not implemented for this architecture")
+    }
+    
+    fn platform_shutdown() -> ! {
+        unimplemented!("Platform not implemented for this architecture")
+    }
+    
+    fn platform_reboot() -> ! {
+        unimplemented!("Platform not implemented for this architecture")
+    }
+    
+    fn platform_memory_layout() -> &'static [crate::memory::MemoryRegion] {
+        unimplemented!("Platform not implemented for this architecture")
+    }
+    
+    fn platform_device_tree() -> Option<usize> {
+        unimplemented!("Platform not implemented for this architecture")
+    }
+}
 
-    /// 获取当前栈指针选择器 (SPSel)
-    fn get_spsel() -> u32;
-
-    /// 从异常栈中读取保存的通用寄存器
-    ///
-    /// # 参数
-    /// - `saved_sp`: 异常栈指针（寄存器保存区域的起始地址）
-    /// - `reg`: 寄存器索引（0-30对应x0-x30）
-    ///
-    /// # 返回值
-    /// 寄存器保存的值
-    fn get_saved_gpr(saved_sp: usize, reg: usize) -> usize;
+impl Arch for UnimplementedArch {
+    const ARCH_NAME: &'static str = "unimplemented";
+    const PAGE_SIZE: usize = 4096;
+    const PAGE_SIZE_BITS: usize = 12;
+    const VADDR_BITS: usize = 48;
+    const PADDR_BITS: usize = 48;
+    const MAX_CPUS: u32 = 1;
 }

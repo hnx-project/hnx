@@ -8,3 +8,4 @@ target
 *.moved
 __pycache__
 outputs.log
+backup
