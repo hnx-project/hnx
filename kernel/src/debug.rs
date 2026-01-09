@@ -116,6 +116,15 @@ pub fn print_str(s: &str) {
     }
 }
 
+/// 打印单个字符
+pub fn putc(c: u8) {
+    unsafe {
+        if let Some(ref mut uart) = UART {
+            uart.write_char(c);
+        }
+    }
+}
+
 /// 打印格式化字符串
 #[macro_export]
 macro_rules! print {

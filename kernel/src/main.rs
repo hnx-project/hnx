@@ -5,6 +5,7 @@
 #![feature(alloc)]
 #![feature(alloc_error_handler)]
 
+#[macro_use]
 extern crate alloc;
 
 use core::alloc::{GlobalAlloc, Layout};

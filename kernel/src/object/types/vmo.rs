@@ -8,9 +8,11 @@
 //! - 创建VMO的克隆（COW）
 
 use alloc::sync::Arc;
+use alloc::vec::Vec;
+use alloc::vec;
 use shared::sync::mutex::Mutex;
 use crate::object::traits::*;
-use crate::object::impl_kernel_object;
+use crate::impl_kernel_object;
 
 /// 虚拟内存对象
 pub struct Vmo {
@@ -165,7 +167,7 @@ impl Drop for Vmo {
         // 释放物理页
         let mut pages = self.pages.lock();
         for page in pages.iter_mut() {
-            if let Some(phys_addr) = page.take() {
+            if let Some(_phys_addr) = page.take() {
                 // 简化实现：实际需要释放物理页
             }
         }

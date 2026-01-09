@@ -8,7 +8,7 @@ use alloc::vec::Vec;
 use alloc::collections::VecDeque;
 use shared::sync::mutex::Mutex;
 use crate::object::traits::*;
-use crate::object::impl_kernel_object;
+use crate::impl_kernel_object;
 use super::event::Event;
 
 /// 通道消息

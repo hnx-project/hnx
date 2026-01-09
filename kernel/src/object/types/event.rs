@@ -5,9 +5,11 @@
 //! 当事件被信号化时，所有等待该事件的线程将被唤醒。
 
 use alloc::sync::Arc;
+use alloc::vec::Vec;
+use alloc::vec;
 use shared::sync::mutex::Mutex;
 use crate::object::traits::*;
-use crate::object::impl_kernel_object;
+use crate::impl_kernel_object;
 
 /// 事件对象
 pub struct Event {

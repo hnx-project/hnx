@@ -4,9 +4,7 @@
 //! 系统调用通过异常进入内核，由本模块分派到具体的对象操作。
 
 use crate::object::traits::*;
-use crate::object::handle::Handle;
 use crate::object::table::HandleTable;
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 use shared::abi::syscalls::*;
 
@@ -24,8 +22,12 @@ pub struct SyscallDispatcher {
 impl SyscallDispatcher {
     /// 创建新的系统调用分发器
     pub fn new() -> Self {
+        Self::with_pid(0)
+    }
+
+    pub fn with_pid(pid: u64) -> Self {
         Self {
-            handle_table: HandleTable::new(),
+            handle_table: HandleTable::new(pid),
         }
     }
 
@@ -71,39 +73,36 @@ impl SyscallDispatcher {
         use crate::object::types::channel::Channel;
         let (chan_a, chan_b) = Channel::create_pair();
 
-        // 创建两个句柄，分别对应通道的两端
-        // 通道两端具有相同的权限
         let rights = ObjectRights::READ | ObjectRights::WRITE | ObjectRights::DUPLICATE;
-        let handle_a = Handle::new(chan_a, rights, 0); // 假设进程ID为0
-        let handle_b = Handle::new(chan_b, rights, 0);
 
-        // 将句柄添加到句柄表
-        let handle_a_id = self.handle_table.add(handle_a);
-        let handle_b_id = self.handle_table.add(handle_b);
+        let _handle_a_id = self.handle_table.add(chan_a, rights)?;
+        let _handle_b_id = self.handle_table.add(chan_b, rights)?;
 
         // 将句柄ID写入用户空间（暂未实现）
         // 需要将handle_a_id和handle_b_id写入args[0]指向的内存
         // 对于测试，我们只返回成功
+        let _ = args;
         Ok(0)
     }
 
     /// 向通道写入消息（HNX_SYS_CHANNEL_WRITE）
     fn sys_channel_write(&mut self, args: &[usize; 6]) -> SyscallResult {
-        let handle_id = args[0] as u32;
+        let handle_id = args[0];
         let data_ptr = args[1] as *const u8;
         let data_len = args[2];
         let _handles_ptr = args[3] as *const u32;
         let _handles_count = args[4];
 
         // 获取句柄
-        let handle = self.handle_table.get(handle_id)
-            .ok_or(ObjectError::BadHandle)?;
+        let handle = self.handle_table.get(handle_id)?;
 
         // 检查写权限
         handle.check_rights(ObjectRights::WRITE)?;
 
         // 获取通道对象
-        let channel = handle.object()
+        let channel = handle
+            .object()
+            .clone()
             .downcast_arc::<crate::object::types::channel::Channel>()
             .map_err(|_| ObjectError::WrongType)?;
 
@@ -112,28 +111,29 @@ impl SyscallDispatcher {
         let data = unsafe { core::slice::from_raw_parts(data_ptr, data_len) };
         
         // 写入通道，不传递句柄（暂未实现句柄传递）
-        channel.write(data, Vec::new()).map_err(|e| e)?;
+        channel.write(data, Vec::new())?;
 
         Ok(data_len)
     }
 
     /// 从通道读取消息（HNX_SYS_CHANNEL_READ）
     fn sys_channel_read(&mut self, args: &[usize; 6]) -> SyscallResult {
-        let handle_id = args[0] as u32;
+        let handle_id = args[0];
         let data_ptr = args[1] as *mut u8;
         let data_capacity = args[2];
         let _handles_ptr = args[3] as *mut u32;
         let _handles_capacity = args[4];
 
         // 获取句柄
-        let handle = self.handle_table.get(handle_id)
-            .ok_or(ObjectError::BadHandle)?;
+        let handle = self.handle_table.get(handle_id)?;
 
         // 检查读权限
         handle.check_rights(ObjectRights::READ)?;
 
         // 获取通道对象
-        let channel = handle.object()
+        let channel = handle
+            .object()
+            .clone()
             .downcast_arc::<crate::object::types::channel::Channel>()
             .map_err(|_| ObjectError::WrongType)?;
 
@@ -141,7 +141,7 @@ impl SyscallDispatcher {
         let mut buffer = vec![0u8; data_capacity];
         
         // 从通道读取（暂未实现超时和句柄接收）
-        let (read_len, _handles) = channel.read(&mut buffer, 0).map_err(|e| e)?;
+        let (read_len, _handles) = channel.read(&mut buffer, 0)?;
 
         // 将数据复制到用户空间
         unsafe {
@@ -153,19 +153,14 @@ impl SyscallDispatcher {
     }
 
     /// 创建进程（HNX_SYS_PROCESS_CREATE）
-    fn sys_process_create(&mut self, _args: &[usize; 6]) -> SyscallResult {
-        // 创建进程对象
+    fn sys_process_create(&mut self, args: &[usize; 6]) -> SyscallResult {
         use crate::object::types::process::Process;
-        let process = Process::new();
+        let pid = args[0] as u64;
+        let process = Process::new(pid);
 
-        // 创建句柄
         let rights = ObjectRights::READ | ObjectRights::WRITE | ObjectRights::DUPLICATE | ObjectRights::DESTROY;
-        let handle = Handle::new(process, rights, 0);
-
-        // 将句柄添加到句柄表
-        let handle_id = self.handle_table.add(handle);
-
-        Ok(handle_id as usize)
+        let handle_id = self.handle_table.add(process, rights)?;
+        Ok(handle_id)
     }
 
     /// 从initrd加载服务（HNX_SYS_SPAWN_SERVICE）
@@ -175,19 +170,40 @@ impl SyscallDispatcher {
     }
 
     /// 创建线程（HNX_SYS_THREAD_CREATE）
-    fn sys_thread_create(&mut self, _args: &[usize; 6]) -> SyscallResult {
-        // 创建线程对象
+    fn sys_thread_create(&mut self, args: &[usize; 6]) -> SyscallResult {
         use crate::object::types::thread::Thread;
-        let thread = Thread::new();
+        use crate::object::types::process::Process;
+        use crate::object::types::vmo::Vmo;
 
-        // 创建句柄
+        let process_handle = args[0];
+        let tid = args[1] as u64;
+        let entry_point = args[2];
+        let stack_vmo_handle = args[3];
+
+        let process_handle = self.handle_table.get(process_handle)?;
+        let process = process_handle
+            .object()
+            .clone()
+            .downcast_arc::<Process>()
+            .map_err(|_| ObjectError::WrongType)?;
+
+        let stack = if stack_vmo_handle == 0 {
+            None
+        } else {
+            let stack_handle = self.handle_table.get(stack_vmo_handle)?;
+            let stack_vmo = stack_handle
+                .object()
+                .clone()
+                .downcast_arc::<Vmo>()
+                .map_err(|_| ObjectError::WrongType)?;
+            Some(stack_vmo)
+        };
+
+        let thread = Thread::new(tid, process, entry_point, stack);
+
         let rights = ObjectRights::READ | ObjectRights::WRITE | ObjectRights::DUPLICATE | ObjectRights::DESTROY;
-        let handle = Handle::new(thread, rights, 0);
-
-        // 将句柄添加到句柄表
-        let handle_id = self.handle_table.add(handle);
-
-        Ok(handle_id as usize)
+        let handle_id = self.handle_table.add(thread, rights)?;
+        Ok(handle_id)
     }
 
     /// 创建虚拟内存对象（HNX_SYS_VMO_CREATE）
@@ -196,16 +212,11 @@ impl SyscallDispatcher {
 
         // 创建VMO对象
         use crate::object::types::vmo::Vmo;
-        let vmo = Vmo::new(size);
+        let vmo = Vmo::new(size)?;
 
-        // 创建句柄
         let rights = ObjectRights::READ | ObjectRights::WRITE | ObjectRights::DUPLICATE | ObjectRights::MAP;
-        let handle = Handle::new(vmo, rights, 0);
-
-        // 将句柄添加到句柄表
-        let handle_id = self.handle_table.add(handle);
-
-        Ok(handle_id as usize)
+        let handle_id = self.handle_table.add(vmo, rights)?;
+        Ok(handle_id)
     }
 
     /// 向文件描述符写入数据（HNX_SYS_WRITE）

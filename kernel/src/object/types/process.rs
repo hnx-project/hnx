@@ -10,7 +10,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use shared::sync::mutex::Mutex;
 use crate::object::traits::*;
-use crate::object::impl_kernel_object;
+use crate::impl_kernel_object;
 use crate::object::HandleTable;
 
 /// 进程对象
@@ -69,9 +69,9 @@ impl Process {
     }
     
     /// 从进程移除线程
-    pub fn remove_thread(&self, thread: &Arc<crate::object::types::thread::Thread>) {
+    pub fn remove_thread(&self, tid: u64) {
         let mut threads = self.threads.lock();
-        if let Some(pos) = threads.iter().position(|t| Arc::ptr_eq(t, thread)) {
+        if let Some(pos) = threads.iter().position(|t| t.tid() == tid) {
             threads.remove(pos);
         }
     }
@@ -83,7 +83,7 @@ impl Process {
         
         // 终止所有线程
         let threads = self.threads.lock();
-        for thread in threads.iter() {
+        for _thread in threads.iter() {
             // 实际实现需要终止线程
         }
     }

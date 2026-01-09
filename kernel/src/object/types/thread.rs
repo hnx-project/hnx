@@ -9,7 +9,7 @@
 use alloc::sync::Arc;
 use shared::sync::mutex::Mutex;
 use crate::object::traits::*;
-use crate::object::impl_kernel_object;
+use crate::impl_kernel_object;
 
 /// 线程对象
 pub struct Thread {
@@ -141,11 +141,11 @@ impl Thread {
     }
     
     /// 退出线程
-    pub fn exit(&self, code: i32) {
+    pub fn exit(&self, _code: i32) {
         *self.state.lock() = ThreadState::Exited;
         
         // 从进程中移除线程
-        self.process.remove_thread(self);
+        self.process.remove_thread(self.tid);
     }
 }
 
