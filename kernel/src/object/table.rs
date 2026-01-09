@@ -19,16 +19,20 @@ pub struct HandleTable {
 impl HandleTable {
     /// 最大句柄数 （默认1024）
     const MAX_HANDLES: usize = 1024;
-    
+
     pub fn new(pid: u64) -> Self {
         Self {
             handles: Mutex::new(vec![None; Self::MAX_HANDLES]),
             pid,
         }
     }
-    
+
     /// 添加句柄，返回句柄值
-    pub fn add(&self, object: Arc<dyn KernelObject>, rights: ObjectRights) -> Result<usize, ObjectError> {
+    pub fn add(
+        &self,
+        object: Arc<dyn KernelObject>,
+        rights: ObjectRights,
+    ) -> Result<usize, ObjectError> {
         let mut handles = self.handles.lock();
         // 寻找空闲槽位
         for (idx, slot) in handles.iter_mut().enumerate() {
@@ -39,16 +43,17 @@ impl HandleTable {
         }
         Err(ObjectError::NoMemory)
     }
-    
+
     /// 获取句柄（不取出）
     pub fn get(&self, handle_value: usize) -> Result<Handle, ObjectError> {
         let handles = self.handles.lock();
-        handles.get(handle_value)
+        handles
+            .get(handle_value)
             .and_then(|h| h.as_ref())
             .cloned()
             .ok_or(ObjectError::BadHandle)
     }
-    
+
     /// 移除句柄（取出所有权）
     pub fn remove(&self, handle_value: usize) -> Result<Handle, ObjectError> {
         let mut handles = self.handles.lock();
@@ -58,7 +63,7 @@ impl HandleTable {
             Err(ObjectError::BadHandle)
         }
     }
-    
+
     /// 替换句柄（原子操作）
     pub fn replace(&self, handle_value: usize, new_handle: Handle) -> Result<Handle, ObjectError> {
         let mut handles = self.handles.lock();

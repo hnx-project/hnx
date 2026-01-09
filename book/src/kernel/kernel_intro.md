@@ -66,7 +66,10 @@ HNX 采用分层微内核设计，旨在实现安全性、模块化和可移植�
 
 HNX 内核由以下关键组件构成，它们协同工作以提供一个稳定、安全且高效的操作系统基础：
 
-- **架构抽象层 (Architecture Abstraction):** 位于 `kernel/src/arch` 目录，提供了针对不同处理器架构（如 AArch64）的底层硬件接口和通用抽象层。这包括内存管理单元 (MMU) 的配置、中断处理、启动序列等，确保内核在不同硬件平台上具备可移植性。
+- **架构抽象层 (Architecture Abstraction):** 位于 `kernel/src/arch` 目录，负责把“硬件相关的细节”收敛到统一接口，让内核主体代码尽量不关心具体 CPU 架构。该层由三部分组成：
+  - `traits/`：对 CPU/MMU/中断/定时器/异常/启动（Boot）等能力定义统一接口
+  - `implementations/<arch>/`：针对具体架构（当前为 AArch64）的实现
+  - `mod.rs`：向上提供稳定的门面 API（如 `arch::mmu::init()`）
 
 - **核心原语 (Core Primitives):** 位于 `kernel/src/core` 目录，包含了内核最基础的服务，如进程间通信 (IPC) 机制和调度器。IPC 负责内核与用户空间服务以及服务之间的通信；调度器则管理进程和线程的执行，实现任务切换和资源分配。
 
@@ -90,13 +93,4 @@ HNX 内核由以下关键组件构成，它们协同工作以提供一个稳定�
 
 为了更好地理解内核的内部工作原理，我们为每个核心模块提供了详细的文档。
 
--   [架构抽象层 (Architecture Abstraction)](./arch/mod.md)
--   [核心原语 (Core Primitives)](./core/mod.md)
--   [驱动程序 (Drivers)](./drivers/mod.md)
--   [错误处理 (Error Handling)](./error/mod.md)
--   [IPC 服务 (IPC Services)](./ipc_services/mod.md)
--   [加载器 (Loader)](./loader/mod.md)
--   [内存管理 (Memory Management)](./memory/mod.md)
--   [进程管理 (Process Management)](./process/mod.md)
--   [安全与能力 (Security & Capabilities)](./security/mod.md)
--   [同步原语 (Synchronization)](./sync/mod.md)
+- [架构抽象层 (Architecture Abstraction)](./arch/mod.md)

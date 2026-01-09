@@ -6,10 +6,10 @@
 //! - 线程局部存储（TLS）
 //! - 调度状态
 
+use crate::impl_kernel_object;
+use crate::object::traits::*;
 use alloc::sync::Arc;
 use shared::sync::mutex::Mutex;
-use crate::object::traits::*;
-use crate::impl_kernel_object;
 
 /// 线程对象
 pub struct Thread {
@@ -82,68 +82,68 @@ impl Thread {
             stack,
             tls: Mutex::new(None),
         });
-        
+
         // 将线程添加到进程
         thread.process.add_thread(thread.clone());
-        
+
         thread
     }
-    
+
     /// 获取线程ID
     pub fn tid(&self) -> u64 {
         self.tid
     }
-    
+
     /// 获取所属进程
     pub fn process(&self) -> &Arc<crate::object::types::process::Process> {
         &self.process
     }
-    
+
     /// 获取线程状态
     pub fn state(&self) -> ThreadState {
         *self.state.lock()
     }
-    
+
     /// 设置线程状态
     pub fn set_state(&self, state: ThreadState) {
         *self.state.lock() = state;
     }
-    
+
     /// 获取线程上下文
     pub fn context(&self) -> ThreadContext {
         self.context.lock().clone()
     }
-    
+
     /// 设置线程上下文
     pub fn set_context(&self, context: ThreadContext) {
         *self.context.lock() = context;
     }
-    
+
     /// 获取线程局部存储地址
     pub fn tls(&self) -> Option<usize> {
         *self.tls.lock()
     }
-    
+
     /// 设置线程局部存储地址
     pub fn set_tls(&self, tls: usize) {
         *self.tls.lock() = Some(tls);
     }
-    
+
     /// 启动线程
     pub fn start(&self) -> Result<(), ObjectError> {
         let mut state = self.state.lock();
         if *state != ThreadState::Created {
             return Err(ObjectError::InvalidArgs);
         }
-        
+
         *state = ThreadState::Ready;
         Ok(())
     }
-    
+
     /// 退出线程
     pub fn exit(&self, _code: i32) {
         *self.state.lock() = ThreadState::Exited;
-        
+
         // 从进程中移除线程
         self.process.remove_thread(self.tid);
     }
@@ -155,11 +155,11 @@ impl Dispatcher for Thread {
     fn can_block(&self) -> bool {
         true // 线程可以阻塞
     }
-    
+
     fn on_block(&self) {
         *self.state.lock() = ThreadState::Blocked;
     }
-    
+
     fn on_unblock(&self) {
         *self.state.lock() = ThreadState::Ready;
     }

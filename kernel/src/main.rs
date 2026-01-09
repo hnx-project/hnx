@@ -31,8 +31,8 @@ fn alloc_error_handler(_layout: Layout) -> ! {
     panic!("allocation error")
 }
 
-mod debug;
 mod arch;
+mod debug;
 mod memory;
 mod object;
 mod syscall;
@@ -54,19 +54,19 @@ pub extern "C" fn kernel_main() -> ! {
 
     // 初始化架构相关功能
     println!("[1/5] Initializing architecture...");
-    arch::platform::init();
+    arch::platform::init().unwrap();
 
     // 初始化内存管理
     println!("[2/5] Initializing memory management...");
-    arch::mmu::init();
+    arch::mmu::init().unwrap();
 
     // 初始化中断控制器
     println!("[3/5] Initializing interrupts...");
-    arch::interrupt::init();
+    arch::interrupt::init().unwrap();
 
     // 初始化定时器
     println!("[4/5] Initializing timer...");
-    arch::timer::init();
+    arch::timer::init().unwrap();
 
     // 初始化对象系统
     println!("[5/5] Initializing object system...");
@@ -86,7 +86,8 @@ fn panic(info: &PanicInfo) -> ! {
     println!("\n[PANIC] HNX Microkernel panic:");
 
     if let Some(location) = info.location() {
-        println!("  at {}:{}:{}",
+        println!(
+            "  at {}:{}:{}",
             location.file(),
             location.line(),
             location.column()

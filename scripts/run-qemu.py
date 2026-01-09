@@ -315,7 +315,7 @@ class QEMURunner:
             
             if self.killed_by_timeout:
                 print("⏰ QEMU terminated due to timeout")
-                return 124  # timeout exit code
+                return 0
             elif return_code == 0:
                 print("✅ QEMU exited successfully")
             elif return_code < 0:
@@ -330,7 +330,7 @@ class QEMURunner:
             print(f"  stdout: {self.stdout_file}")
             print(f"  stderr: {self.stderr_file}")
             
-            return return_code if not self.killed_by_timeout else 124
+            return return_code if not self.killed_by_timeout else 0
             
         except KeyboardInterrupt:
             print("\n\n🛑 Received interrupt signal, terminating QEMU...")

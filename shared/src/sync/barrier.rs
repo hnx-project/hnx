@@ -28,14 +28,14 @@ impl Barrier {
             condvar: Condvar::new(),
         }
     }
-    
+
     /// Waits for all processes to reach this barrier
     ///
     /// When all processes have called `wait`, they will all proceed together.
     pub fn wait(&self) {
         let mut current = self.current.lock();
         *current += 1;
-        
+
         if *current == self.count {
             // Last process reached the barrier, wake up all others
             for _ in 0..(self.count - 1) {
@@ -87,28 +87,28 @@ impl<T: ?Sized> RwLock<T> {
     pub fn read(&self) -> RwLockReadGuard<'_, T> {
         // Acquire writer semaphore to ensure no writer is waiting
         self.writer_sem.acquire();
-        
+
         // Increment reader count
         let mut readers = self.readers.lock();
         *readers += 1;
-        
+
         // Release writer semaphore so other readers can proceed
         self.writer_sem.release();
-        
+
         RwLockReadGuard { lock: self }
     }
-    
+
     /// Acquires a write lock
     ///
     /// Only one process can hold a write lock, and it excludes all readers.
     pub fn write(&self) -> RwLockWriteGuard<'_, T> {
         // Acquire writer semaphore to prevent new readers
         self.writer_sem.acquire();
-        
+
         // Set writer active flag
         let mut writer_active = self.writer_active.lock();
         *writer_active = true;
-        
+
         // Wait for all readers to finish
         loop {
             let readers = self.readers.lock();
@@ -118,7 +118,7 @@ impl<T: ?Sized> RwLock<T> {
             drop(readers);
             core::hint::spin_loop();
         }
-        
+
         RwLockWriteGuard { lock: self }
     }
 }
@@ -130,7 +130,7 @@ pub struct RwLockReadGuard<'a, T: ?Sized> {
 
 impl<'a, T: ?Sized> Deref for RwLockReadGuard<'a, T> {
     type Target = T;
-    
+
     fn deref(&self) -> &Self::Target {
         unsafe { &*self.lock.data.get() }
     }
@@ -150,7 +150,7 @@ pub struct RwLockWriteGuard<'a, T: ?Sized> {
 
 impl<'a, T: ?Sized> Deref for RwLockWriteGuard<'a, T> {
     type Target = T;
-    
+
     fn deref(&self) -> &Self::Target {
         unsafe { &*self.lock.data.get() }
     }
@@ -167,7 +167,7 @@ impl<'a, T: ?Sized> Drop for RwLockWriteGuard<'a, T> {
         // Set writer active flag to false
         let mut writer_active = self.lock.writer_active.lock();
         *writer_active = false;
-        
+
         // Release writer semaphore
         self.lock.writer_sem.release();
     }

@@ -1,37 +1,71 @@
 # 架构抽象层 (Architecture Abstraction Layer)
 
-HNX 内核的架构抽象层 (Arch Layer) 位于 `kernel/src/arch` 目录，其核心目标是实现内核的跨平台兼容性。通过提供一套统一的接口，它将硬件相关的底层操作与内核的通用逻辑分离，使得 HNX 能够支持不同的处理器架构，如当前的 AArch64 以及未来可能支持的 x86_64 和 RISC-V。
+HNX 的架构抽象层位于 `kernel/src/arch`，目标是把“硬件相关的能力”抽象成一组稳定接口，避免内核主体逻辑与具体指令集/寄存器/平台设备强耦合。
 
-## 结构与设计
+## 目录结构
 
-架构抽象层遵循严格的约定，以确保通用代码和架构特定代码之间的清晰分离：
+当前代码组织（以 AArch64 为例）：
 
-1.  **通用接口 (Traits):** 内核的通用部分通过 Rust 的 `trait` 定义一套抽象接口，例如内存管理单元 (MMU) 操作、中断处理、上下文切换、系统调用入口等。所有架构特定的实现都必须实现这些 `trait`。
+```text
+kernel/src/arch/
+  mod.rs
+  common/
+  traits/
+    boot.rs cpu.rs mmu.rs interrupt.rs timer.rs exception.rs mod.rs
+  implementations/
+    aarch64/
+      mod.rs
+      boot/ (boot.S + Rust glue)
+      cpu/  mmu/ interrupt/ timer/ exception/ smp/ psci/ registers/
+```
 
-2.  **架构特定实现:** 每个受支持的处理器架构都在 `kernel/src/arch` 目录下拥有独立的子目录，例如 `aarch64`。这些子目录包含了该架构的特定实现代码，负责将通用接口映射到具体的硬件指令和寄存器操作。
+其中：
 
-    -   `aarch64/`: 包含针对 AArch64 架构的实现，包括：
-        -   **中断处理 (`interrupt.rs`):** 处理来自硬件的中断和异常。
-        -   **内存管理单元 (`mmu.rs`):** 配置和管理 AArch64 的 MMU，进行物理地址到虚拟地址的转换。
-        -   **启动代码 (`boot.rs`):** AArch64 特定的内核启动流程和初始化。
-        -   **汇编代码:** 通常包含底层的汇编语言例程，用于上下文切换、异常向量表等。
+- `traits/`：定义跨架构统一接口（trait），内核通用代码只依赖这些接口语义
+- `implementations/<arch>/`：把接口落到具体硬件实现（指令、系统寄存器、设备 MMIO）
+- `mod.rs`：向上提供稳定门面 API，并选择当前目标架构的实现
 
-3.  **跨架构通用代码 (`common/`):** 包含可在所有架构之间共享的代码，例如一些通用的宏定义、数据结构或辅助函数，这些代码本身不依赖于特定的硬件特性。
+## 架构接口（traits）概览
 
-## 关键功能
+架构抽象层的核心接口位于 `kernel/src/arch/traits`：
 
--   **引导启动 (Bootstrapping):** 管理内核在特定硬件平台上的初始化过程，包括设置初始页表、初始化中断控制器、切换到 EL1/EL0 模式等。
--   **内存管理单元 (MMU) 控制:** 提供对硬件 MMU 的编程接口，实现虚拟内存的映射、权限控制和地址空间切换。
--   **中断与异常处理:** 设置中断向量表，定义中断和异常的入口点，并提供处理这些事件的机制。
--   **上下文切换 (Context Switching):** 实现进程或线程之间 CPU 状态的保存和恢复，这是任务调度的基础。
--   **系统调用接口 (Syscall Interface):** 定义用户空间如何通过架构特定的机制（如 SVC 指令）进入内核，并触发相应的系统调用处理程序。
--   **定时器管理:** 硬件定时器的初始化和配置，为内核的调度器和时间相关服务提供精确的时间源。
+- `CpuArch`：CPU 初始化、屏障、WFI、中断开关、特权级等
+- `MmuArch`：页表、地址空间、映射/取消映射、TLB 维护等
+- `InterruptArch`：中断控制器初始化、IRQ enable/disable、优先级、亲和性等
+- `TimerArch`：时钟源/计时、定时器中断、超时回调等
+- `ExceptionArch`：异常向量表、同步异常处理、断点/单步（可选）等
+- `BootArch`：启动阶段的信息收集与收尾（内存图、设备树、启动参数等）
 
-## 设计目标与挑战
+这些 trait 的目的不是“把一切都抽象到极致”，而是把跨平台所必须的语义边界确定下来：上层只关心“我需要一个可用的页表映射/一个可用的时钟/一个可用的 IRQ 路径”，而不关心“这块芯片的寄存器细节”。
 
--   **可移植性:** 最大化通用代码，最小化架构特定代码，简化对新架构的支持。
--   **性能:** 确保底层硬件操作的高效性，避免不必要的抽象开销。
--   **安全性:** 严格控制对底层硬件的访问，防止用户空间或恶意代码直接操纵硬件。
--   **复杂性管理:** 平衡抽象层和硬件细节之间的关系，使得代码既易于理解又功能强大。
+## 门面 API（arch::xxx）
 
-通过这种分层设计，HNX 能够在保持内核精简的同时，有效地管理不同硬件平台的复杂性，为上层服务提供稳定、一致的运行环境。
+为了让内核其它模块以更少的泛型/trait 约束调用架构能力，`kernel/src/arch/mod.rs` 提供门面 API，例如：
+
+- `arch::platform::init()`：启动早期的架构初始化入口（会触发 Boot early init 与 boot info 初始化）
+- `arch::mmu::init()`：初始化 MMU 子系统
+- `arch::interrupt::init()`：初始化中断子系统
+- `arch::timer::init()`：初始化定时器/时钟源
+- `arch::cpu::wait_for_interrupt()`：进入低功耗等待（WFI）
+
+在实现选择上，`arch::current` 会根据 `target_arch` 指向具体实现（例如 `implementations::aarch64`）。
+
+## 启动链路（AArch64）
+
+以 QEMU virt + AArch64 为例，启动过程可理解为三段：
+
+1. `boot.S`：最早期汇编入口 `_start`，完成异常级别切换、栈设置、BSS 清零、向量表设置、早期串口输出等
+2. `kernel_main()`：Rust 入口，初始化调试输出与各子系统（arch/mmu/interrupt/timer/对象等）
+3. 进入主循环：通过 `arch::cpu::wait_for_interrupt()` 等待事件
+
+目前 AArch64 的 `boot.S` 通过 `global_asm!(include_str!(\"boot.S\"))` 编译进内核二进制，并由链接脚本 `ENTRY(_start)` 指定 ELF 入口点。
+
+## BootInfo 的职责边界
+
+`BootArch/BootInfo` 的定位是“启动阶段的信息汇聚器”，典型包括：
+
+- 内核映像信息：基址、大小、入口点、段信息（.text/.rodata/.data/.bss）
+- 物理内存信息：总量/可用量、保留区（例如 initrd、设备保留内存）
+- 设备发现信息：设备树/ACPI（可选，当前 AArch64 暂未完整实现）
+
+这些信息通常会被 MMU 初始化、物理内存分配器初始化、驱动初始化等阶段消费。

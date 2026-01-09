@@ -49,7 +49,7 @@ fn generate_linker_script_and_config_header(arch: &str, _target: &str) {
     let cfg: Value = toml::from_str(&cfg_str).unwrap_or(Value::Table(Default::default()));
 
     // 提取配置项，带默认值
-    // endian 
+    // endian
     let endian = cfg
         .get("arch")
         .and_then(|a| a.get("endian"))
@@ -106,10 +106,8 @@ fn generate_linker_script_and_config_header(arch: &str, _target: &str) {
     let script_path = PathBuf::from(out_dir).join("linker.ld");
     fs::write(&script_path, script).unwrap();
 
-
     // 告诉 Cargo 使用这个链接脚本
     println!("cargo:rustc-link-arg=-T{}", script_path.display());
     println!("cargo:rustc-link-arg=-nostdlib");
     println!("cargo:rustc-link-arg=-no-pie");
-    
 }

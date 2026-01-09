@@ -40,29 +40,27 @@ impl<T: ?Sized> Mutex<T> {
         // Simple spinlock implementation for now
         // In a more advanced implementation, we could block the process
         // and put it in a waiting queue
-        while self.locked.compare_exchange_weak(
-            false,
-            true,
-            Ordering::Acquire,
-            Ordering::Relaxed,
-        ).is_err() {
+        while self
+            .locked
+            .compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Relaxed)
+            .is_err()
+        {
             // Spin wait
             core::hint::spin_loop();
         }
-        
+
         MutexGuard { mutex: self }
     }
-    
+
     /// Attempts to acquire the mutex without blocking
     ///
     /// Returns Some(guard) if the mutex was acquired, None otherwise.
     pub fn try_lock(&self) -> Option<MutexGuard<'_, T>> {
-        if self.locked.compare_exchange(
-            false,
-            true,
-            Ordering::Acquire,
-            Ordering::Relaxed,
-        ).is_ok() {
+        if self
+            .locked
+            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+            .is_ok()
+        {
             Some(MutexGuard { mutex: self })
         } else {
             None
@@ -77,7 +75,7 @@ pub struct MutexGuard<'a, T: ?Sized> {
 
 impl<'a, T: ?Sized> Deref for MutexGuard<'a, T> {
     type Target = T;
-    
+
     fn deref(&self) -> &Self::Target {
         unsafe { &*self.mutex.data.get() }
     }
@@ -107,7 +105,7 @@ impl Semaphore {
             count: AtomicU32::new(count),
         }
     }
-    
+
     /// Acquires a permit from the semaphore, blocking if necessary
     ///
     /// Decrements the semaphore's count. If the count is zero, the calling
@@ -116,12 +114,11 @@ impl Semaphore {
         loop {
             let current = self.count.load(Ordering::Acquire);
             if current > 0 {
-                if self.count.compare_exchange(
-                    current,
-                    current - 1,
-                    Ordering::AcqRel,
-                    Ordering::Acquire,
-                ).is_ok() {
+                if self
+                    .count
+                    .compare_exchange(current, current - 1, Ordering::AcqRel, Ordering::Acquire)
+                    .is_ok()
+                {
                     break;
                 }
             } else {
@@ -131,7 +128,7 @@ impl Semaphore {
             }
         }
     }
-    
+
     /// Releases a permit to the semaphore
     ///
     /// Increments the semaphore's count and potentially wakes up a waiting process.
@@ -139,7 +136,7 @@ impl Semaphore {
         self.count.fetch_add(1, Ordering::Release);
         // In a more advanced implementation, we would wake up a waiting process
     }
-    
+
     /// Attempts to acquire a permit without blocking
     ///
     /// Returns true if a permit was acquired, false otherwise.
@@ -147,12 +144,11 @@ impl Semaphore {
         loop {
             let current = self.count.load(Ordering::Acquire);
             if current > 0 {
-                if self.count.compare_exchange(
-                    current,
-                    current - 1,
-                    Ordering::AcqRel,
-                    Ordering::Acquire,
-                ).is_ok() {
+                if self
+                    .count
+                    .compare_exchange(current, current - 1, Ordering::AcqRel, Ordering::Acquire)
+                    .is_ok()
+                {
                     return true;
                 }
             } else {
@@ -174,33 +170,33 @@ impl Condvar {
             waiters: AtomicU32::new(0),
         }
     }
-    
+
     /// Blocks the current process until this condition variable is notified
     ///
     /// This function should only be called while holding the associated mutex.
     pub fn wait<T>(&self, _guard: MutexGuard<'_, T>) {
         // Increment waiter count
         self.waiters.fetch_add(1, Ordering::Release);
-        
+
         // In a more advanced implementation, we would:
         // 1. Release the mutex
         // 2. Block the current process
         // 3. Add the process to a waiting queue
         // 4. Reacquire the mutex when woken up
-        
+
         // For now, we'll just spin
         loop {
             core::hint::spin_loop();
         }
     }
-    
+
     /// Wakes up one process waiting on this condition variable
     pub fn notify_one(&self) {
         // Decrement waiter count
         self.waiters.fetch_sub(1, Ordering::Release);
         // In a more advanced implementation, we would wake up one waiting process
     }
-    
+
     /// Wakes up all processes waiting on this condition variable
     pub fn notify_all(&self) {
         // Reset waiter count

@@ -15,37 +15,34 @@ use super::super::ArchResult;
 pub trait TimerArch: Send + Sync {
     /// 定时器对象类型
     type Timer: HardwareTimer;
-    
+
     /// 时钟源对象类型
     type ClockSource: ClockSource;
-    
+
     /// 初始化定时器系统
     fn init() -> ArchResult<()>;
-    
+
     /// 获取系统时间（纳秒）
     fn system_time() -> u64;
-    
+
     /// 获取单调时间（纳秒）
     fn monotonic_time() -> u64;
-    
+
     /// 获取启动时间（纳秒）
     fn boot_time() -> u64;
-    
+
     /// 获取高精度定时器
     fn high_precision_timer() -> &'static Self::Timer;
-    
+
     /// 获取系统定时器
     fn system_timer() -> &'static Self::Timer;
-    
+
     /// 注册定时器回调
-    fn register_callback(
-        callback: TimerCallback,
-        data: usize,
-    ) -> ArchResult<TimerHandle>;
-    
+    fn register_callback(callback: TimerCallback, data: usize) -> ArchResult<TimerHandle>;
+
     /// 注销定时器回调
     fn unregister_callback(handle: TimerHandle) -> ArchResult<()>;
-    
+
     /// 设置单次定时器
     fn set_oneshot(
         timer: &Self::Timer,
@@ -53,7 +50,7 @@ pub trait TimerArch: Send + Sync {
         callback: Option<TimerCallback>,
         data: usize,
     ) -> ArchResult<()>;
-    
+
     /// 设置周期性定时器
     fn set_periodic(
         timer: &Self::Timer,
@@ -61,16 +58,16 @@ pub trait TimerArch: Send + Sync {
         callback: Option<TimerCallback>,
         data: usize,
     ) -> ArchResult<()>;
-    
+
     /// 取消定时器
     fn cancel(timer: &Self::Timer) -> ArchResult<()>;
-    
+
     /// 获取定时器频率（Hz）
     fn timer_frequency(timer: &Self::Timer) -> u64;
-    
+
     /// 获取时钟源
     fn clock_source() -> &'static Self::ClockSource;
-    
+
     /// 校准时间
     fn calibrate() -> ArchResult<()>;
 }
@@ -79,43 +76,43 @@ pub trait TimerArch: Send + Sync {
 pub trait HardwareTimer: Send + Sync {
     /// 定时器名称
     fn name(&self) -> &str;
-    
+
     /// 初始化定时器
     fn initialize(&self) -> ArchResult<()>;
-    
+
     /// 启用定时器
     fn enable(&self);
-    
+
     /// 禁用定时器
     fn disable(&self);
-    
+
     /// 设置计数值
     fn set_count(&self, count: u64);
-    
+
     /// 获取当前计数值
     fn current_count(&self) -> u64;
-    
+
     /// 设置比较值
     fn set_compare(&self, compare: u64);
-    
+
     /// 获取比较值
     fn compare_value(&self) -> u64;
-    
+
     /// 设置周期
     fn set_period(&self, period_ns: u64) -> ArchResult<()>;
-    
+
     /// 是否支持单次模式
     fn supports_oneshot(&self) -> bool;
-    
+
     /// 是否支持周期性模式
     fn supports_periodic(&self) -> bool;
-    
+
     /// 最大计数值
     fn max_count(&self) -> u64;
-    
+
     /// 最小周期（纳秒）
     fn min_period_ns(&self) -> u64;
-    
+
     /// 最大周期（纳秒）
     fn max_period_ns(&self) -> u64;
 }
@@ -124,28 +121,28 @@ pub trait HardwareTimer: Send + Sync {
 pub trait ClockSource: Send + Sync {
     /// 时钟源名称
     fn name(&self) -> &str;
-    
+
     /// 初始化时钟源
     fn initialize(&self) -> ArchResult<()>;
-    
+
     /// 读取当前时间
     fn read(&self) -> u64;
-    
+
     /// 频率（Hz）
     fn frequency(&self) -> u64;
-    
+
     /// 精度（纳秒）
     fn resolution_ns(&self) -> u64;
-    
+
     /// 是否单调递增
     fn is_monotonic(&self) -> bool;
-    
+
     /// 是否连续（不会回绕）
     fn is_continuous(&self) -> bool;
-    
+
     /// 回绕周期
     fn wrap_around_period(&self) -> u64;
-    
+
     /// 时钟源类型
     fn clock_type(&self) -> ClockType;
 }

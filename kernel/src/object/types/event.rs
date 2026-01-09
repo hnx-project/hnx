@@ -4,12 +4,12 @@
 //! 事件可以处于两种状态：已信号（signaled）或未信号（unsignaled）。
 //! 当事件被信号化时，所有等待该事件的线程将被唤醒。
 
-use alloc::sync::Arc;
-use alloc::vec::Vec;
-use alloc::vec;
-use shared::sync::mutex::Mutex;
-use crate::object::traits::*;
 use crate::impl_kernel_object;
+use crate::object::traits::*;
+use alloc::sync::Arc;
+use alloc::vec;
+use alloc::vec::Vec;
+use shared::sync::mutex::Mutex;
 
 /// 事件对象
 pub struct Event {
@@ -30,36 +30,36 @@ impl Event {
             waiters: Mutex::new(Vec::new()),
         })
     }
-    
+
     /// 发出事件信号
     pub fn signal(&self) {
         let mut signaled = self.signaled.lock();
         *signaled = true;
-        
+
         // 唤醒所有等待的线程
         let mut waiters = self.waiters.lock();
         for waiter in waiters.drain(..) {
             waiter.on_unblock();
         }
     }
-    
+
     /// 清除事件信号
     pub fn clear(&self) {
         let mut signaled = self.signaled.lock();
         *signaled = false;
     }
-    
+
     /// 检查事件是否已信号
     pub fn is_signaled(&self) -> bool {
         *self.signaled.lock()
     }
-    
+
     /// 等待事件信号（简化实现，实际应支持超时）
     pub fn wait(&self) -> Result<(), ObjectError> {
         if self.is_signaled() {
             return Ok(());
         }
-        
+
         // 将当前线程添加到等待列表（简化实现）
         // 实际实现需要获取当前线程对象
         Err(ObjectError::WouldBlock)
@@ -72,12 +72,12 @@ impl Dispatcher for Event {
     fn can_block(&self) -> bool {
         true
     }
-    
+
     fn on_block(&self) {
         // 当线程开始等待此事件时调用
         // 实际实现需要记录等待的线程
     }
-    
+
     fn on_unblock(&self) {
         // 当事件信号化时调用
         // 实际实现需要唤醒等待的线程

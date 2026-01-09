@@ -32,24 +32,24 @@
 // pub struct Aarch64Module;
 // pub struct Aarch64ModuleInfo;
 // pub struct Aarch64ModuleConfig;
-// 
+//
 // 需要实现的方法（示例）：
 // pub fn init() -> ArchResult<()>;
 // pub fn create(config: &Aarch64ModuleConfig) -> ArchResult<Aarch64Module>;
 // pub fn info(&self) -> Aarch64ModuleInfo;
-// 
+//
 // 寄存器定义（示例）：
 // use tock_registers::{register_bitfields, register_structs, registers::*};
-// 
+//
 // 对象管理（示例）：
 // use crate::object::{KernelObject, Handle, ObjectRights};
-// 
+//
 // 遵循"一切皆对象"原则，所有资源都封装为对象。
 
+use crate::arch::traits::cpu::{CacheInfo, CacheLevel, CpuContext, CpuInfo};
+use crate::arch::{ArchError, ArchResult};
 use aarch64_cpu::registers::{Readable, Writeable};
 use aarch64_cpu::{asm, registers};
-use crate::arch::{ArchError, ArchResult};
-use crate::arch::traits::cpu::{CacheInfo, CacheLevel, CpuContext, CpuInfo};
 
 #[derive(Debug, Clone)]
 pub struct Aarch64CpuInfo {
@@ -130,15 +130,40 @@ impl CpuContext for Aarch64Context {
     }
 
     unsafe fn switch_to(&self) {
-        let _ = self;
-        core::hint::spin_loop();
+        let entry = self.entry_point;
+        let sp = self.stack_pointer;
+        let arg = self.arg;
+
+        core::arch::asm!(
+            "mov sp, {sp}",
+            "mov x0, {arg}",
+            "br {entry}",
+            sp = in(reg) sp,
+            arg = in(reg) arg,
+            entry = in(reg) entry,
+            options(noreturn)
+        );
     }
 
     unsafe fn save_current() -> Self {
+        let mut sp: usize;
+        let mut pc: usize;
+        let mut arg: usize;
+
+        core::arch::asm!(
+            "mov {sp_out}, sp",
+            "adr {pc_out}, .",
+            "mov {arg_out}, x0",
+            sp_out = out(reg) sp,
+            pc_out = out(reg) pc,
+            arg_out = out(reg) arg,
+            options(nomem, preserves_flags)
+        );
+
         Self {
-            entry_point: 0,
-            stack_pointer: 0,
-            arg: 0,
+            entry_point: pc,
+            stack_pointer: sp,
+            arg,
         }
     }
 }
@@ -212,7 +237,10 @@ pub fn current_privilege_level() -> u8 {
 }
 
 pub fn set_stack_pointer(_sp: usize) {
-    core::hint::spin_loop();
+    let sp = _sp;
+    unsafe {
+        core::arch::asm!("mov sp, {0}", in(reg) sp, options(nomem, preserves_flags));
+    }
 }
 
 pub fn read_timestamp_counter() -> u64 {

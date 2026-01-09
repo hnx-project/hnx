@@ -1,4 +1,3 @@
-
 // File open flags - synchronized with POSIX
 pub const O_RDONLY: u32 = 0o0;
 pub const O_WRONLY: u32 = 0o1;

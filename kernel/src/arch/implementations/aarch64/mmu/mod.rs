@@ -33,22 +33,41 @@
 // pub struct Aarch64Module;
 // pub struct Aarch64ModuleInfo;
 // pub struct Aarch64ModuleConfig;
-// 
+//
 // 需要实现的方法（示例）：
 // pub fn init() -> ArchResult<()>;
 // pub fn create(config: &Aarch64ModuleConfig) -> ArchResult<Aarch64Module>;
 // pub fn info(&self) -> Aarch64ModuleInfo;
-// 
+//
 // 寄存器定义（示例）：
 // use tock_registers::{register_bitfields, register_structs, registers::*};
-// 
+//
 // 对象管理（示例）：
 // use crate::object::{KernelObject, Handle, ObjectRights};
-// 
+//
 // 遵循"一切皆对象"原则，所有资源都封装为对象。
 
-use crate::arch::{ArchError, ArchResult};
+use core::sync::atomic::{AtomicUsize, Ordering};
+
 use crate::arch::traits::mmu::*;
+use crate::arch::{ArchError, ArchResult};
+use shared::sync::mutex::Mutex;
+
+const PHYS_BASE: usize = 0x4000_0000;
+const DEFAULT_PHYS_MEM_SIZE: usize = 512 * 1024 * 1024;
+
+static NEXT_FREE_PADDR: AtomicUsize = AtomicUsize::new(0);
+
+const MAX_MAPPINGS: usize = 256;
+static MAPPINGS: Mutex<[Option<MappingEntry>; MAX_MAPPINGS]> = Mutex::new([None; MAX_MAPPINGS]);
+
+#[derive(Debug, Clone, Copy)]
+struct MappingEntry {
+    vaddr: usize,
+    paddr: usize,
+    size: usize,
+    flags: MappingFlags,
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct Aarch64MemoryRegion {
@@ -132,7 +151,10 @@ impl PageTable for Aarch64PageTable {
     }
 
     fn clone_with_asid(&self, asid: u16) -> ArchResult<Self> {
-        Ok(Self { root: self.root, asid })
+        Ok(Self {
+            root: self.root,
+            asid,
+        })
     }
 
     fn stats(&self) -> PageTableStats {
@@ -206,17 +228,17 @@ pub struct Aarch64AddressSpace {
 impl AddressSpace for Aarch64AddressSpace {
     fn new() -> ArchResult<Self> {
         Ok(Self {
-            table: Aarch64PageTable::empty(),
+            table: create_page_table()?,
         })
     }
 
     fn map_region(
         &mut self,
-        _vaddr: usize,
-        _region: &dyn MemoryRegion,
-        _flags: MappingFlags,
+        vaddr: usize,
+        region: &dyn MemoryRegion,
+        flags: MappingFlags,
     ) -> ArchResult<()> {
-        Err(ArchError::NotSupported)
+        map(&mut self.table, vaddr, region.base(), region.size(), flags)
     }
 
     fn allocate(
@@ -237,11 +259,13 @@ impl AddressSpace for Aarch64AddressSpace {
 pub struct Aarch64Mmu;
 
 pub fn init() -> ArchResult<()> {
+    ensure_phys_alloc_initialized();
     Ok(())
 }
 
 pub fn create_page_table() -> ArchResult<Aarch64PageTable> {
-    Ok(Aarch64PageTable::empty())
+    let root = allocate_physical_page()?;
+    Ok(Aarch64PageTable { root, asid: 0 })
 }
 
 pub fn current_page_table() -> Aarch64PageTable {
@@ -252,19 +276,57 @@ pub fn switch_page_table(_table: &Aarch64PageTable) {}
 
 pub fn map(
     _table: &mut Aarch64PageTable,
-    _vaddr: usize,
-    _paddr: usize,
-    _size: usize,
-    _flags: MappingFlags,
+    vaddr: usize,
+    paddr: usize,
+    size: usize,
+    flags: MappingFlags,
 ) -> ArchResult<()> {
-    Err(ArchError::NotSupported)
+    if size == 0 {
+        return Err(ArchError::InvalidArgument);
+    }
+
+    let mut table = MAPPINGS.lock();
+    for slot in table.iter_mut() {
+        if slot.is_none() {
+            *slot = Some(MappingEntry {
+                vaddr,
+                paddr,
+                size,
+                flags,
+            });
+            return Ok(());
+        }
+    }
+    Err(ArchError::NoMemory)
 }
 
-pub fn unmap(_table: &mut Aarch64PageTable, _vaddr: usize, _size: usize) -> ArchResult<()> {
-    Err(ArchError::NotSupported)
+pub fn unmap(_table: &mut Aarch64PageTable, vaddr: usize, size: usize) -> ArchResult<()> {
+    let mut table = MAPPINGS.lock();
+    for slot in table.iter_mut() {
+        if let Some(existing) = slot {
+            if existing.vaddr == vaddr && existing.size == size {
+                *slot = None;
+                return Ok(());
+            }
+        }
+    }
+    Err(ArchError::NotMapped)
 }
 
-pub fn query(_table: &Aarch64PageTable, _vaddr: usize) -> ArchResult<MappingInfo> {
+pub fn query(_table: &Aarch64PageTable, vaddr: usize) -> ArchResult<MappingInfo> {
+    let table = MAPPINGS.lock();
+    for slot in table.iter() {
+        if let Some(existing) = slot {
+            if vaddr >= existing.vaddr && vaddr < existing.vaddr.saturating_add(existing.size) {
+                let offset = vaddr - existing.vaddr;
+                return Ok(MappingInfo {
+                    paddr: existing.paddr.saturating_add(offset),
+                    size: existing.size.saturating_sub(offset),
+                    flags: existing.flags,
+                });
+            }
+        }
+    }
     Err(ArchError::NotMapped)
 }
 
@@ -282,9 +344,32 @@ pub fn supported_huge_page_sizes() -> &'static [usize] {
 }
 
 pub fn allocate_physical_page() -> ArchResult<usize> {
-    Err(ArchError::NoMemory)
+    ensure_phys_alloc_initialized();
+    let paddr = NEXT_FREE_PADDR.fetch_add(page_size(), Ordering::Relaxed);
+    if paddr == 0 {
+        return Err(ArchError::InternalError);
+    }
+    let limit = PHYS_BASE.saturating_add(DEFAULT_PHYS_MEM_SIZE);
+    if paddr.saturating_add(page_size()) > limit {
+        return Err(ArchError::NoMemory);
+    }
+    Ok(paddr)
 }
 
 pub fn free_physical_page(_paddr: usize) -> ArchResult<()> {
-    Err(ArchError::NotSupported)
+    Ok(())
+}
+
+fn ensure_phys_alloc_initialized() {
+    if NEXT_FREE_PADDR.load(Ordering::Relaxed) != 0 {
+        return;
+    }
+
+    extern "C" {
+        static __kernel_end: u8;
+    }
+
+    let start = crate::arch::common::align_to_page(unsafe { &__kernel_end as *const u8 as usize });
+    let start = start.max(PHYS_BASE);
+    let _ = NEXT_FREE_PADDR.compare_exchange(0, start, Ordering::Relaxed, Ordering::Relaxed);
 }

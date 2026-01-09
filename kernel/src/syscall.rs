@@ -3,8 +3,8 @@
 //! 基于对象模型的系统调用实现，遵循Zircon微内核设计。
 //! 系统调用通过异常进入内核，由本模块分派到具体的对象操作。
 
-use crate::object::traits::*;
 use crate::object::table::HandleTable;
+use crate::object::traits::*;
 use alloc::vec::Vec;
 use shared::abi::syscalls::*;
 
@@ -109,7 +109,7 @@ impl SyscallDispatcher {
         // 读取用户空间数据（暂未实现安全检查）
         // 实际实现需要将数据复制到内核缓冲区
         let data = unsafe { core::slice::from_raw_parts(data_ptr, data_len) };
-        
+
         // 写入通道，不传递句柄（暂未实现句柄传递）
         channel.write(data, Vec::new())?;
 
@@ -139,7 +139,7 @@ impl SyscallDispatcher {
 
         // 准备缓冲区
         let mut buffer = vec![0u8; data_capacity];
-        
+
         // 从通道读取（暂未实现超时和句柄接收）
         let (read_len, _handles) = channel.read(&mut buffer, 0)?;
 
@@ -158,7 +158,10 @@ impl SyscallDispatcher {
         let pid = args[0] as u64;
         let process = Process::new(pid);
 
-        let rights = ObjectRights::READ | ObjectRights::WRITE | ObjectRights::DUPLICATE | ObjectRights::DESTROY;
+        let rights = ObjectRights::READ
+            | ObjectRights::WRITE
+            | ObjectRights::DUPLICATE
+            | ObjectRights::DESTROY;
         let handle_id = self.handle_table.add(process, rights)?;
         Ok(handle_id)
     }
@@ -171,8 +174,8 @@ impl SyscallDispatcher {
 
     /// 创建线程（HNX_SYS_THREAD_CREATE）
     fn sys_thread_create(&mut self, args: &[usize; 6]) -> SyscallResult {
-        use crate::object::types::thread::Thread;
         use crate::object::types::process::Process;
+        use crate::object::types::thread::Thread;
         use crate::object::types::vmo::Vmo;
 
         let process_handle = args[0];
@@ -201,7 +204,10 @@ impl SyscallDispatcher {
 
         let thread = Thread::new(tid, process, entry_point, stack);
 
-        let rights = ObjectRights::READ | ObjectRights::WRITE | ObjectRights::DUPLICATE | ObjectRights::DESTROY;
+        let rights = ObjectRights::READ
+            | ObjectRights::WRITE
+            | ObjectRights::DUPLICATE
+            | ObjectRights::DESTROY;
         let handle_id = self.handle_table.add(thread, rights)?;
         Ok(handle_id)
     }
@@ -214,7 +220,8 @@ impl SyscallDispatcher {
         use crate::object::types::vmo::Vmo;
         let vmo = Vmo::new(size)?;
 
-        let rights = ObjectRights::READ | ObjectRights::WRITE | ObjectRights::DUPLICATE | ObjectRights::MAP;
+        let rights =
+            ObjectRights::READ | ObjectRights::WRITE | ObjectRights::DUPLICATE | ObjectRights::MAP;
         let handle_id = self.handle_table.add(vmo, rights)?;
         Ok(handle_id)
     }

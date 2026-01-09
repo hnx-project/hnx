@@ -2,20 +2,21 @@
 
 ## 项目概述
 
-HNX 是一个用 Rust 编写的现代微内核操作系统，采用内核空间与用户空间服务的清晰分离设计。项目实现了三层系统调用架构（用户空间 → 内核 → 服务），并强调安全性、模块化和可靠性。
+HNX 是一个用 Rust 编写的现代微内核操作系统 Unix-like 实现，兼容标准的 Unix 系统调用接口。POSIX实现 。采用内核空间与用户空间服务的清晰分离设计。项目实现了三层系统调用架构（用户空间 → 内核 → 服务），并强调安全性、模块化和可靠性。参考借鉴了 Zircon 微内核的设计思想。
 
-**核心架构:**
-- **微内核设计:** 最小化内核，仅提供基本服务（IPC、内存管理、调度）
-- **用户空间服务:** 核心功能作为独立服务实现（Loader、VFS、IPC Router 等）
-- **基于能力的安全性:** 使用能力进行细粒度访问控制
-- **跨平台支持:** 当前主要支持 AArch64 架构，使用 QEMU 仿真
+HNX 遵循以下设计原则：
+   **核心架构:**
+   - **微内核设计:** 最小化内核，Everything is Object。所有设计基于对象模型。
+   - **用户空间服务:** 核心功能作为独立服务实现（Loader、VFS、IPC Router 等）
+   - **基于能力的安全性:** 使用能力进行细粒度访问控制
+   - **跨平台支持:** 当前主要支持 AArch64 架构，使用 QEMU 仿真
 
-**关键技术:**
-- **编程语言:** Rust（内核和用户空间组件）
-- **构建系统:** Meson
-- **仿真环境:** QEMU 用于测试和开发
-- **目标架构:** AArch64 (ARMv8-A)
-- **版本管理:** 语义化版本控制，支持自动同步
+   **关键技术:**
+   - **编程语言:** Rust（内核和用户空间组件）
+   - **构建系统:** Meson
+   - **仿真环境:** QEMU 用于测试和开发
+   - **目标架构:** AArch64 (ARMv8-A)
+   - **版本管理:** 语义化版本控制，支持自动同步
 
 ## 目录结构
 
@@ -113,6 +114,9 @@ meson run -C build debug
 
 # 运行测试
 meson test -C build
+
+# 前期测试脚本
+zsh demo.sh
 ```
 
 ### 清理操作
@@ -120,6 +124,9 @@ meson test -C build
 ```bash
 # 清理构建产物
 rm -rf build
+
+# or
+cargo clean
 ```
 
 ## 开发约定
@@ -269,72 +276,6 @@ HNX 实现了三层系统调用架构：
 - **完整 initrd:** 包含设备节点的完整目录结构
 - **压缩:** 默认使用 gzip 压缩（内核尚不支持解压）
 
-## 开发工作流程
-
-### 设置开发环境
-```bash
-# 安装 Rust nightly 工具链
-rustup install nightly
-rustup default nightly
-
-# 安装 Python 依赖
-poetry install
-
-# 安装交叉编译目标
-rustup target add aarch64-unknown-none
-
-# 安装 QEMU（macOS 示例）
-brew install qemu
-```
-
-### 典型开发周期
-```bash
-# 1. 配置构建
-meson setup build --option ARCH=aarch64 --option BOARD=qemu-virt --option PROFILE=debug
-
-# 2. 构建组件
-meson compile -C build
-
-# 3. 创建测试镜像
-meson compile -C build simple-image
-
-# 4. 使用超时快速测试运行
-meson run -C build run-simple
-
-# 5. 使用内核日志调试问题
-# （内核日志出现在 QEMU 输出中）
-```
-
-### 调试
-- **内核日志:** 内核源代码中的详细 INFO/ERROR 日志记录
-- **QEMU GDB:** 使用 `meson run -C build debug` 进行 GDB 调试
-- **系统调用跟踪:** 内核记录系统调用入口/出口及参数
-- **页面错误调试:** 详细的 VMA 和页表日志记录
-
-### 测试
-- **单元测试:** Rust crate 内的单元测试 (`meson test -C build`)
-- **集成测试:** QEMU 环境中的系统级测试
-- **手动测试:** 使用 `meson run -C build run-simple` 进行 30 秒超时的快速验证
-
-## 关键实现细节
-
-### 当前状态
-- **版本:** 0.3.0-alpha.1
-- **架构:** 支持 AArch64 和 QEMU virt 机器
-- **核心功能:**
-  - 具有基本调度的微内核
-  - 虚拟内存管理
-  - 带超时机制的 IPC 基础设施
-  - 从 initrd 生成服务
-  - 通过 sys_write 的控制台输出
-  - 统一的服务开发框架（ServiceFramework）
-  - 类型安全的 IPC 通信抽象
-  - 服务注册与发现机制
-- **进行中:**
-  - 系统调用返回值传递问题修复
-  - 现有服务适配新的 IPC 框架
-  - 进程管理服务功能完善
-  - Initrd gzip 解压支持
 ---
 
 *此开发状态部分跟踪当前进度、阻塞问题和未来计划。随着项目发展定期更新。最后更新：2026年1月2日*

@@ -32,27 +32,27 @@
 // pub struct Aarch64Module;
 // pub struct Aarch64ModuleInfo;
 // pub struct Aarch64ModuleConfig;
-// 
+//
 // 需要实现的方法（示例）：
 // pub fn init() -> ArchResult<()>;
 // pub fn create(config: &Aarch64ModuleConfig) -> ArchResult<Aarch64Module>;
 // pub fn info(&self) -> Aarch64ModuleInfo;
-// 
+//
 // 寄存器定义（示例）：
 // use tock_registers::{register_bitfields, register_structs, registers::*};
-// 
+//
 // 对象管理（示例）：
 // use crate::object::{KernelObject, Handle, ObjectRights};
-// 
+//
 // 遵循"一切皆对象"原则，所有资源都封装为对象。
 
 use core::sync::atomic::{AtomicU64, Ordering};
 
-use aarch64_cpu::registers::{Readable, Writeable};
 use aarch64_cpu::registers;
+use aarch64_cpu::registers::{Readable, Writeable};
 
-use crate::arch::{ArchError, ArchResult};
 use crate::arch::traits::timer::*;
+use crate::arch::{ArchError, ArchResult};
 use shared::sync::mutex::Mutex;
 
 #[derive(Debug)]

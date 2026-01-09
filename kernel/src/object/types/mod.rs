@@ -7,15 +7,15 @@
 //! - 进程对象（Process、Job、Thread）
 //! - 其他系统对象
 
-pub mod event;
 pub mod channel;
-pub mod vmo;
+pub mod event;
 pub mod process;
 pub mod thread;
+pub mod vmo;
 
 // 重新导出常用对象类型
-pub use event::{Event, EventPair};
 pub use channel::Channel;
-pub use vmo::Vmo;
+pub use event::{Event, EventPair};
 pub use process::Process;
 pub use thread::Thread;
+pub use vmo::Vmo;

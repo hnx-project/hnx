@@ -15,8 +15,8 @@ pub mod types;
 pub use handle::Handle;
 pub use table::HandleTable;
 pub use traits::{
-    KernelObject, Dispatcher, DowncastArc, DowncastRef,
-    KObjectId, ObjectRights, ObjectSignals, ObjectError,
+    Dispatcher, DowncastArc, DowncastRef, KObjectId, KernelObject, ObjectError, ObjectRights,
+    ObjectSignals,
 };
 
 /// 对象系统初始化

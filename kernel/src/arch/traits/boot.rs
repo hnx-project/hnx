@@ -20,46 +20,46 @@ use super::mmu::{MemoryRegion as MmuMemoryRegion, MemoryType};
 pub trait BootArch: Send + Sync {
     /// 引导信息对象类型
     type BootInfo: BootInfo;
-    
+
     /// 设备树对象类型
     type DeviceTree: DeviceTree;
-    
+
     /// 早期启动初始化
     unsafe fn early_init();
-    
+
     /// 主启动初始化
     fn init() -> ArchResult<Self::BootInfo>;
-    
+
     /// 获取引导信息
     fn boot_info() -> &'static Self::BootInfo;
-    
+
     /// 初始化内存管理
     fn init_memory(info: &Self::BootInfo) -> ArchResult<()>;
-    
+
     /// 初始化控制台
     fn init_console() -> ArchResult<()>;
-    
+
     /// 初始化多核
     fn init_smp() -> ArchResult<()>;
-    
+
     /// 启动从核
     fn boot_secondary_cpus() -> ArchResult<()>;
-    
+
     /// 平台特定初始化
     fn platform_init() -> ArchResult<()>;
-    
+
     /// 获取设备树
     fn device_tree() -> Option<&'static Self::DeviceTree>;
-    
+
     /// 获取命令行参数
     fn command_line() -> &'static str;
-    
+
     /// 获取内存映射
     fn memory_map() -> &'static [MemoryRegion];
-    
+
     /// 获取启动时间戳
     fn boot_timestamp() -> u64;
-    
+
     /// 清理引导资源
     fn cleanup_boot_resources() -> ArchResult<()>;
 }
@@ -188,28 +188,28 @@ impl CpuInfoTrait for BootCpuInfo {
 pub trait BootInfo: Send + Sync {
     /// 物理内存总量
     fn total_physical_memory(&self) -> u64;
-    
+
     /// 可用物理内存
     fn available_physical_memory(&self) -> u64;
-    
+
     /// 保留内存区域
     fn reserved_memory_regions(&self) -> &[MemoryRegion];
-    
+
     /// 设备内存区域
     fn device_memory_regions(&self) -> &[MemoryRegion];
-    
+
     /// 内核映像信息
     fn kernel_image(&self) -> KernelImageInfo;
-    
+
     /// 引导加载器信息
     fn bootloader(&self) -> BootloaderInfo;
-    
+
     /// 平台信息
     fn platform(&self) -> PlatformInfo;
-    
+
     /// 是否支持ACPI
     fn has_acpi(&self) -> bool;
-    
+
     /// 是否支持设备树
     fn has_device_tree(&self) -> bool;
 }
@@ -218,22 +218,22 @@ pub trait BootInfo: Send + Sync {
 pub trait DeviceTree: Send + Sync {
     /// 根节点
     fn root(&self) -> DeviceTreeNode;
-    
+
     /// 根据路径查找节点
     fn find_node(&self, path: &str) -> Option<DeviceTreeNode>;
-    
+
     /// 根据兼容性查找节点
     fn find_compatible(&self, compatible: &str) -> Vec<DeviceTreeNode>;
-    
+
     /// 获取属性值
     fn property(&self, node: DeviceTreeNode, name: &str) -> Option<DeviceTreeProperty>;
-    
+
     /// 获取内存映射
     fn memory_regions(&self) -> Vec<MemoryRegion>;
-    
+
     /// 获取中断控制器信息
     fn interrupt_controllers(&self) -> Vec<InterruptControllerInfo>;
-    
+
     /// 获取CPU信息
     fn cpus(&self) -> Vec<BootCpuInfo>;
 }

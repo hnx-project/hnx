@@ -1,8 +1,7 @@
 // 基本内核特征
-use core::sync::atomic::{AtomicU32, Ordering};
 use alloc::sync::Arc;
 use core::any::Any;
-
+use core::sync::atomic::{AtomicU32, Ordering};
 
 /// 内核对象ID类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -32,7 +31,6 @@ bitflags::bitflags! {
     }
 }
 
-
 /// 基本信号位
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ObjectSignals(u32);
@@ -54,7 +52,6 @@ impl ObjectSignals {
         (self.0 & other.0) == other.0
     }
 }
-
 
 /// 所有内核对象必须实现的特性
 pub trait KernelObject: Send + Sync + Any {
@@ -82,15 +79,15 @@ pub trait KernelObject: Send + Sync + Any {
 }
 
 /// 可调度对象特性
-/// 
+///
 /// 所有可阻塞等待信号的内核对象都必须实现此特性
 pub trait Dispatcher: KernelObject {
     /// 是否可以阻塞等待信号
     fn can_block(&self) -> bool;
-    
+
     /// 当对象阻塞等待信号时调用
     fn on_block(&self);
-    
+
     /// 当对象收到信号时调用
     fn on_unblock(&self);
 }
@@ -98,7 +95,9 @@ pub trait Dispatcher: KernelObject {
 /// 为Arc<dyn KernelObject>提供向下转换方法
 pub trait DowncastArc {
     /// 尝试将Arc<dyn KernelObject>向下转换为具体类型
-    fn downcast_arc<T: KernelObject + 'static>(self) -> Result<Arc<T>, Self> where Self: Sized;
+    fn downcast_arc<T: KernelObject + 'static>(self) -> Result<Arc<T>, Self>
+    where
+        Self: Sized;
 }
 
 impl DowncastArc for Arc<dyn KernelObject> {

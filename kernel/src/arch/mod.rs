@@ -5,9 +5,9 @@
 
 #![allow(unused_imports)]
 
-pub mod traits;
 pub mod common;
 pub mod implementations;
+pub mod traits;
 
 pub use common::PAGE_SIZE;
 
@@ -21,6 +21,8 @@ pub mod platform {
     use crate::arch::ArchResult;
 
     pub fn init() -> ArchResult<()> {
+        unsafe { crate::arch::current::boot::early_init() };
+        crate::arch::current::boot::init()?;
         crate::arch::current::cpu::init()
     }
 }

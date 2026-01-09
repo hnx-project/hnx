@@ -14,28 +14,28 @@ use super::super::ArchResult;
 pub trait MmuArch: Send + Sync {
     /// 页表对象类型
     type PageTable: PageTable;
-    
+
     /// 页表项对象类型
     type PageTableEntry: PageTableEntry;
-    
+
     /// 地址空间描述符
     type AddressSpace: AddressSpace;
-    
+
     /// 物理内存区域
     type MemoryRegion: MemoryRegion;
-    
+
     /// 初始化MMU
     fn init() -> ArchResult<()>;
-    
+
     /// 创建新页表
     fn create_page_table() -> ArchResult<Self::PageTable>;
-    
+
     /// 获取当前页表
     fn current_page_table() -> Self::PageTable;
-    
+
     /// 切换到指定页表
     fn switch_page_table(table: &Self::PageTable);
-    
+
     /// 映射虚拟地址到物理地址
     fn map(
         table: &mut Self::PageTable,
@@ -44,35 +44,28 @@ pub trait MmuArch: Send + Sync {
         size: usize,
         flags: MappingFlags,
     ) -> ArchResult<()>;
-    
+
     /// 取消映射
-    fn unmap(
-        table: &mut Self::PageTable,
-        vaddr: usize,
-        size: usize,
-    ) -> ArchResult<()>;
-    
+    fn unmap(table: &mut Self::PageTable, vaddr: usize, size: usize) -> ArchResult<()>;
+
     /// 查询映射
-    fn query(
-        table: &Self::PageTable,
-        vaddr: usize,
-    ) -> ArchResult<MappingInfo>;
-    
+    fn query(table: &Self::PageTable, vaddr: usize) -> ArchResult<MappingInfo>;
+
     /// 刷新TLB
     fn tlb_flush(vaddr: Option<usize>, asid: Option<u16>);
-    
+
     /// 无效化缓存
     fn cache_invalidate(vaddr: usize, size: usize);
-    
+
     /// 获取页面大小
     fn page_size() -> usize;
-    
+
     /// 支持的大页大小列表
     fn supported_huge_page_sizes() -> &'static [usize];
-    
+
     /// 分配物理页面
     fn allocate_physical_page() -> ArchResult<usize>;
-    
+
     /// 释放物理页面
     fn free_physical_page(paddr: usize) -> ArchResult<()>;
 }
@@ -81,16 +74,16 @@ pub trait MmuArch: Send + Sync {
 pub trait PageTable: Send + Sync + Clone {
     /// 获取根地址
     fn root_address(&self) -> usize;
-    
+
     /// 获取ASID
     fn asid(&self) -> u16;
-    
+
     /// 设置ASID
     fn set_asid(&mut self, asid: u16);
-    
+
     /// 复制页表
     fn clone_with_asid(&self, asid: u16) -> ArchResult<Self>;
-    
+
     /// 统计信息
     fn stats(&self) -> PageTableStats;
 }
@@ -99,22 +92,22 @@ pub trait PageTable: Send + Sync + Clone {
 pub trait PageTableEntry: Send + Sync {
     /// 创建无效项
     fn invalid() -> Self;
-    
+
     /// 创建页表项
     fn new(paddr: usize, flags: EntryFlags) -> Self;
-    
+
     /// 是否有效
     fn is_valid(&self) -> bool;
-    
+
     /// 获取物理地址
     fn physical_address(&self) -> usize;
-    
+
     /// 获取标志位
     fn flags(&self) -> EntryFlags;
-    
+
     /// 设置访问位
     fn set_accessed(&mut self, accessed: bool);
-    
+
     /// 设置脏位
     fn set_dirty(&mut self, dirty: bool);
 }
@@ -122,8 +115,10 @@ pub trait PageTableEntry: Send + Sync {
 /// 地址空间特征
 pub trait AddressSpace: Send + Sync {
     /// 创建新页表
-    fn new() -> ArchResult<Self> where Self: Sized;
-    
+    fn new() -> ArchResult<Self>
+    where
+        Self: Sized;
+
     /// 映射内存区域
     fn map_region(
         &mut self,
@@ -131,7 +126,7 @@ pub trait AddressSpace: Send + Sync {
         region: &dyn MemoryRegion,
         flags: MappingFlags,
     ) -> ArchResult<()>;
-    
+
     /// 分配虚拟内存
     fn allocate(
         &mut self,
@@ -139,7 +134,7 @@ pub trait AddressSpace: Send + Sync {
         alignment: usize,
         flags: AllocationFlags,
     ) -> ArchResult<VirtualMemory>;
-    
+
     /// 释放虚拟内存
     fn free(&mut self, vmem: VirtualMemory) -> ArchResult<()>;
 }
@@ -148,22 +143,22 @@ pub trait AddressSpace: Send + Sync {
 pub trait MemoryRegion: Send + Sync {
     /// 起始地址
     fn base(&self) -> usize;
-    
+
     /// 大小
     fn size(&self) -> usize;
-    
+
     /// 类型
     fn memory_type(&self) -> MemoryType;
-    
+
     /// 是否可缓存
     fn is_cacheable(&self) -> bool;
-    
+
     /// 是否可执行
     fn is_executable(&self) -> bool;
-    
+
     /// 是否可写
     fn is_writable(&self) -> bool;
-    
+
     /// 是否设备内存
     fn is_device(&self) -> bool;
 }

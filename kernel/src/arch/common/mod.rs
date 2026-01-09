@@ -66,7 +66,7 @@ impl CacheRange {
         assert!(start <= end, "Invalid cache range");
         Self { start, end }
     }
-    
+
     pub fn size(&self) -> usize {
         self.end - self.start
     }

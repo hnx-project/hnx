@@ -1,8 +1,8 @@
 /// 内核对象句柄
-/// 
+///
 /// 句柄是内核对象的引用，用于在进程之间传递对象引用。
 /// 每个句柄都有一个权限位，用于控制对对象的访问。
-use super::traits::{KernelObject, ObjectRights, ObjectError};
+use super::traits::{KernelObject, ObjectError, ObjectRights};
 use alloc::sync::Arc;
 
 /// 内核对象句柄
@@ -24,15 +24,15 @@ impl Handle {
             owner_pid,
         }
     }
-    
+
     pub fn object(&self) -> &Arc<dyn KernelObject> {
         &self.object
     }
-    
+
     pub fn rights(&self) -> ObjectRights {
         self.rights
     }
-    
+
     /// 检查是否拥有指定权限
     pub fn check_rights(&self, required: ObjectRights) -> Result<(), ObjectError> {
         if self.rights.contains(required) {
@@ -41,7 +41,7 @@ impl Handle {
             Err(ObjectError::PermissionDenied)
         }
     }
-    
+
     /// 复制句柄（可选降低权限）
     pub fn duplicate(&self, new_rights: Option<ObjectRights>) -> Handle {
         let rights = new_rights.unwrap_or(self.rights);
