@@ -45,6 +45,8 @@
 // 
 // 遵循"一切皆对象"原则，所有资源都封装为对象。
 
+core::arch::global_asm!(include_str!("boot.S"));
+
 use crate::arch::{ArchResult};
 use crate::arch::traits::boot::{BootCpuInfo, BootInfo, DeviceTree, DeviceTreeNode, MemoryRegion};
 use crate::arch::traits::mmu::MemoryType;
@@ -204,4 +206,30 @@ pub fn boot_timestamp() -> u64 {
 
 pub fn cleanup_boot_resources() -> ArchResult<()> {
     Ok(())
+}
+
+#[no_mangle]
+pub extern "C" fn rust_exc_mark(_ec: u64, _esr: u64, _elr: u64, _far: u64) {}
+
+#[no_mangle]
+pub extern "C" fn rust_svc_handler(_esr: u64, _elr: u64, _far: u64, _saved_x8: u64, saved_sp: usize) {
+    unsafe {
+        let x0_ptr = (saved_sp as *mut i64).add(18);
+        *x0_ptr = shared::abi::errors::ZX_ERR_NOT_SUPPORTED as i64;
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn rust_irq_handler() {}
+
+#[no_mangle]
+pub extern "C" fn rust_sync_try_handle(_esr: u64, _elr: u64, _far: u64, _tcr: u64, _sctlr: u64, _spsr: u64) -> u64 {
+    1
+}
+
+#[no_mangle]
+pub extern "C" fn rust_sync_panic() {
+    loop {
+        core::hint::spin_loop();
+    }
 }
